@@ -1,0 +1,13 @@
+# Hermes config — new build (architect-v2), THE ARCHITECT spec §2.
+# Only the values the spec pins. Everything else stays at upstream defaults so
+# an upgrade has less to fight with. Upstream default max_turns here is 500.
+
+model:
+  default: "anthropic/claude-opus-4.6"   # frontier lane; WATCH overrides to haiku
+
+agent:
+  max_turns: 90
+
+memory:
+  memory_enabled: true
+  user_profile_enabled: true

@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# Every command against the new build goes through here.
+# Without HERMES_HOME set, the agent defaults to ~/.hermes -- the OLD estate.
+# hermes_constants.py:59 -> Path.home() / ".hermes"
+set -euo pipefail
+H="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+unset PYTHONPATH PYTHONHOME
+export HERMES_HOME="$H"
+exec "$H/.venv/bin/hermes" "$@"
