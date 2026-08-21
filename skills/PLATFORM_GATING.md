@@ -18,5 +18,20 @@ verify-to-prod or post-mortem, because all three write.
 
 WORK may run all six. WORK still never merges and never deploys.
 
+## Surfaces
+
+A skill is gated by where the message came from, not only by what is installed.
+
+| surface | may run | may not run |
+|---|---|---|
+| telegram | estate-map, incident-triage, screenshot-to-story | pr-discipline, verify-to-prod, post-mortem |
+| cli (this machine) | all six | - |
+| cron (WATCH) | estate-map, incident-triage, screenshot-to-story | anything that writes code |
+| cron (WORK) | all six | merging, deploying |
+
+Dev and deploy skills are **off on telegram**. A phone is where the founder is
+least able to read a diff before it lands, and a message on telegram is the
+easiest thing for someone else to send. Spec §4.
+
 If a check fails, say which binary is missing and stop. Do not install anything
 to get past a gate - installing on the fly is how an estate drifts.

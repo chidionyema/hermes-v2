@@ -1,0 +1,67 @@
+# Rituals
+
+Two of them. Both are short. Both produce a change, not a document.
+
+---
+
+## The lesson ladder
+
+Every incident ends on a rung. Name the rung out loud in the post-mortem. A
+lesson that stays on rung 0 or 1 will be relearned.
+
+| rung | what it means | example |
+|---|---|---|
+| 0 | nobody wrote anything down | the next agent repeats it |
+| 1 | a line in MEMORY.md | helps this agent, forgets under compaction |
+| 2 | a change to a skill | every run of that skill now behaves differently |
+| 3 | a test in `tests/incidents/` | the mistake fails CI before a human sees it |
+| 4 | structural - the mistake is impossible | the wrong path cannot be typed |
+
+Climb as far as the incident allows. Rung 4 beats rung 3 beats a note. If you
+stop below 3, say plainly that the next occurrence will not be caught.
+
+**Promotion gate.** Nothing moves up a rung on its own. A lesson enters memory,
+a skill or a test only through a pull request the founder taps. This is the
+promotion gate and it applies at every self-modification point: memory edits,
+skill edits, evolution output, curator suggestions. An agent may propose. Only
+the founder promotes.
+
+---
+
+## Sunday review - 20 minutes
+
+Once a week, and it is mostly deleting.
+
+1. **Read the week's incidents.**
+   ```bash
+   python3 - <<'PY'
+   import json
+   rows = [json.loads(l) for l in open('estate-evals/incidents.jsonl') if l.strip()]
+   for r in rows[-10:]:
+       print(r['lesson']['rung'], r['id'], '->', r['lesson']['artifact'])
+   PY
+   ```
+
+2. **Delete the lessons that did not help.** A lesson that never fired, or fired
+   and did not change the outcome, is noise, and noise costs a slice of every
+   prompt forever. Delete it. Say which ones you deleted and why. The measure is
+   whether the estate got quieter, not whether the file got longer.
+
+3. **Check what is on rung 0 or 1** and ask whether it can climb. If it cannot,
+   write one sentence saying why not.
+
+4. **Read the cost.**
+   ```bash
+   cat logs/cost/watch-monthly.txt logs/cost/evolution.txt 2>/dev/null
+   ```
+   A cost that grew without the work growing is the finding.
+
+5. **Look at the open board.**
+   ```bash
+   gh issue list -R chidionyema/prospector --state open --json number,title,labels \
+     --jq '.[] | "#\(.number) \([.labels[].name]|join(","))  \(.title)"'
+   ```
+   Anything in `agent-go` for more than a week is either wrong or unwanted. Kill
+   it or work it.
+
+Output: one message. What was deleted, what climbed a rung, what the week cost.

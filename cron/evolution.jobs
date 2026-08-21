@@ -1,0 +1,6 @@
+# Self-evolution - nightly, and it lands as a PR, never a direct commit.
+# The promotion gate in RITUALS.md applies: the agent proposes, the founder taps.
+# Loaded with: bin/hermes cron add --file cron/evolution.jobs
+#
+0 3 * * *   work   Take the three most-used skills from the last 7 days. For each, run evolve_skill against the transcripts where it was used. Write the improved SKILL.md on a branch and open a PR titled "evolution: <skill>". Never commit to main. Append the run cost to logs/cost/evolution.txt.
+0 4 * * 0   work   Run the curator over the week's sessions. Write logs/curator/REPORT.md. Do not act on it - the report is for the Sunday review.

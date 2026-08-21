@@ -4,14 +4,514 @@
   "graph": {},
   "nodes": [
     {
+      "label": "PLATFORM_GATING.md",
+      "file_type": "document",
+      "source_file": "skills/PLATFORM_GATING.md",
+      "source_location": "L1",
+      "_origin": "ast",
+      "id": "skills_platform_gating",
+      "community": 9,
+      "norm_label": "platform_gating.md"
+    },
+    {
+      "label": "Platform gating",
+      "file_type": "document",
+      "source_file": "skills/PLATFORM_GATING.md",
+      "source_location": "L1",
+      "_origin": "ast",
+      "id": "skills_platform_gating_platform_gating",
+      "community": 9,
+      "norm_label": "platform gating"
+    },
+    {
+      "label": "VETTED.md",
+      "file_type": "document",
+      "source_file": "skills/VETTED.md",
+      "source_location": "L1",
+      "_origin": "ast",
+      "id": "skills_vetted",
+      "community": 8,
+      "norm_label": "vetted.md"
+    },
+    {
+      "label": "Vetted third-party skills",
+      "file_type": "document",
+      "source_file": "skills/VETTED.md",
+      "source_location": "L1",
+      "_origin": "ast",
+      "id": "skills_vetted_vetted_third_party_skills",
+      "community": 8,
+      "norm_label": "vetted third-party skills"
+    },
+    {
+      "label": "Reviewed and installed",
+      "file_type": "document",
+      "source_file": "skills/VETTED.md",
+      "source_location": "L10",
+      "_origin": "ast",
+      "id": "skills_vetted_reviewed_and_installed",
+      "community": 8,
+      "norm_label": "reviewed and installed"
+    },
+    {
+      "label": "Reviewed and rejected",
+      "file_type": "document",
+      "source_file": "skills/VETTED.md",
+      "source_location": "L14",
+      "_origin": "ast",
+      "id": "skills_vetted_reviewed_and_rejected",
+      "community": 8,
+      "norm_label": "reviewed and rejected"
+    },
+    {
+      "label": "How to review one",
+      "file_type": "document",
+      "source_file": "skills/VETTED.md",
+      "source_location": "L18",
+      "_origin": "ast",
+      "id": "skills_vetted_how_to_review_one",
+      "community": 8,
+      "norm_label": "how to review one"
+    },
+    {
+      "label": "SKILL.md",
+      "file_type": "document",
+      "source_file": "skills/estate-map/SKILL.md",
+      "source_location": "L1",
+      "_origin": "ast",
+      "id": "estate_map_skill",
+      "community": 4,
+      "norm_label": "skill.md"
+    },
+    {
+      "label": "estate-map",
+      "file_type": "document",
+      "source_file": "skills/estate-map/SKILL.md",
+      "source_location": "L6",
+      "_origin": "ast",
+      "id": "estate_map_skill_estate_map",
+      "community": 4,
+      "norm_label": "estate-map"
+    },
+    {
+      "label": "The apps",
+      "file_type": "document",
+      "source_file": "skills/estate-map/SKILL.md",
+      "source_location": "L10",
+      "_origin": "ast",
+      "id": "estate_map_skill_the_apps",
+      "community": 4,
+      "norm_label": "the apps"
+    },
+    {
+      "label": "Is it serving",
+      "file_type": "document",
+      "source_file": "skills/estate-map/SKILL.md",
+      "source_location": "L21",
+      "_origin": "ast",
+      "id": "estate_map_skill_is_it_serving",
+      "community": 4,
+      "norm_label": "is it serving"
+    },
+    {
+      "label": "The repos",
+      "file_type": "document",
+      "source_file": "skills/estate-map/SKILL.md",
+      "source_location": "L37",
+      "_origin": "ast",
+      "id": "estate_map_skill_the_repos",
+      "community": 4,
+      "norm_label": "the repos"
+    },
+    {
+      "label": "The board",
+      "file_type": "document",
+      "source_file": "skills/estate-map/SKILL.md",
+      "source_location": "L46",
+      "_origin": "ast",
+      "id": "estate_map_skill_the_board",
+      "community": 4,
+      "norm_label": "the board"
+    },
+    {
+      "label": "Report shape",
+      "file_type": "document",
+      "source_file": "skills/estate-map/SKILL.md",
+      "source_location": "L53",
+      "_origin": "ast",
+      "id": "estate_map_skill_report_shape",
+      "community": 4,
+      "norm_label": "report shape"
+    },
+    {
+      "label": "SKILL.md",
+      "file_type": "document",
+      "source_file": "skills/incident-triage/SKILL.md",
+      "source_location": "L1",
+      "_origin": "ast",
+      "id": "incident_triage_skill",
+      "community": 5,
+      "norm_label": "skill.md"
+    },
+    {
+      "label": "incident-triage",
+      "file_type": "document",
+      "source_file": "skills/incident-triage/SKILL.md",
+      "source_location": "L6",
+      "_origin": "ast",
+      "id": "incident_triage_skill_incident_triage",
+      "community": 5,
+      "norm_label": "incident-triage"
+    },
+    {
+      "label": "1. Confirm it twice, from two angles",
+      "file_type": "document",
+      "source_file": "skills/incident-triage/SKILL.md",
+      "source_location": "L11",
+      "_origin": "ast",
+      "id": "incident_triage_skill_1_confirm_it_twice_from_two_angles",
+      "community": 5,
+      "norm_label": "1. confirm it twice, from two angles"
+    },
+    {
+      "label": "2. Get the reason, not the symptom",
+      "file_type": "document",
+      "source_file": "skills/incident-triage/SKILL.md",
+      "source_location": "L23",
+      "_origin": "ast",
+      "id": "incident_triage_skill_2_get_the_reason_not_the_symptom",
+      "community": 5,
+      "norm_label": "2. get the reason, not the symptom"
+    },
+    {
+      "label": "3. What changed",
+      "file_type": "document",
+      "source_file": "skills/incident-triage/SKILL.md",
+      "source_location": "L32",
+      "_origin": "ast",
+      "id": "incident_triage_skill_3_what_changed",
+      "community": 5,
+      "norm_label": "3. what changed"
+    },
+    {
+      "label": "4. Open exactly one issue",
+      "file_type": "document",
+      "source_file": "skills/incident-triage/SKILL.md",
+      "source_location": "L43",
+      "_origin": "ast",
+      "id": "incident_triage_skill_4_open_exactly_one_issue",
+      "community": 5,
+      "norm_label": "4. open exactly one issue"
+    },
+    {
+      "label": "Never",
+      "file_type": "document",
+      "source_file": "skills/incident-triage/SKILL.md",
+      "source_location": "L80",
+      "_origin": "ast",
+      "id": "incident_triage_skill_never",
+      "community": 5,
+      "norm_label": "never"
+    },
+    {
+      "label": "SKILL.md",
+      "file_type": "document",
+      "source_file": "skills/post-mortem/SKILL.md",
+      "source_location": "L1",
+      "_origin": "ast",
+      "id": "post_mortem_skill",
+      "community": 2,
+      "norm_label": "skill.md"
+    },
+    {
+      "label": "post-mortem",
+      "file_type": "document",
+      "source_file": "skills/post-mortem/SKILL.md",
+      "source_location": "L6",
+      "_origin": "ast",
+      "id": "post_mortem_skill_post_mortem",
+      "community": 2,
+      "norm_label": "post-mortem"
+    },
+    {
+      "label": "1. The timeline, from commands",
+      "file_type": "document",
+      "source_file": "skills/post-mortem/SKILL.md",
+      "source_location": "L14",
+      "_origin": "ast",
+      "id": "post_mortem_skill_1_the_timeline_from_commands",
+      "community": 2,
+      "norm_label": "1. the timeline, from commands"
+    },
+    {
+      "label": "2. The class",
+      "file_type": "document",
+      "source_file": "skills/post-mortem/SKILL.md",
+      "source_location": "L26",
+      "_origin": "ast",
+      "id": "post_mortem_skill_2_the_class",
+      "community": 2,
+      "norm_label": "2. the class"
+    },
+    {
+      "label": "3. Name the rung",
+      "file_type": "document",
+      "source_file": "skills/post-mortem/SKILL.md",
+      "source_location": "L31",
+      "_origin": "ast",
+      "id": "post_mortem_skill_3_name_the_rung",
+      "community": 2,
+      "norm_label": "3. name the rung"
+    },
+    {
+      "label": "4. Close it mechanically, in this order",
+      "file_type": "document",
+      "source_file": "skills/post-mortem/SKILL.md",
+      "source_location": "L50",
+      "_origin": "ast",
+      "id": "post_mortem_skill_4_close_it_mechanically_in_this_order",
+      "community": 2,
+      "norm_label": "4. close it mechanically, in this order"
+    },
+    {
+      "label": "5. Write it into the eval set",
+      "file_type": "document",
+      "source_file": "skills/post-mortem/SKILL.md",
+      "source_location": "L59",
+      "_origin": "ast",
+      "id": "post_mortem_skill_5_write_it_into_the_eval_set",
+      "community": 2,
+      "norm_label": "5. write it into the eval set"
+    },
+    {
+      "label": "6. Post it",
+      "file_type": "document",
+      "source_file": "skills/post-mortem/SKILL.md",
+      "source_location": "L71",
+      "_origin": "ast",
+      "id": "post_mortem_skill_6_post_it",
+      "community": 2,
+      "norm_label": "6. post it"
+    },
+    {
+      "label": "SKILL.md",
+      "file_type": "document",
+      "source_file": "skills/pr-discipline/SKILL.md",
+      "source_location": "L1",
+      "_origin": "ast",
+      "id": "pr_discipline_skill",
+      "community": 3,
+      "norm_label": "skill.md"
+    },
+    {
+      "label": "pr-discipline",
+      "file_type": "document",
+      "source_file": "skills/pr-discipline/SKILL.md",
+      "source_location": "L6",
+      "_origin": "ast",
+      "id": "pr_discipline_skill_pr_discipline",
+      "community": 3,
+      "norm_label": "pr-discipline"
+    },
+    {
+      "label": "0. Pre-flight - two questions before the first command",
+      "file_type": "document",
+      "source_file": "skills/pr-discipline/SKILL.md",
+      "source_location": "L8",
+      "_origin": "ast",
+      "id": "pr_discipline_skill_0_pre_flight_two_questions_before_the_first_command",
+      "community": 3,
+      "norm_label": "0. pre-flight - two questions before the first command"
+    },
+    {
+      "label": "1. A worktree, never the main checkout",
+      "file_type": "document",
+      "source_file": "skills/pr-discipline/SKILL.md",
+      "source_location": "L38",
+      "_origin": "ast",
+      "id": "pr_discipline_skill_1_a_worktree_never_the_main_checkout",
+      "community": 3,
+      "norm_label": "1. a worktree, never the main checkout"
+    },
+    {
+      "label": "2. Reproduce before you fix",
+      "file_type": "document",
+      "source_file": "skills/pr-discipline/SKILL.md",
+      "source_location": "L50",
+      "_origin": "ast",
+      "id": "pr_discipline_skill_2_reproduce_before_you_fix",
+      "community": 3,
+      "norm_label": "2. reproduce before you fix"
+    },
+    {
+      "label": "3. Smallest diff",
+      "file_type": "document",
+      "source_file": "skills/pr-discipline/SKILL.md",
+      "source_location": "L56",
+      "_origin": "ast",
+      "id": "pr_discipline_skill_3_smallest_diff",
+      "community": 3,
+      "norm_label": "3. smallest diff"
+    },
+    {
+      "label": "4. Green before you push",
+      "file_type": "document",
+      "source_file": "skills/pr-discipline/SKILL.md",
+      "source_location": "L67",
+      "_origin": "ast",
+      "id": "pr_discipline_skill_4_green_before_you_push",
+      "community": 3,
+      "norm_label": "4. green before you push"
+    },
+    {
+      "label": "5. The PR",
+      "file_type": "document",
+      "source_file": "skills/pr-discipline/SKILL.md",
+      "source_location": "L77",
+      "_origin": "ast",
+      "id": "pr_discipline_skill_5_the_pr",
+      "community": 3,
+      "norm_label": "5. the pr"
+    },
+    {
+      "label": "SKILL.md",
+      "file_type": "document",
+      "source_file": "skills/screenshot-to-story/SKILL.md",
+      "source_location": "L1",
+      "_origin": "ast",
+      "id": "screenshot_to_story_skill",
+      "community": 6,
+      "norm_label": "skill.md"
+    },
+    {
+      "label": "screenshot-to-story",
+      "file_type": "document",
+      "source_file": "skills/screenshot-to-story/SKILL.md",
+      "source_location": "L6",
+      "_origin": "ast",
+      "id": "screenshot_to_story_skill_screenshot_to_story",
+      "community": 6,
+      "norm_label": "screenshot-to-story"
+    },
+    {
+      "label": "1. Read the image, do not guess at it",
+      "file_type": "document",
+      "source_file": "skills/screenshot-to-story/SKILL.md",
+      "source_location": "L11",
+      "_origin": "ast",
+      "id": "screenshot_to_story_skill_1_read_the_image_do_not_guess_at_it",
+      "community": 6,
+      "norm_label": "1. read the image, do not guess at it"
+    },
+    {
+      "label": "2. Locate it",
+      "file_type": "document",
+      "source_file": "skills/screenshot-to-story/SKILL.md",
+      "source_location": "L18",
+      "_origin": "ast",
+      "id": "screenshot_to_story_skill_2_locate_it",
+      "community": 6,
+      "norm_label": "2. locate it"
+    },
+    {
+      "label": "3. Ask the one question that matters, in the issue",
+      "file_type": "document",
+      "source_file": "skills/screenshot-to-story/SKILL.md",
+      "source_location": "L27",
+      "_origin": "ast",
+      "id": "screenshot_to_story_skill_3_ask_the_one_question_that_matters_in_the_issue",
+      "community": 6,
+      "norm_label": "3. ask the one question that matters, in the issue"
+    },
+    {
+      "label": "4. File it",
+      "file_type": "document",
+      "source_file": "skills/screenshot-to-story/SKILL.md",
+      "source_location": "L32",
+      "_origin": "ast",
+      "id": "screenshot_to_story_skill_4_file_it",
+      "community": 6,
+      "norm_label": "4. file it"
+    },
+    {
+      "label": "Never",
+      "file_type": "document",
+      "source_file": "skills/screenshot-to-story/SKILL.md",
+      "source_location": "L56",
+      "_origin": "ast",
+      "id": "screenshot_to_story_skill_never",
+      "community": 6,
+      "norm_label": "never"
+    },
+    {
+      "label": "SKILL.md",
+      "file_type": "document",
+      "source_file": "skills/verify-to-prod/SKILL.md",
+      "source_location": "L1",
+      "_origin": "ast",
+      "id": "verify_to_prod_skill",
+      "community": 7,
+      "norm_label": "skill.md"
+    },
+    {
+      "label": "verify-to-prod",
+      "file_type": "document",
+      "source_file": "skills/verify-to-prod/SKILL.md",
+      "source_location": "L6",
+      "_origin": "ast",
+      "id": "verify_to_prod_skill_verify_to_prod",
+      "community": 7,
+      "norm_label": "verify-to-prod"
+    },
+    {
+      "label": "1. Merged",
+      "file_type": "document",
+      "source_file": "skills/verify-to-prod/SKILL.md",
+      "source_location": "L11",
+      "_origin": "ast",
+      "id": "verify_to_prod_skill_1_merged",
+      "community": 7,
+      "norm_label": "1. merged"
+    },
+    {
+      "label": "2. Deployed - the pipeline ran and the app took the release",
+      "file_type": "document",
+      "source_file": "skills/verify-to-prod/SKILL.md",
+      "source_location": "L18",
+      "_origin": "ast",
+      "id": "verify_to_prod_skill_2_deployed_the_pipeline_ran_and_the_app_took_the_release",
+      "community": 7,
+      "norm_label": "2. deployed - the pipeline ran and the app took the release"
+    },
+    {
+      "label": "3. Working - the behaviour the issue asked for",
+      "file_type": "document",
+      "source_file": "skills/verify-to-prod/SKILL.md",
+      "source_location": "L31",
+      "_origin": "ast",
+      "id": "verify_to_prod_skill_3_working_the_behaviour_the_issue_asked_for",
+      "community": 7,
+      "norm_label": "3. working - the behaviour the issue asked for"
+    },
+    {
+      "label": "4. Two angles, or it is not verified",
+      "file_type": "document",
+      "source_file": "skills/verify-to-prod/SKILL.md",
+      "source_location": "L40",
+      "_origin": "ast",
+      "id": "verify_to_prod_skill_4_two_angles_or_it_is_not_verified",
+      "community": 7,
+      "norm_label": "4. two angles, or it is not verified"
+    },
+    {
       "label": "SOUL.md",
       "file_type": "document",
       "source_file": "SOUL.md",
       "source_location": "L1",
       "_origin": "ast",
-      "id": "soul",
       "community": 1,
-      "norm_label": "soul.md"
+      "norm_label": "soul.md",
+      "id": "soul"
     },
     {
       "label": "check-requirements.py",
@@ -19,12 +519,433 @@
       "source_file": "bin/check-requirements.py",
       "source_location": "L1",
       "_origin": "ast",
-      "id": "bin_check_requirements",
       "community": 0,
-      "norm_label": "check-requirements.py"
+      "norm_label": "check-requirements.py",
+      "id": "bin_check_requirements"
     }
   ],
-  "links": [],
+  "links": [
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "skills/PLATFORM_GATING.md",
+      "source_location": "L1",
+      "weight": 1.0,
+      "source": "skills_platform_gating",
+      "target": "skills_platform_gating_platform_gating",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "skills/VETTED.md",
+      "source_location": "L1",
+      "weight": 1.0,
+      "source": "skills_vetted",
+      "target": "skills_vetted_vetted_third_party_skills",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "skills/VETTED.md",
+      "source_location": "L18",
+      "weight": 1.0,
+      "source": "skills_vetted_vetted_third_party_skills",
+      "target": "skills_vetted_how_to_review_one",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "skills/VETTED.md",
+      "source_location": "L10",
+      "weight": 1.0,
+      "source": "skills_vetted_vetted_third_party_skills",
+      "target": "skills_vetted_reviewed_and_installed",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "skills/VETTED.md",
+      "source_location": "L14",
+      "weight": 1.0,
+      "source": "skills_vetted_vetted_third_party_skills",
+      "target": "skills_vetted_reviewed_and_rejected",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "skills/estate-map/SKILL.md",
+      "source_location": "L6",
+      "weight": 1.0,
+      "source": "estate_map_skill",
+      "target": "estate_map_skill_estate_map",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "skills/estate-map/SKILL.md",
+      "source_location": "L21",
+      "weight": 1.0,
+      "source": "estate_map_skill_estate_map",
+      "target": "estate_map_skill_is_it_serving",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "skills/estate-map/SKILL.md",
+      "source_location": "L53",
+      "weight": 1.0,
+      "source": "estate_map_skill_estate_map",
+      "target": "estate_map_skill_report_shape",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "skills/estate-map/SKILL.md",
+      "source_location": "L10",
+      "weight": 1.0,
+      "source": "estate_map_skill_estate_map",
+      "target": "estate_map_skill_the_apps",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "skills/estate-map/SKILL.md",
+      "source_location": "L46",
+      "weight": 1.0,
+      "source": "estate_map_skill_estate_map",
+      "target": "estate_map_skill_the_board",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "skills/estate-map/SKILL.md",
+      "source_location": "L37",
+      "weight": 1.0,
+      "source": "estate_map_skill_estate_map",
+      "target": "estate_map_skill_the_repos",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "skills/incident-triage/SKILL.md",
+      "source_location": "L6",
+      "weight": 1.0,
+      "source": "incident_triage_skill",
+      "target": "incident_triage_skill_incident_triage",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "skills/incident-triage/SKILL.md",
+      "source_location": "L11",
+      "weight": 1.0,
+      "source": "incident_triage_skill_incident_triage",
+      "target": "incident_triage_skill_1_confirm_it_twice_from_two_angles",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "skills/incident-triage/SKILL.md",
+      "source_location": "L23",
+      "weight": 1.0,
+      "source": "incident_triage_skill_incident_triage",
+      "target": "incident_triage_skill_2_get_the_reason_not_the_symptom",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "skills/incident-triage/SKILL.md",
+      "source_location": "L32",
+      "weight": 1.0,
+      "source": "incident_triage_skill_incident_triage",
+      "target": "incident_triage_skill_3_what_changed",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "skills/incident-triage/SKILL.md",
+      "source_location": "L43",
+      "weight": 1.0,
+      "source": "incident_triage_skill_incident_triage",
+      "target": "incident_triage_skill_4_open_exactly_one_issue",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "skills/incident-triage/SKILL.md",
+      "source_location": "L80",
+      "weight": 1.0,
+      "source": "incident_triage_skill_incident_triage",
+      "target": "incident_triage_skill_never",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "skills/post-mortem/SKILL.md",
+      "source_location": "L6",
+      "weight": 1.0,
+      "source": "post_mortem_skill",
+      "target": "post_mortem_skill_post_mortem",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "skills/post-mortem/SKILL.md",
+      "source_location": "L14",
+      "weight": 1.0,
+      "source": "post_mortem_skill_post_mortem",
+      "target": "post_mortem_skill_1_the_timeline_from_commands",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "skills/post-mortem/SKILL.md",
+      "source_location": "L26",
+      "weight": 1.0,
+      "source": "post_mortem_skill_post_mortem",
+      "target": "post_mortem_skill_2_the_class",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "skills/post-mortem/SKILL.md",
+      "source_location": "L31",
+      "weight": 1.0,
+      "source": "post_mortem_skill_post_mortem",
+      "target": "post_mortem_skill_3_name_the_rung",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "skills/post-mortem/SKILL.md",
+      "source_location": "L50",
+      "weight": 1.0,
+      "source": "post_mortem_skill_post_mortem",
+      "target": "post_mortem_skill_4_close_it_mechanically_in_this_order",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "skills/post-mortem/SKILL.md",
+      "source_location": "L59",
+      "weight": 1.0,
+      "source": "post_mortem_skill_post_mortem",
+      "target": "post_mortem_skill_5_write_it_into_the_eval_set",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "skills/post-mortem/SKILL.md",
+      "source_location": "L71",
+      "weight": 1.0,
+      "source": "post_mortem_skill_post_mortem",
+      "target": "post_mortem_skill_6_post_it",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "skills/pr-discipline/SKILL.md",
+      "source_location": "L6",
+      "weight": 1.0,
+      "source": "pr_discipline_skill",
+      "target": "pr_discipline_skill_pr_discipline",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "skills/pr-discipline/SKILL.md",
+      "source_location": "L8",
+      "weight": 1.0,
+      "source": "pr_discipline_skill_pr_discipline",
+      "target": "pr_discipline_skill_0_pre_flight_two_questions_before_the_first_command",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "skills/pr-discipline/SKILL.md",
+      "source_location": "L38",
+      "weight": 1.0,
+      "source": "pr_discipline_skill_pr_discipline",
+      "target": "pr_discipline_skill_1_a_worktree_never_the_main_checkout",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "skills/pr-discipline/SKILL.md",
+      "source_location": "L50",
+      "weight": 1.0,
+      "source": "pr_discipline_skill_pr_discipline",
+      "target": "pr_discipline_skill_2_reproduce_before_you_fix",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "skills/pr-discipline/SKILL.md",
+      "source_location": "L56",
+      "weight": 1.0,
+      "source": "pr_discipline_skill_pr_discipline",
+      "target": "pr_discipline_skill_3_smallest_diff",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "skills/pr-discipline/SKILL.md",
+      "source_location": "L67",
+      "weight": 1.0,
+      "source": "pr_discipline_skill_pr_discipline",
+      "target": "pr_discipline_skill_4_green_before_you_push",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "skills/pr-discipline/SKILL.md",
+      "source_location": "L77",
+      "weight": 1.0,
+      "source": "pr_discipline_skill_pr_discipline",
+      "target": "pr_discipline_skill_5_the_pr",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "skills/screenshot-to-story/SKILL.md",
+      "source_location": "L6",
+      "weight": 1.0,
+      "source": "screenshot_to_story_skill",
+      "target": "screenshot_to_story_skill_screenshot_to_story",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "skills/screenshot-to-story/SKILL.md",
+      "source_location": "L11",
+      "weight": 1.0,
+      "source": "screenshot_to_story_skill_screenshot_to_story",
+      "target": "screenshot_to_story_skill_1_read_the_image_do_not_guess_at_it",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "skills/screenshot-to-story/SKILL.md",
+      "source_location": "L18",
+      "weight": 1.0,
+      "source": "screenshot_to_story_skill_screenshot_to_story",
+      "target": "screenshot_to_story_skill_2_locate_it",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "skills/screenshot-to-story/SKILL.md",
+      "source_location": "L27",
+      "weight": 1.0,
+      "source": "screenshot_to_story_skill_screenshot_to_story",
+      "target": "screenshot_to_story_skill_3_ask_the_one_question_that_matters_in_the_issue",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "skills/screenshot-to-story/SKILL.md",
+      "source_location": "L32",
+      "weight": 1.0,
+      "source": "screenshot_to_story_skill_screenshot_to_story",
+      "target": "screenshot_to_story_skill_4_file_it",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "skills/screenshot-to-story/SKILL.md",
+      "source_location": "L56",
+      "weight": 1.0,
+      "source": "screenshot_to_story_skill_screenshot_to_story",
+      "target": "screenshot_to_story_skill_never",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "skills/verify-to-prod/SKILL.md",
+      "source_location": "L6",
+      "weight": 1.0,
+      "source": "verify_to_prod_skill",
+      "target": "verify_to_prod_skill_verify_to_prod",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "skills/verify-to-prod/SKILL.md",
+      "source_location": "L11",
+      "weight": 1.0,
+      "source": "verify_to_prod_skill_verify_to_prod",
+      "target": "verify_to_prod_skill_1_merged",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "skills/verify-to-prod/SKILL.md",
+      "source_location": "L18",
+      "weight": 1.0,
+      "source": "verify_to_prod_skill_verify_to_prod",
+      "target": "verify_to_prod_skill_2_deployed_the_pipeline_ran_and_the_app_took_the_release",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "skills/verify-to-prod/SKILL.md",
+      "source_location": "L31",
+      "weight": 1.0,
+      "source": "verify_to_prod_skill_verify_to_prod",
+      "target": "verify_to_prod_skill_3_working_the_behaviour_the_issue_asked_for",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "skills/verify-to-prod/SKILL.md",
+      "source_location": "L40",
+      "weight": 1.0,
+      "source": "verify_to_prod_skill_verify_to_prod",
+      "target": "verify_to_prod_skill_4_two_angles_or_it_is_not_verified",
+      "confidence_score": 1.0
+    }
+  ],
   "hyperedges": [],
-  "built_at_commit": "10d3973199f2ba9edca933dd77c5f458901a3f94"
+  "built_at_commit": "897f1d94ebee7da3296620d919834b48ee645a72"
 }

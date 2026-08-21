@@ -1,0 +1,110 @@
+{
+  "version": 2,
+  "manifest": {
+    "pr-discipline/SKILL.md": [
+      1787355352347915591,
+      2602
+    ],
+    "incident-triage/SKILL.md": [
+      1787355067249097058,
+      2296
+    ],
+    "post-mortem/SKILL.md": [
+      1787355352351101523,
+      2786
+    ],
+    "verify-to-prod/SKILL.md": [
+      1787355114372767581,
+      1865
+    ],
+    "screenshot-to-story/SKILL.md": [
+      1787355114361495302,
+      1746
+    ],
+    "estate-map/SKILL.md": [
+      1787355067235975076,
+      1840
+    ]
+  },
+  "skills": [
+    {
+      "skill_name": "estate-map",
+      "category": "estate-map",
+      "frontmatter_name": "estate-map",
+      "description": "Print the current shape of the estate - Fly apps, health,...",
+      "platforms": [],
+      "conditions": {
+        "fallback_for_toolsets": [],
+        "requires_toolsets": [],
+        "fallback_for_tools": [],
+        "requires_tools": []
+      }
+    },
+    {
+      "skill_name": "incident-triage",
+      "category": "incident-triage",
+      "frontmatter_name": "incident-triage",
+      "description": "Turn a red platform into one GitHub issue with real evide...",
+      "platforms": [],
+      "conditions": {
+        "fallback_for_toolsets": [],
+        "requires_toolsets": [],
+        "fallback_for_tools": [],
+        "requires_tools": []
+      }
+    },
+    {
+      "skill_name": "post-mortem",
+      "category": "post-mortem",
+      "frontmatter_name": "post-mortem",
+      "description": "Close an incident by naming the class of mistake and addi...",
+      "platforms": [],
+      "conditions": {
+        "fallback_for_toolsets": [],
+        "requires_toolsets": [],
+        "fallback_for_tools": [],
+        "requires_tools": []
+      }
+    },
+    {
+      "skill_name": "pr-discipline",
+      "category": "pr-discipline",
+      "frontmatter_name": "pr-discipline",
+      "description": "How to make a change - worktree, reproduce, smallest diff...",
+      "platforms": [],
+      "conditions": {
+        "fallback_for_toolsets": [],
+        "requires_toolsets": [],
+        "fallback_for_tools": [],
+        "requires_tools": []
+      }
+    },
+    {
+      "skill_name": "screenshot-to-story",
+      "category": "screenshot-to-story",
+      "frontmatter_name": "screenshot-to-story",
+      "description": "Turn a photo or screenshot the founder sends into a well-...",
+      "platforms": [],
+      "conditions": {
+        "fallback_for_toolsets": [],
+        "requires_toolsets": [],
+        "fallback_for_tools": [],
+        "requires_tools": []
+      }
+    },
+    {
+      "skill_name": "verify-to-prod",
+      "category": "verify-to-prod",
+      "frontmatter_name": "verify-to-prod",
+      "description": "Prove a merged change is actually running in production. ...",
+      "platforms": [],
+      "conditions": {
+        "fallback_for_toolsets": [],
+        "requires_toolsets": [],
+        "fallback_for_tools": [],
+        "requires_tools": []
+      }
+    }
+  ],
+  "category_descriptions": {}
+}

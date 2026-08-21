@@ -1,0 +1,10 @@
+# WATCH reaches these and nothing else. Logs are attacker-influenceable text;
+# this list is the control, not the agent's judgement. Spec §5, §10.
+api.github.com
+api.fly.io
+prospector-engine.fly.dev
+prospector-store-api.fly.dev
+prospector-store-web.fly.dev
+prospector-hermes.fly.dev
+api.telegram.org
+api.anthropic.com

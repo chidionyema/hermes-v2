@@ -1,0 +1,13 @@
+# WORK - hands. Triggered by the agent-go label. Worktree and PR only.
+model:
+  provider: "anthropic"   # not OpenRouter - see config.yaml
+  default: "claude-opus-4-6"    # frontier lane, spec §2
+agent:
+  max_turns: 90
+memory:
+  memory_enabled: true
+  user_profile_enabled: true
+toolsets:
+  - hermes-cli
+limits:
+  max_cost_usd_per_task: 5    # spec §10.1 - hard cap, kills without asking

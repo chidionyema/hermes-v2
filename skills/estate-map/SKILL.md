@@ -50,6 +50,24 @@ gh issue list -R chidionyema/prospector --state open \
   --json number,title,labels --jq '.[] | "#\(.number) \(.title) [\([.labels[].name]|join(","))]"'
 ```
 
+## Thresholds
+
+These live here, in the skill, not in a script. Changing what counts as
+unhealthy is a one-line edit to this file with a diff, reviewable like anything
+else. A threshold buried in code is a decision nobody can see.
+
+| what | healthy | open an issue when |
+|---|---|---|
+| engine /health | 200 | two consecutive non-200, 15 minutes apart |
+| store-web / | 200 | two consecutive non-200 |
+| machines started | all | any machine not `started` for 10 minutes |
+| region | lhr | any machine outside lhr |
+| agent-go age | under 3 days | older than 7 days, untouched |
+| open issues | any | a jump of more than 20 in a day |
+
+One failed probe is a reading. Two are a fact. The threshold is two, everywhere,
+and that is the whole reason the pulse runs every 15 minutes rather than hourly.
+
 ## Report shape
 
 Two lines, then stop.

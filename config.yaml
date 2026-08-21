@@ -1,13 +1,77 @@
-# Hermes config — new build (architect-v2), THE ARCHITECT spec §2.
-# Only the values the spec pins. Everything else stays at upstream defaults so
-# an upgrade has less to fight with. Upstream default max_turns here is 500.
-
+# Hermes config - new build (architect-v2), THE ARCHITECT spec §2.
+# Upstream default max_turns here is 500. 90 is deliberate: a task that needs
+# more than 90 turns has gone wrong and should stop, not keep spending.
 model:
-  default: "anthropic/claude-opus-4.6"   # frontier lane; WATCH overrides to haiku
+  # Direct Anthropic, not OpenRouter. Measured 2026-08-22: OpenRouter returned
+  # HTTP 402, credits exhausted, and the first WATCH run failed on it. Routing
+  # through an account with no credit is a dead estate that looks configured.
+  provider: "anthropic"
+  default: "claude-opus-4-6"             # frontier lane; WATCH overrides to haiku
 
 agent:
   max_turns: 90
+  # 64K minimum. Below that the agent drops the platform map out of context and
+  # starts guessing at what is running.
+  context_window: 200000
+
+approvals:
+  # Smart approvals: the agent asks before anything it cannot undo, and does not
+  # ask about anything it can. Spec §2.
+  smart_approvals: true
+  always_ask:
+    - "gh pr merge"
+    - "fly deploy"
+    - "fly scale"
+    - "fly machine destroy"
+    - "git push"
+    - "rm -rf"
+  never_ask:
+    - "gh issue list"
+    - "gh issue view"
+    - "fly status"
+    - "fly logs"
+    - "git status"
+    - "git diff"
+
+# Auxiliary lane. Summaries, titles, the curator, memory extraction - none of it
+# needs a frontier model, and all of it runs constantly. Spec §11.
+aux:
+  model: "claude-haiku-4-5-20251001"
+  provider: "anthropic"
+
+# When the primary route dies, try these in order. Measured 2026-08-22: the
+# OpenRouter account is out of credit, so it sits last, not first.
+fallback_providers:
+  - provider: "anthropic"
+    model: "claude-haiku-4-5-20251001"
+  - provider: "openrouter"
+    model: "anthropic/claude-haiku-4.5"
 
 memory:
   memory_enabled: true
   user_profile_enabled: true
+
+skills:
+  # The agent may write a new skill. It lands as a PR, never straight to disk.
+  # RITUALS.md promotion gate.
+  skill_auto_creation: true
+  skill_auto_creation_requires_pr: true
+
+limits:
+  # Hard cap per task, in USD. It kills the task; it does not ask.
+  max_cost_usd_per_task: 5
+  budget_hard_stop: true
+
+sandbox:
+  # Tools run in a pinned image with the estate mounted read-only. Only the
+  # worktree is writable, so a tool cannot edit the estate that runs it.
+  image: "python:3.11-slim@sha256:pinned"
+  mounts:
+    - "$HERMES_HOME:/estate:ro"
+    - "$HERMES_HOME/skills:/skills:ro"
+  # Nothing is inherited. Every variable a tool sees is listed here.
+  env_passthrough:
+    - GITHUB_TOKEN
+    - ANTHROPIC_API_KEY
+  network:
+    allowlist_file: "egress-allowlist.txt"

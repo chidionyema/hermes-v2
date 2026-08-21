@@ -11,6 +11,27 @@ install it.
 
 _(none yet)_
 
+## Not installed - could not be found
+
+Searched 2026-08-22 with `hermes skills search` and `hermes skills inspect`.
+The hub is reachable and returns results for other queries, so this is not a
+connectivity problem: these names do not resolve.
+
+| skill | spec | result |
+|---|---|---|
+| oh-my-hermes | §4b, WORK | no match in any source |
+| execplan-skill | §4b, WORK | no match |
+| hermes-agent-acp-skill | §4b, WORK | no match |
+| rtk-hermes | §4b, WORK and WATCH | no match |
+| hermes-web-search-plus | §4b, WORK | no match |
+| agenttrace | §4b, WORK | no match |
+| lintlang | §4b, WORK | no match |
+| drawio-skill | §4b, WORK | hub returns 25 results for "drawio", none named this |
+| hermes-ai-infrastructure-monitoring-toolkit | §4b, WATCH | no match |
+
+Installing something with a similar name would break the first rule of this
+file. These stay uninstalled until the real identifier is known.
+
 ## Reviewed and rejected
 
 _(none yet)_

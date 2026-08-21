@@ -1,0 +1,54 @@
+# Static gates. Spec §7 - the machine refuses the mistake, nobody reviews for it.
+# Every job here is a required check on main. A red job is not advisory.
+name: static-gates
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  python:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install ruff pyright pip-audit deptry hypothesis pytest
+      - name: ruff lint
+        run: ruff check .
+      - name: ruff format
+        run: ruff format --check .
+      - name: pyright strict
+        run: pyright --level error
+      - name: dependency audit
+        run: pip-audit --strict
+      - name: unused and undeclared dependencies
+        run: deptry .
+      - name: tests, including the property tests on the risk paths
+        run: pytest -q
+
+  dotnet:
+    runs-on: ubuntu-latest
+    if: hashFiles('**/*.csproj') != ''
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      # TreatWarningsAsErrors: an analyser warning stops the build, same as a bug.
+      - run: dotnet build -warnaserror -p:TreatWarningsAsErrors=true
+
+  node:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: the evidence gate cannot be gamed
+        run: python3 ci/tests/test_evidence_gate_gaming.py

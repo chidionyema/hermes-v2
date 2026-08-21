@@ -5,8 +5,13 @@ description: Turn a red platform into one GitHub issue with real evidence in it.
 
 # incident-triage
 
-The output of this skill is an issue, not a fix. If you cannot paste raw command
-output into the issue, you do not have an incident yet - you have a suspicion.
+The output of this skill is an issue, not a fix.
+
+**No raw output, no issue.** If you cannot paste the raw output of a command
+into the body, you do not have an incident - you have a suspicion, and a
+suspicion filed as an incident wastes the next agent's morning. The template
+below has an evidence slot for exactly this reason: an empty slot means do not
+file.
 
 ## 1. Confirm it twice, from two angles
 

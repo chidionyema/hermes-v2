@@ -1,0 +1,9 @@
+# WATCH - perception only, cheap lane. Reads, opens issues, never writes code.
+# These are already installed. Prove it with: bin/hermes cron list
+#
+# schedule       job name           what it does
+0 * * * *      watch-estate-map   Run estate-map. If anything differs from MEMORY.md, run incident-triage. Otherwise say nothing.
+*/15 * * * *   watch-health       The 15-minute pulse. Probe prospector-engine /health and prospector-store-web /. Two failures in a row, run incident-triage. One failure, say nothing - a single reading is not a fact.
+30 7 * * *     watch-board        The 07:00 digest. Read the open board, list anything in agent-go untouched for 3 days, one line each. Delivered to Telegram once the gateway is up.
+0 9 * * 0      sunday-review      Sunday review per RITUALS.md. Delete the lessons that did not help.
+0 10 * * 0     sunday-proposals   Open exactly 3 proposal issues: the three things most worth doing next week, each with the evidence that says so. Label them proposal, never agent-go.

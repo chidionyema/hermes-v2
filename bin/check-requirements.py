@@ -8,10 +8,11 @@ import json, os, subprocess, sys, collections
 
 HOME = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 LEDGER = os.path.join(HOME, "REQUIREMENTS.jsonl")
-only = sys.argv[1] if len(sys.argv) > 1 else None
+args = [a for a in sys.argv[1:] if not a.startswith("-")]
+only = args[0] if args else None
 
 rows = [json.loads(l) for l in open(LEDGER) if l.strip()]
-passed, failed = [], []
+passed, failed, blocked = [], [], []
 for row in rows:
     if only and only not in (row["phase"], row["section"], row["id"]):
         continue
@@ -20,18 +21,33 @@ for row in rows:
                             capture_output=True, timeout=25).returncode
     except subprocess.TimeoutExpired:
         rc = 124
-    row["status"] = "done" if rc == 0 else "open"
-    (passed if rc == 0 else failed).append(row)
+    if rc == 0:
+        row["status"] = "done"
+        passed.append(row)
+    elif row.get("blocked_reason"):
+        # Blocked is not open. It is a decision waiting on the founder, and it
+        # is reported separately so it cannot hide inside the open count.
+        row["status"] = "blocked"
+        blocked.append(row)
+    else:
+        row["status"] = "open"
+        failed.append(row)
 
 with open(LEDGER, "w") as f:
     for row in rows:
         f.write(json.dumps(row) + "\n")
 
 by_phase = collections.Counter(r["phase"] for r in passed)
-tot_phase = collections.Counter(r["phase"] for r in (passed + failed))
-print(f"PASS {len(passed)} / {len(passed)+len(failed)}")
+tot_phase = collections.Counter(r["phase"] for r in (passed + failed + blocked))
+print(f"PASS {len(passed)} / {len(passed)+len(failed)+len(blocked)}"
+      + (f"   BLOCKED {len(blocked)}" if blocked else ""))
 for ph in sorted(tot_phase):
     print(f"  {ph}: {by_phase[ph]}/{tot_phase[ph]}")
+if blocked:
+    print("\nblocked - waiting on a founder decision, not on work:")
+    for r in blocked:
+        print(f"  {r['id']} {r['statement']}")
+        print(f"      why: {r['blocked_reason']}")
 if failed and "-v" in sys.argv:
     print("\nopen:")
     for r in failed:

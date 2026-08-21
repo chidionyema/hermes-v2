@@ -1,0 +1,11 @@
+# WATCH - perception only. Reads the platform, opens issues, never fixes.
+model:
+  provider: "anthropic"   # not OpenRouter - see config.yaml
+  default: "claude-haiku-4-5-20251001"   # cheap lane, spec §2
+agent:
+  max_turns: 90
+memory:
+  memory_enabled: true
+  user_profile_enabled: true
+toolsets:
+  - hermes-cli
