@@ -1,0 +1,30 @@
+{
+  "directed": false,
+  "multigraph": false,
+  "graph": {},
+  "nodes": [
+    {
+      "label": "SOUL.md",
+      "file_type": "document",
+      "source_file": "SOUL.md",
+      "source_location": "L1",
+      "_origin": "ast",
+      "id": "soul",
+      "community": 1,
+      "norm_label": "soul.md"
+    },
+    {
+      "label": "check-requirements.py",
+      "file_type": "code",
+      "source_file": "bin/check-requirements.py",
+      "source_location": "L1",
+      "_origin": "ast",
+      "id": "bin_check_requirements",
+      "community": 0,
+      "norm_label": "check-requirements.py"
+    }
+  ],
+  "links": [],
+  "hyperedges": [],
+  "built_at_commit": "10d3973199f2ba9edca933dd77c5f458901a3f94"
+}

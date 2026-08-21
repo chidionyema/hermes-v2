@@ -1,0 +1,17 @@
+{
+  "auth.json": {
+    "mtime": 1787353593.409829,
+    "ast_hash": "e8460fb4db28c81a1f25874acccef1c4",
+    "semantic_hash": ""
+  },
+  "bin/check-requirements.py": {
+    "mtime": 1787353536.5265782,
+    "ast_hash": "938deca1f53a60d7e09d7d5e09427e73",
+    "semantic_hash": ""
+  },
+  "SOUL.md": {
+    "mtime": 1787353539.8106916,
+    "ast_hash": "d2739b1321916e04d3e0ce68e03eb4b6",
+    "semantic_hash": ""
+  }
+}
