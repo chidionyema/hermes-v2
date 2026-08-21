@@ -1,0 +1,84 @@
+---
+name: incident-triage
+description: Turn a red platform into one GitHub issue with real evidence in it. Use when a health check fails, an app is not started, or logs show errors. Never fixes anything.
+---
+
+# incident-triage
+
+The output of this skill is an issue, not a fix. If you cannot paste raw command
+output into the issue, you do not have an incident yet - you have a suspicion.
+
+## 1. Confirm it twice, from two angles
+
+A single failed probe is a reading, not a fact. Get the code and the process.
+
+```bash
+curl -s -o /dev/null -w '%{http_code}\n' https://prospector-engine.fly.dev/health
+fly status -a prospector-engine
+```
+
+If the HTTP code is bad and `fly status` shows every machine `started`, that is a
+different incident from both agreeing. Say which you got.
+
+## 2. Get the reason, not the symptom
+
+```bash
+fly logs -a prospector-engine --no-tail | tail -100
+fly machine list -a prospector-engine
+```
+
+Find the first error line, not the last. The last one is usually a consequence.
+
+## 3. What changed
+
+```bash
+fly releases -a prospector-engine | head -5
+gh run list -R chidionyema/prospector --limit 5 \
+  --json displayTitle,conclusion,createdAt --jq '.[] | "\(.createdAt[0:16]) \(.conclusion) \(.displayTitle)"'
+```
+
+An incident that starts within minutes of a release is that release until proven
+otherwise.
+
+## 4. Open exactly one issue
+
+Search first. A second issue for a live incident splits the evidence.
+
+```bash
+gh issue list -R chidionyema/prospector --state open --label live-red \
+  --json number,title --jq '.[] | "#\(.number) \(.title)"'
+```
+
+If one exists, comment on it. Otherwise:
+
+```bash
+gh issue create -R chidionyema/prospector \
+  --title "<app> <what is wrong> since <time>" \
+  --label live-red --label triage --label "lane: Ops" --label P0 \
+  --body "$(cat <<'BODY'
+## What is wrong
+<one sentence>
+
+## Two angles
+- probe: <command> -> <output>
+- process: <command> -> <output>
+
+## First error in the logs
+```
+<paste>
+```
+
+## What changed
+<release / run, or "nothing in the last 24h">
+
+## What I did not check
+<be specific>
+BODY
+)"
+```
+
+## Never
+
+Do not restart a machine. Do not roll back. Do not scale. Those change the
+platform, and a change without a decision is how one incident becomes two.
+Label it `P0` and stop - that is what the label is for.

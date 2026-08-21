@@ -1,0 +1,100 @@
+---
+name: pr-discipline
+description: How to make a change - worktree, reproduce, smallest diff, PR, stop. Use for every code change. Never merges.
+---
+
+# pr-discipline
+
+## 0. Pre-flight - two questions before the first command
+
+**Have we failed this way before?**
+
+```bash
+grep -i '<the symptom in a word or two>' ~/Documents/code/hermes-v2/estate-evals/incidents.jsonl
+```
+
+A hit means the class is known and there may already be a guard. Read the row
+before you write anything.
+
+**Does the fix already exist somewhere?**
+
+```bash
+git -C ~/Documents/code/prospector log --all --oneline -1 -- <path>
+```
+
+Two implementations of one thing are worse than none: both have passing tests,
+so neither can be deleted, and they race in production.
+
+Then post your interpretation on the issue, in one line, before you start:
+
+```bash
+gh issue comment <n> -R chidionyema/prospector \
+  --body "Interpretation: <what I think you are asking for, in one sentence>. Starting now."
+```
+
+If the interpretation is wrong, the founder says so and you have lost a minute
+instead of an afternoon.
+
+## 1. A worktree, never the main checkout
+
+```bash
+cd ~/Documents/code/prospector
+git fetch origin main
+git worktree add ../prospector-wt/issue-<n> -b fix/<n>-<slug> origin/main
+cd ../prospector-wt/issue-<n>
+```
+
+The main checkout is the founder's. It has uncommitted work in it and you must
+never touch it.
+
+## 2. Reproduce before you fix
+
+Write the failing test or the failing command first, and paste its output on the
+issue. If you cannot reproduce it, comment saying exactly what you tried and
+stop. A fix for a bug you never saw is a guess with a diff attached.
+
+## 3. Smallest diff
+
+Extend what exists. A new module needs a demonstrated reason the old one cannot
+serve. No adjacent cleanups, no renames, no reformatting.
+
+```bash
+git diff --stat
+```
+
+If that shows files your issue does not mention, take them back out.
+
+## 4. Green before you push
+
+```bash
+git fetch origin main && git merge origin/main --no-edit
+<the project's test command> 2>&1 | tail -20
+```
+
+Merge, never rebase, never force push. A stale branch fails as somebody else's
+bug and you then debug a fiction.
+
+## 5. The PR
+
+```bash
+gh pr create -R chidionyema/prospector --base main \
+  --title "<what changed and where>" \
+  --body "$(cat <<'BODY'
+Closes #<n>
+
+## What changed
+<one sentence per file>
+
+## Evidence
+```
+<the failing case, then the same command passing>
+```
+
+## What I did not do
+<scope you deliberately left>
+BODY
+)"
+```
+
+Then apply `pr-open` to the issue and stop. Do not merge. Do not deploy.
+Merging is the founder's, every time.

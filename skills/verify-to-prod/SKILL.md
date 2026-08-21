@@ -1,0 +1,58 @@
+---
+name: verify-to-prod
+description: Prove a merged change is actually running in production. Use after a merge, before moving an issue to verified or closed.
+---
+
+# verify-to-prod
+
+Merged is not deployed. Deployed is not running. Running is not working. Three
+separate facts, three separate commands.
+
+## 1. Merged
+
+```bash
+gh pr view <n> -R chidionyema/prospector --json state,mergedAt,mergeCommit \
+  --jq '"\(.state) \(.mergedAt) \(.mergeCommit.oid[0:8])"'
+```
+
+## 2. Deployed - the pipeline ran and the app took the release
+
+```bash
+gh run list -R chidionyema/prospector --branch main --limit 3 \
+  --json conclusion,headSha,displayTitle \
+  --jq '.[] | "\(.conclusion) \(.headSha[0:8]) \(.displayTitle)"'
+fly releases -a prospector-engine | head -3
+fly status -a prospector-engine
+```
+
+The release must be newer than the merge, and every machine `started`. A green
+Action with no new Fly release means the deploy step did not run.
+
+## 3. Working - the behaviour the issue asked for
+
+```bash
+curl -s -o /dev/null -w '%{http_code}\n' https://prospector-engine.fly.dev/health
+```
+
+Then the specific thing. Health being 200 says the process is up; it says
+nothing about the change. Run the case from the issue and paste what came back.
+
+## 4. Two angles, or it is not verified
+
+One angle is the deploy metadata. The second is the running behaviour. Both, in
+the comment, or the issue does not move.
+
+```bash
+gh issue comment <n> -R chidionyema/prospector --body "$(cat <<'BODY'
+Verified in production.
+
+- merged: <sha> at <time>
+- release: <fly release n> at <time>, machines started
+- behaviour: `<command>` -> `<output>`
+BODY
+)"
+gh issue edit <n> -R chidionyema/prospector --add-label verified --remove-label deployed
+```
+
+If any of the three is missing, comment what is missing and leave the label
+alone. A negative result is a real result and you report it.
