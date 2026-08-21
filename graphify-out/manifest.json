@@ -1,12 +1,12 @@
 {
   "auth.json": {
-    "mtime": 1787353593.409829,
-    "ast_hash": "e8460fb4db28c81a1f25874acccef1c4",
+    "mtime": 1787355907.527351,
+    "ast_hash": "56a4e990c24da40d391f77c0608cfdc4",
     "semantic_hash": ""
   },
   "bin/check-requirements.py": {
-    "mtime": 1787353536.5265782,
-    "ast_hash": "938deca1f53a60d7e09d7d5e09427e73",
+    "mtime": 1787355904.901573,
+    "ast_hash": "4caa99ffce8d008c493124b66e019854",
     "semantic_hash": ""
   },
   "SOUL.md": {
@@ -20,8 +20,8 @@
     "semantic_hash": ""
   },
   "config.yaml": {
-    "mtime": 1787355329.725048,
-    "ast_hash": "ab8dd2cc56f8a03fd8db63b54fac1760",
+    "mtime": 1787355992.3154006,
+    "ast_hash": "8bb885bc550901094f3bcfcad6585730",
     "semantic_hash": ""
   },
   "bin/audit-append.sh": {
@@ -100,38 +100,38 @@
     "semantic_hash": ""
   },
   "profiles/watch/MEMORY.md": {
-    "mtime": 1787354893.7742643,
+    "mtime": 1787355705.2768402,
     "ast_hash": "96d0d062a0985dc3ff7ec589c2ef39a7",
     "semantic_hash": ""
   },
   "profiles/watch/USER.md": {
-    "mtime": 1787354893.7996051,
+    "mtime": 1787355705.2789543,
     "ast_hash": "754ff19edb3a6a5d788f6c9497b9dd68",
     "semantic_hash": ""
   },
   "profiles/watch/config.yaml": {
-    "mtime": 1787354893.7616966,
-    "ast_hash": "29d14a01a7bac2ca2454d6a01bdf3c4e",
+    "mtime": 1787355873.9403381,
+    "ast_hash": "af63ca4e5ee8d3101941cfef9818d3fb",
     "semantic_hash": ""
   },
   "profiles/watch/egress-allowlist.txt": {
-    "mtime": 1787354893.8129075,
+    "mtime": 1787355705.2964885,
     "ast_hash": "60ea746ba5887c7012e2fa49b74e48a9",
     "semantic_hash": ""
   },
   "profiles/work/MEMORY.md": {
-    "mtime": 1787354893.8385391,
+    "mtime": 1787355705.3121889,
     "ast_hash": "96d0d062a0985dc3ff7ec589c2ef39a7",
     "semantic_hash": ""
   },
   "profiles/work/USER.md": {
-    "mtime": 1787354893.8642972,
+    "mtime": 1787355705.313844,
     "ast_hash": "f316da878f5ca85e8bc2c0a36306b454",
     "semantic_hash": ""
   },
   "profiles/work/config.yaml": {
-    "mtime": 1787354893.826407,
-    "ast_hash": "4a3305a0edad0b13f23664bac5ffb42b",
+    "mtime": 1787355873.9415658,
+    "ast_hash": "75f68f83102c08f98f9727398a397f1b",
     "semantic_hash": ""
   },
   "runbooks/hermes-upgrade.md": {
@@ -140,23 +140,23 @@
     "semantic_hash": ""
   },
   "skills/PLATFORM_GATING.md": {
-    "mtime": 1787355114.39685,
-    "ast_hash": "c6bc72b095000c8ed0a4c0f06b88a4f1",
+    "mtime": 1787355999.9635768,
+    "ast_hash": "2f1f6071a7ce180541be50dc577afdbb",
     "semantic_hash": ""
   },
   "skills/VETTED.md": {
-    "mtime": 1787355114.4088457,
-    "ast_hash": "556b72aea616a6fcb808be5cc84ffc5c",
+    "mtime": 1787356194.212235,
+    "ast_hash": "cf0c8c508ce2022c37d8837e68dfeac8",
     "semantic_hash": ""
   },
   "skills/estate-map/SKILL.md": {
-    "mtime": 1787355067.235975,
-    "ast_hash": "88ae649307bc10579212c75d8f8207ec",
+    "mtime": 1787355999.9623113,
+    "ast_hash": "f8e6ba4ffc94e9985d273cc34ec6519d",
     "semantic_hash": ""
   },
   "skills/incident-triage/SKILL.md": {
-    "mtime": 1787355067.249097,
-    "ast_hash": "fab0377175fe5e114974544a714ed993",
+    "mtime": 1787355999.9612353,
+    "ast_hash": "4c095f2f6166ac73008b36fa975619fd",
     "semantic_hash": ""
   },
   "skills/post-mortem/SKILL.md": {
@@ -182,6 +182,51 @@
   "tests/incidents/README.md": {
     "mtime": 1787355240.9187746,
     "ast_hash": "85a7cdd83561189dbb33b0cf6a3092e8",
+    "semantic_hash": ""
+  },
+  ".skills_prompt_snapshot.json": {
+    "mtime": 1787355783.1212432,
+    "ast_hash": "1109c87b61f02d5cc54e51a4edb741bf",
+    "semantic_hash": ""
+  },
+  "bin/cost-report.sh": {
+    "mtime": 1787355843.288345,
+    "ast_hash": "f366e36c08da78c6171142cb799e3914",
+    "semantic_hash": ""
+  },
+  "bin/curator-report.sh": {
+    "mtime": 1787355887.2103362,
+    "ast_hash": "2a887f5be9052b74d544ba77208c2a28",
+    "semantic_hash": ""
+  },
+  "bin/prove-watch-readonly.sh": {
+    "mtime": 1787356027.6621468,
+    "ast_hash": "0d5f333db24ddcc42c1c726bb38b92b1",
+    "semantic_hash": ""
+  },
+  "cron/jobs.json": {
+    "mtime": 1787355998.1144588,
+    "ast_hash": "ee04bc9e50d6051f6f53ed4baba092ef",
+    "semantic_hash": ""
+  },
+  "models_dev_cache.json": {
+    "mtime": 1787355907.4623911,
+    "ast_hash": "8b7b4685de2c0d610711d97ba1f3cfc3",
+    "semantic_hash": ""
+  },
+  "sessions/request_dump_20260822_004302_bdc052_20260822_004309_559480.json": {
+    "mtime": 1787355789.7577355,
+    "ast_hash": "1ea932018b643aa34b420de4dd98a227",
+    "semantic_hash": ""
+  },
+  "skills/.usage.json": {
+    "mtime": 1787355807.8401957,
+    "ast_hash": "ebd883630f6547c49a87a0dee65f0e8f",
+    "semantic_hash": ""
+  },
+  "CUTOVER.md": {
+    "mtime": 1787355577.7595444,
+    "ast_hash": "b353429d0327f1a0f21617d281fa3bf4",
     "semantic_hash": ""
   }
 }

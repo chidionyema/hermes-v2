@@ -8,19 +8,21 @@ a sequence of steps, each of which can be undone.
 Two settings on `chidionyema/prospector` are in the spec and are **not** applied,
 because applying them today would stop the live pipeline. Measured 2026-08-22:
 
-**1. Auto-merge is on, and two PRs are queued on it.**
+**1. Auto-merge is on, and a PR is queued on it.**
 
 ```
 $ gh api repos/chidionyema/prospector --jq .allow_auto_merge
 true
 $ gh pr list -R chidionyema/prospector --state open --json number,autoMergeRequest
 #643 auto_merge=true  ci: delete the workarounds the public repo made unnecessary
-#627 auto_merge=true  fix(backup): one backup system that can restore the ledger, not two that cannot
 ```
 
+(#627 was also queued when this was first measured; it merged at 23:47 the same
+evening. #643 is still waiting.)
+
 The repo also runs `automerge.yml` and `merge-when-green.yml`. Spec §10 says the
-founder tap is the only promotion. Turning auto-merge off cancels both queued
-PRs and takes two active workflows out of service.
+founder tap is the only promotion. Turning auto-merge off cancels #643 and takes two
+active workflows out of service.
 
 The command, when he decides:
 
@@ -37,7 +39,7 @@ Branch not protected (HTTP 404)
 
 Requiring `evidence-gate` and `static-gates` before those workflows exist in
 prospector freezes main permanently - a required check that never reports is a
-merge that never happens.
+merge that never happens. #643 is in that queue now.
 
 Order that works: copy `ci/evidence-gate.yml` and `ci/static-gates.yml` into
 `prospector/.github/workflows/`, open a PR, watch both run green once, **then**:
