@@ -1,0 +1,11 @@
+hermes-agent/
+hermes-agent-self-evolution/
+state.db
+state.db-*
+backups/
+logs/
+audio_cache/
+cache/
+__pycache__/
+*.pyc
+.venv/
