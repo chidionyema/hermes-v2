@@ -616,6 +616,16 @@ is not a defect of the model but of the question. Principle 3 does not bend for
 it: a claim exists with a command and its output, and a consult produces
 neither. When a consult and a command disagree, the command is right.
 
+**Which model answers is not fixed, and the lane must not care.** The service
+tries several in order and the first one that is ready and not benched takes
+the question. On 2026-08-22 that meant a subscription model, then a free-tier
+one, then a 7B model running on the laptop with no network at all. A backend
+that fails three times in a row sits out for ten minutes, so a spent quota
+degrades the answer instead of stopping it. The reply names the backend that
+produced it. A lane that would only accept an answer from one particular model
+is asking for a provider, not a consult, and that is the out-of-scope case
+below.
+
 **Three uses, no others.** Two failed attempts, a close design decision, or
 anything about to be done that cannot be undone. Never for a question a command
 would answer. Never twice on one problem.

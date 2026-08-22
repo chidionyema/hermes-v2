@@ -67,7 +67,14 @@ in some other project's layout, and a service this platform does not run. Every
 answer is a hypothesis, and it earns its place the same way yours does: a
 command, and its output.
 
-**Never put a secret in the question.** The text leaves this machine. A token,
+**Never assume you got the good model.** The service tries several in order and
+answers from the first one that is available, which on a bad day is a small
+model running on the laptop. The reply names the backend. Weigh the answer by
+what it says and whether a command confirms it, never by the fact that
+something answered.
+
+**Never put a secret in the question.** The text usually leaves this machine,
+and you cannot tell from here which backend will take it, so assume it does. A token,
 a connection string, a private key or the contents of `.env` may not appear in
 a question or in the context, for any reason, including debugging. Name the
 variable instead of pasting it.
