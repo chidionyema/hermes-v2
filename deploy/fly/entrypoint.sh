@@ -170,24 +170,6 @@ elif [ -f "$AGE_FILE" ]; then
     echo "[entrypoint] age drill: skipped (no AGE_PRIVATE_KEY on this platform)"
 fi
 
-# Report the last-resort credential, the one that answers when the volume file
-# is gone. It is deliberately NOT what runs day to day: when the file exists and
-# carries a refresh token, _prefer_refreshable_claude_code_token
-# (anthropic_adapter.py:1366-1385) overrides this env var so a static token
-# cannot shadow refresh forever. That is correct, and it means you cannot see
-# this credential working by watching a healthy container — so say at boot
-# whether it is there at all, which is the only cheap moment to find out.
-if [ -n "${CLAUDE_CODE_OAUTH_TOKEN:-}" ]; then
-    case "$CLAUDE_CODE_OAUTH_TOKEN" in
-        sk-ant-oat*) echo "[entrypoint] fallback: CLAUDE_CODE_OAUTH_TOKEN is set and looks like a setup-token" ;;
-        \{*)         echo "[entrypoint] fallback: WARNING CLAUDE_CODE_OAUTH_TOKEN holds a JSON document, not a token. It will be sent verbatim as a bearer credential. Use CLAUDE_CREDENTIALS_JSON for a document." >&2 ;;
-        *)           echo "[entrypoint] fallback: WARNING CLAUDE_CODE_OAUTH_TOKEN is set but is not a recognised setup-token" >&2 ;;
-    esac
-else
-    echo "[entrypoint] fallback: none. If the volume file is lost, this container cannot authenticate."
-    echo "[entrypoint]           fix: claude setup-token, then fly secrets set CLAUDE_CODE_OAUTH_TOKEN=... -a <app>"
-fi
-
 "$H/.venv/bin/hermes" --version || true
 
 # HERMES_GATEWAY_AUTOSTART is the cutover switch, and it only means something
