@@ -144,6 +144,26 @@ case "$CRON_STATUS" in
     printf '  \033[33mIDLE\033[0m  %-34s %s\n' "the gateway is not running" "start it: ./bin/hermes gateway install" ;;
 esac
 
+# 11. can the agent actually reach the founder?
+# The rows above prove the gateway runs. None of them proves a word of it ever
+# reaches his phone. Every job shipped with deliver=local, which writes a file
+# in cron/output/ and tells nobody -- a scheduler talking to itself. This row
+# fails if any job goes back to local.
+LOCAL="$("$PY" - <<'PYEOF'
+import json
+d = json.load(open('cron/jobs.json'))
+jobs = d if isinstance(d, list) else d.get('jobs', d)
+if isinstance(jobs, dict): jobs = list(jobs.values())
+bad = [j.get('name') for j in jobs if j.get('deliver') in (None, '', 'local')]
+print(','.join(bad) if bad else '')
+PYEOF
+)"
+if [ -z "$LOCAL" ]; then
+  row "every job reaches the founder" 0 "all jobs deliver off-machine"
+else
+  row "every job reaches the founder" 1 "delivers to nobody: $LOCAL"
+fi
+
 # --full: the whole requirement ledger, which is slower
 if [ "${1:-}" = "--full" ]; then
   printf '\n'
