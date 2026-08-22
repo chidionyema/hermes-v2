@@ -20,8 +20,17 @@ cd my-agent
 every file that needs them, and then proves the result works. It is safe to run
 twice.
 
-The only thing you must have is an Anthropic API key from
-[console.anthropic.com](https://console.anthropic.com/settings/keys).
+It needs a way to talk to a model, and there are two. Either an API key from
+[console.anthropic.com](https://console.anthropic.com/settings/keys), which
+goes in `.env`. Or your existing Claude Code subscription, which it reuses:
+
+```bash
+./bin/hermes auth login
+```
+
+The second one costs nothing extra and is what the estate that built this uses.
+`./install` asks for a key and accepts an empty answer if you would rather log
+in.
 
 Check what your machine is missing before you start:
 
@@ -167,15 +176,21 @@ command you can run.
 ```
 
 ```
-  PASS  estate.yaml describes an estate    prospector 3
+  PASS  estate.yaml describes an estate    acme 2
   PASS  generated files match templates    20 checked
   PASS  the agent runs                     Hermes Agent v0.20.5
   PASS  agent is the pinned commit         fcbd1076a9
-  PASS  an Anthropic credential exists     auth.json
+  PASS  agent home is this directory       /Users/you/acme-agent
+  PASS  every model has a price            2 models
+  PASS  an Anthropic credential exists     auth.json (hermes auth login)
+  PASS  .env is private (mode 600)         mode 600
   PASS  no secrets tracked in git
   PASS  every service answers
-        engine     307   answering
-        store-web  200   answering
+        site    200   answering            https://acme-site.fly.dev/
+        api     307   answering            https://acme-api.fly.dev/health
+  PASS  cron jobs installed                5 jobs
+  IDLE  the gateway is not running         start it: ./bin/hermes gateway install
+
   11 passed, 0 failed
 ```
 

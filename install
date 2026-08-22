@@ -152,16 +152,25 @@ fi
 
 # --------------------------------------------------------------------------- .env
 
-next "Collecting the one secret that is not optional"
+next "Giving it a way to talk to a model"
 
+# Two routes in, and most people already have the second one.
+#
+#   1. An API key from console.anthropic.com, in .env.
+#   2. A Claude Code subscription, reused by `bin/hermes auth login`. No key,
+#      no separate bill. This is what the estate that built this uses.
+#
+# Neither is checked here beyond existing. bin/verify does the checking.
 if [ -f .env ]; then
   skip ".env already exists, leaving it alone"
 else
-  cp .env.example .env
+  if [ -f .env.example ]; then cp .env.example .env
+  else printf 'ANTHROPIC_API_KEY=\nGITHUB_TOKEN=\n' > .env; fi
   chmod 600 .env
   KEY="${ANTHROPIC_API_KEY:-}"
   if [ -z "$KEY" ] && [ -t 0 ]; then
-    echo "  Get one at https://console.anthropic.com/settings/keys"
+    echo "  An API key from https://console.anthropic.com/settings/keys,"
+    echo "  or press enter to use your Claude Code login instead."
     read -r -s -p "  ANTHROPIC_API_KEY (hidden, enter to skip): " KEY
     echo
   fi
@@ -170,8 +179,9 @@ else
     chmod 600 .env
     ok ".env written, mode 600"
   else
-    warn ".env written with no API key. The agent cannot think until you add one:
-        edit .env and set ANTHROPIC_API_KEY"
+    ok ".env written, mode 600, no API key in it"
+    echo "        You will log in with your Claude Code account instead:"
+    echo "        ./bin/hermes auth login"
   fi
 fi
 
@@ -245,8 +255,9 @@ if ./bin/verify; then
 
   Setup is done and proven.
 
-  Nothing is running yet. One command starts it:
+  Nothing is running yet. Two commands start it:
 
+      ./bin/hermes auth login        # only if you skipped the API key
       ./bin/hermes gateway install
 
   Then watch what it costs:

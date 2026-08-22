@@ -1,6 +1,9 @@
 *.pyc
 .env
 .env.*
+# ...except the template install copies. It holds no secrets, only the
+# variable names, and a fresh clone is unusable without it.
+!.env.example
 .venv/
 __pycache__/
 audio_cache/

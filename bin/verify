@@ -61,8 +61,14 @@ import json,sys
 p=json.load(open('auth.json')).get('credential_pool',{})
 sys.exit(0 if p.get('anthropic') else 1)" 2>/dev/null && CRED="auth.json (hermes auth login)"
 fi
-[ -n "$CRED" ]
-row "an Anthropic credential exists" "$?" "${CRED:-none: set it in .env or run bin/hermes auth login}"
+# Neither route configured is not a failure on a fresh install. It is the one
+# step left, and it is stated rather than hidden, the same as the gateway row.
+if [ -n "$CRED" ]; then
+  row "an Anthropic credential exists" 0 "$CRED"
+else
+  printf '  \033[33mTODO\033[0m  %-34s %s\n' "no model credential yet" \
+    "./bin/hermes auth login, or put a key in .env"
+fi
 
 if [ -f .env ]; then
   MODE="$(stat -f '%Lp' .env 2>/dev/null || stat -c '%a' .env 2>/dev/null)"
