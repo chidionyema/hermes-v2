@@ -37,10 +37,12 @@ except Exception:
 print(d.get("verdict", "unreadable"))
 print(int(d.get("epoch", 0) or 0))
 print(str(d.get("detail", "")).replace("\n", " "))
+print(d.get("fallback", "unknown"))
 ' 2>/dev/null)
 VERDICT=$(printf '%s\n' "$PARSED" | sed -n 1p)
 EPOCH=$(printf '%s\n' "$PARSED" | sed -n 2p)
 DETAIL=$(printf '%s\n' "$PARSED" | sed -n 3p)
+FALLBACK=$(printf '%s\n' "$PARSED" | sed -n 4p)
 [ -z "${EPOCH//[0-9]/}" ] || EPOCH=0
 
 NOW=$(date -u +%s)
@@ -55,10 +57,22 @@ if [ "$AGE" -gt "$MAX_AGE" ]; then
     exit 3
 fi
 
+# The last-resort credential is reported alongside every verdict, not as its own
+# exit code. It is a different question from "does the ciphertext still open",
+# and folding it into the exit status would let one mask the other. A drill that
+# says ok while nothing could authenticate after a volume loss is still a fact
+# the reader needs on the same line.
+case "$FALLBACK" in
+    none)        FB="  [no last-resort credential: a lost volume means no auth]" ;;
+    setup-token) FB="  [last resort: setup-token]" ;;
+    unknown)     FB="" ;;
+    *)           FB="  [last resort: $FALLBACK -- check this]" ;;
+esac
+
 case "$VERDICT" in
-    ok)      echo "ok     $APP: $DETAIL (checked ${AGE}s ago)"; exit 0 ;;
-    drifted) echo "DRIFT  $APP: $DETAIL (checked ${AGE}s ago)"; exit 2 ;;
-    fail)    echo "FAIL   $APP: $DETAIL (checked ${AGE}s ago)"; exit 1 ;;
-    skipped) echo "skip   $APP: $DETAIL"; exit 4 ;;
+    ok)      echo "ok     $APP: $DETAIL (checked ${AGE}s ago)$FB"; exit 0 ;;
+    drifted) echo "DRIFT  $APP: $DETAIL (checked ${AGE}s ago)$FB"; exit 2 ;;
+    fail)    echo "FAIL   $APP: $DETAIL (checked ${AGE}s ago)$FB"; exit 1 ;;
+    skipped) echo "skip   $APP: $DETAIL$FB"; exit 4 ;;
     *)       echo "STALE  $APP: unreadable verdict"; exit 3 ;;
 esac

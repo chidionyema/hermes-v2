@@ -45,6 +45,23 @@ print(hashlib.sha256(t.encode()).hexdigest()[:16])
 PYEOF
 }
 
+# The last-resort credential: what answers when the volume file is gone. It is
+# deliberately NOT what runs day to day — when the file exists and carries a
+# refresh token, _prefer_refreshable_claude_code_token
+# (hermes-agent/agent/anthropic_adapter.py:1366-1385) overrides this env var so
+# a static token cannot shadow refresh forever. That is correct, and it is also
+# why you cannot see this credential working by watching a healthy container.
+# So report whether it is there at all. "none" means one lost volume from an
+# app that cannot authenticate.
+fallback_state() {
+    case "${CLAUDE_CODE_OAUTH_TOKEN:-}" in
+        '')          echo none ;;
+        sk-ant-oat*) echo setup-token ;;
+        \{*)         echo json-document-not-a-token ;;
+        *)           echo unrecognised ;;
+    esac
+}
+
 # Written on every run including the skips, because a status file that only
 # appears when things are broken is indistinguishable from a checker that never
 # ran. The reader wants freshness as much as verdict.
@@ -52,8 +69,9 @@ emit() {
     local verdict=$1 detail=$2 age_sha=${3:-} live_sha=${4:-}
     local tmp
     tmp=$(mktemp "${STATUS}.XXXXXX") || return 0
-    printf '{"verdict":"%s","detail":"%s","age_digest":"%s","live_digest":"%s","checked_at":"%s","epoch":%s}\n' \
-        "$verdict" "$detail" "$age_sha" "$live_sha" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$(date -u +%s)" > "$tmp"
+    printf '{"verdict":"%s","detail":"%s","age_digest":"%s","live_digest":"%s","fallback":"%s","checked_at":"%s","epoch":%s}\n' \
+        "$verdict" "$detail" "$age_sha" "$live_sha" "$(fallback_state)" \
+        "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$(date -u +%s)" > "$tmp"
     chmod 644 "$tmp"
     mv -f "$tmp" "$STATUS"
 }
