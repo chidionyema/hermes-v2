@@ -36,4 +36,32 @@ done
 echo "[entrypoint] state linked to $D"
 "$H/.venv/bin/hermes" --version || true
 
+# HERMES_GATEWAY_AUTOSTART is the cutover switch, and it only means something
+# because of the block below. This image has no supervisord — the old estate's
+# does, and that is where the variable's name comes from. Without this, setting
+# it to 1 changed an environment variable and nothing else, and the container
+# went on sleeping. Measured 2026-08-22: CMD was ["sleep","infinity"].
+if [ "${HERMES_GATEWAY_AUTOSTART:-0}" = "1" ]; then
+    # Refuse to start without a resolvable Anthropic credential. On this image
+    # the Claude Code Keychain and ~/.claude are both absent, so the only
+    # sources that can work are the env vars — see docs/claude-auth.md. Starting
+    # anyway gives a gateway that answers Telegram and fails every turn, which
+    # looks like a Hermes bug rather than a missing secret.
+    if ! "$H/.venv/bin/python" -c "
+import sys
+sys.path.insert(0, '$H/hermes-agent')
+from agent.anthropic_adapter import resolve_anthropic_token
+sys.exit(0 if resolve_anthropic_token() else 1)
+" 2>/dev/null; then
+        echo "[entrypoint] REFUSING to start the gateway: no Anthropic token resolves." >&2
+        echo "[entrypoint] Set CLAUDE_CODE_OAUTH_TOKEN (preferred) or ANTHROPIC_API_KEY." >&2
+        echo "[entrypoint] See docs/claude-auth.md. Sleeping so the machine stays reachable." >&2
+        exec sleep infinity
+    fi
+    echo "[entrypoint] starting the gateway"
+    cd "$H"
+    exec "$H/.venv/bin/hermes" gateway run --replace --external-supervisor
+fi
+
+echo "[entrypoint] gateway autostart is off; idling"
 exec "$@"
