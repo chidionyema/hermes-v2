@@ -114,11 +114,14 @@ github:
   repo: your-repo
 
 services:
-  - key: api
-    app: acme-api
-    url: https://acme-api.fly.dev/health
-    expect: "2xx"
-    note: ""
+  - key: api                                  # short handle used in reports
+    app: acme-api                             # the platform's app name
+    url: https://acme-api.fly.dev/health      # what gets probed
+    expect: "2xx"                             # 2xx | 3xx | any-answer
+    note: ""                                  # what a human should know
+
+# Anything else the agent may reach. The services above are added for you.
+egress_extra: []
 
 models:
   watch: claude-haiku-4-5
@@ -128,12 +131,26 @@ models:
 Add a service, change a model, point it at a different repo — then:
 
 ```bash
-bin/render      # writes your change into all 20 generated files
+bin/render      # writes your change into every generated file
 bin/verify      # proves the result still works
 ```
 
 `bin/render --check` fails if anyone has hand-edited a generated file, so the
 estate and the files describing it cannot quietly drift apart.
+
+No template may name one of your services. A template that wrote
+`{{ service.api.app }}` would build perfectly for the estate it was written in
+and fail on the next one, so `bin/render` refuses it and tells you to loop
+instead:
+
+```
+{{#services}}{{app}} answers on {{url}}
+{{/services}}
+```
+
+Anything a human needs to know about one service — that it sits behind a login,
+that a 404 there is normal — goes in that service's `note`, which the skills and
+memory files pick up. That is the only place estate-specific knowledge lives.
 
 ---
 
@@ -142,10 +159,12 @@ estate and the files describing it cannot quietly drift apart.
 | | |
 |---|---|
 | `./install` | set up from a clean clone |
-| `./bin/verify` | prove it works — 11 checks, a few seconds |
-| `./bin/verify --full` | also run all 122 requirement checks |
+| `./bin/verify` | prove it works — a few seconds |
+| `./bin/verify --full` | also run the whole requirement ledger, a few minutes |
 | `./bin/hermes ...` | the agent itself; **always** use this wrapper, never bare `hermes` |
 | `bin/render` | push `estate.yaml` into every generated file |
+| `bin/install-cron.py cron/watch.jobs` | put the WATCH jobs on the schedule; safe to run twice |
+| `bin/install-cron.py cron/work.jobs` | start the WORK lane, which opens pull requests |
 | `bin/pulse.sh` | the free health check; silence means healthy |
 | `./bin/cost-report.sh` | what it has spent |
 | `bin/teardown` | stop it running, keep everything |
@@ -161,12 +180,15 @@ different estate. The wrapper sets `HERMES_HOME` to this directory.
 Claims about an agent are cheap. This one is built so that every claim is a
 command you can run.
 
-- **122 requirements**, each closing only when a shell command exits 0. Nothing
-  is closed by anyone asserting it is closed. `bin/check-requirements.py`.
+- **A requirement ledger**, where a row closes only when a shell command exits
+  0. Nothing is closed by anyone asserting it is closed.
+  `bin/check-requirements.py`.
 - **A lesson ladder.** Every incident goes in `estate-evals/incidents.jsonl`
   with the class of mistake it belongs to and the artifact that now prevents it.
-  Rung 4 means a machine refuses the mistake; rung 1 means somebody wrote it
-  down. Notes are the weakest rung on purpose.
+  The cheapest rung that can express the guarantee wins: rung 1 makes the
+  mistake unrepresentable, rung 2 is one property test standing in for hundreds
+  of examples, and a note somebody has to remember is the weakest thing on the
+  list.
 - **An evidence gate in CI.** A pull request body that claims a fix without
   showing the command output is rejected. `ci/evidence-gate.js` has 10 tests,
   each one a way somebody tried to talk their way past it.
@@ -177,22 +199,28 @@ command you can run.
 
 ```
   PASS  estate.yaml describes an estate    acme 2
-  PASS  generated files match templates    20 checked
+  PASS  generated files match templates    21 checked
   PASS  the agent runs                     Hermes Agent v0.20.5
-  PASS  agent is the pinned commit         fcbd1076a9
-  PASS  agent home is this directory       /Users/you/acme-agent
-  PASS  every model has a price            2 models
+  PASS  agent is the pinned commit         fcbd1076a9 (want fcbd1076a9)
+  PASS  install and agent agree on python  install: >=3.11,<3.14  agent: >=3.11,<3.14
+  PASS  the venv python is in range        3.13
+  PASS  agent home is this directory       /Users/you/acme-agent/hermes-agent
+  PASS  every model has a price            Cheapest Claude in the table: claude-3-h
   PASS  an Anthropic credential exists     auth.json (hermes auth login)
   PASS  .env is private (mode 600)         mode 600
   PASS  no secrets tracked in git
+        api     200   answering            https://acme-api.fly.dev/health
+        web     200   answering            https://acme-web.fly.dev/
   PASS  every service answers
-        site    200   answering            https://acme-site.fly.dev/
-        api     307   answering            https://acme-api.fly.dev/health
   PASS  cron jobs installed                5 jobs
   IDLE  the gateway is not running         start it: ./bin/hermes gateway install
 
-  11 passed, 0 failed
+  13 passed, 0 failed
 ```
+
+`IDLE` is not a failure. Nothing is scheduled to fire until you start the
+gateway, and that is deliberate: a fresh install should not begin opening issues
+on your repo before you have read what it is going to do.
 
 ---
 

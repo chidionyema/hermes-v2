@@ -70,4 +70,20 @@ skills/pr-discipline/SKILL.md
 skills/screenshot-to-story/SKILL.md
 skills/verify-to-prod/SKILL.md
 cron/jobs.json
+# Scheduler state, written on every run. It is a live database, not source.
+cron/executions.db
+cron/output/
+cron/.tick.lock
+cron/.fire-*.lock
+# Skills the agent ships with, unpacked into skills/ at first run. Ours are
+# generated from templates/ and listed above; skills/VETTED.md is the only
+# file here anyone writes by hand.
+skills/.bundled_manifest
+skills/*/
+!skills/estate-map/
+!skills/incident-triage/
+!skills/post-mortem/
+!skills/pr-discipline/
+!skills/screenshot-to-story/
+!skills/verify-to-prod/
 estate-evals/incidents.jsonl
