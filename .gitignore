@@ -12,3 +12,32 @@ logs/
 skills/.hub/
 state.db
 state.db-*
+
+# --- runtime state. None of this is the build. ---
+# auth.json holds live API credentials for four providers. It was committed by
+# accident in 10d3973 and every commit after. Never track it.
+auth.json
+auth.lock
+.update_check
+.skills_prompt_snapshot.json
+models_dev_cache.json
+models_dev_cache.etag
+state.db
+cache/
+sessions/
+sandboxes/
+audio_cache/
+image_cache/
+pairing/
+backups/
+memories/
+.worktrees/
+cron/.jobs.lock
+skills/.usage.json
+skills/.usage.json.lock
+# graphify writes here from a commit hook. Another tool's output, not ours.
+graphify-out/
+# the pinned upstream install and its venv: 1.1GB, reinstallable from PINNED_VERSION
+hermes-agent/
+hermes-agent-self-evolution/
+.venv/
