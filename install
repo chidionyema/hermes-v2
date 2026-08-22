@@ -240,6 +240,10 @@ else
   echo "  installing dependencies, a minute or two"
   ./.venv/bin/pip install --quiet -e hermes-agent
   ./.venv/bin/pip install --quiet pyyaml
+  # The repo ships its own tests - the evidence gate, the incident guards, the
+  # spec links. Without pytest in the venv none of them can run, so a clone
+  # carried tests nobody could execute. Found 2026-08-22.
+  ./.venv/bin/pip install --quiet pytest
   ok "$(./bin/hermes --version 2>/dev/null | grep -o 'Hermes Agent v[0-9.]*' | head -1)"
 fi
 

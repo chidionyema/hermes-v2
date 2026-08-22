@@ -6,6 +6,12 @@ breaks, and opens pull requests you approve from your phone.
 It is one directory. You clone it, answer five questions, and it runs. Point it
 at a different estate and it is a different agent, with no code changes.
 
+**The spec is [`docs/THE-ARCHITECT.md`](docs/THE-ARCHITECT.md).** Every one of
+the 133 rows in `REQUIREMENTS.jsonl` carries a `spec` field that links to the
+section it came from, so any requirement can be traced back to the paragraph
+that asked for it in one click. Nothing is in this repo that the spec did not
+ask for.
+
 ---
 
 ## Setup
