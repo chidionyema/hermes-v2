@@ -242,3 +242,21 @@ does not rescue it: a JSON blob fails `_is_oauth_token` and the helper returns
 A setup-token does not refresh; when it expires, set the secret again. The JSON
 route refreshes itself and writes back to the volume, which is why the volume
 still matters and why `/root/.claude` is symlinked to it on every boot.
+
+## The Mac bridge is retired (2026-08-22)
+
+`deploy/mac/hermes-auth-bridge` and its launchd agent are gone. Removed from
+this Mac at 13:58 UTC: `launchctl unload`, then the plist and the symlink in
+`~/.local/bin`. The last version of the script is in git at `17bca62^`.
+
+It is not merely redundant now, it was harmful. Claude Code's OAuth refresh
+tokens are single-use and rotate on every refresh
+(`hermes-agent/agent/anthropic_adapter.py:1233-1242`). The container refreshes
+its own credential and writes the result back through the `/root/.claude`
+symlink onto the volume (`_write_claude_code_credentials`, `:1281`). While the
+bridge was also pushing this Mac's copy over that file every few minutes, two
+independent processes were rotating one refresh token, and whichever refreshed
+second was holding an invalidated one.
+
+What replaced it: the credential is in the image as an age-encrypted file, and
+the key is a platform secret. Nothing on a laptop is in the path.
