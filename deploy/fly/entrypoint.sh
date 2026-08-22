@@ -34,6 +34,31 @@ done
 [ -f "$D/.env" ] && ln -sfn "$D/.env" "$H/.env" || true
 
 echo "[entrypoint] state linked to $D"
+
+# Identity is not state and is not code, so it is handled apart from both.
+# ~/.local/bin/hermes-auth-bridge runs on the founder's Mac under launchd and
+# writes the Claude credential to /data/dot-claude/.credentials.json. The
+# container reads it at $HOME/.claude/.credentials.json, and $HOME is /root.
+#
+# The link has to be made here, on every boot. The root filesystem is recreated
+# from the image each time the machine starts, so a link made by hand from an
+# ssh session survives until the next restart and no longer. Measured
+# 2026-08-22: the bridge created it at 14:08, and it existed only because
+# nothing had restarted the machine since.
+mkdir -p "$D/dot-claude"
+chmod 700 "$D/dot-claude"
+if [ -d /root/.claude ] && [ ! -L /root/.claude ]; then
+    # An image that baked something in keeps it, once, on the volume.
+    cp -a /root/.claude/. "$D/dot-claude/" 2>/dev/null || true
+fi
+rm -rf /root/.claude
+ln -sfn "$D/dot-claude" /root/.claude
+[ -f "$D/dot-claude/.credentials.json" ] && chmod 600 "$D/dot-claude/.credentials.json" || true
+if [ -f /root/.claude/.credentials.json ]; then
+    echo "[entrypoint] identity: /root/.claude -> $D/dot-claude (credential present)"
+else
+    echo "[entrypoint] identity: /root/.claude -> $D/dot-claude (no credential yet)"
+fi
 "$H/.venv/bin/hermes" --version || true
 
 # HERMES_GATEWAY_AUTOSTART is the cutover switch, and it only means something

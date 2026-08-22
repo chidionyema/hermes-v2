@@ -65,8 +65,9 @@ echo "cleared; the next state file is written by this boot"
 say "3/5  stop the old gateway"
 # Before starting the new one, not after. One bot token allows one long poller;
 # run two and they take each other's updates and both look broken (crew #15).
-fly ssh console -a "$OLD" -C "supervisorctl stop gateway" 2>&1 | tail -2
-fly ssh console -a "$OLD" -C "supervisorctl status gateway" 2>&1 | tail -1
+fly ssh console -a "$OLD" -C "supervisorctl stop gateway" 2>&1 | tail -2 || true
+# supervisorctl exits 3 for a STOPPED program; that is the answer, not an error.
+fly ssh console -a "$OLD" -C "supervisorctl status gateway" 2>&1 | tail -1 || true
 
 say "4/5  start the new gateway"
 # Setting a secret restarts the machine, and entrypoint.sh reads the flag on boot.
@@ -97,8 +98,9 @@ fi
 
 printf '\033[31mthe new gateway did not connect. rolling back.\033[0m\n'
 fly secrets set HERMES_GATEWAY_AUTOSTART=0 -a "$NEW" >/dev/null
-fly ssh console -a "$OLD" -C "supervisorctl start gateway" 2>&1 | tail -2
-fly ssh console -a "$OLD" -C "supervisorctl status gateway" 2>&1 | tail -1
+fly ssh console -a "$OLD" -C "supervisorctl start gateway" 2>&1 | tail -2 || true
+# supervisorctl exits 3 for a STOPPED program; that is the answer, not an error.
+fly ssh console -a "$OLD" -C "supervisorctl status gateway" 2>&1 | tail -1 || true
 echo "the old gateway is back. logs from the new one:"
 fly ssh console -a "$NEW" -C "/bin/sh -c 'tail -40 /data/logs/gateway.log 2>/dev/null || true'" 2>&1 | tail -40
 exit 1
