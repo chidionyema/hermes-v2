@@ -273,12 +273,17 @@ if [ -x .venv/bin/hermes ]; then
   else
     warn "profiles not installed yet. Run: bin/hermes profile create watch"
   fi
-  # WATCH only. WORK opens pull requests on a live repo, so it stays paused
-  # until someone decides it starts: bin/install-cron.py cron/work.jobs
-  "$PY_BIN" bin/install-cron.py cron/watch.jobs || true
+  # Every lane is built. estate.yaml decides which of them gets a schedule, and
+  # a lane that is off gets no jobs at all, so it cannot fire. `bin/features`
+  # prints the current state and changes it.
+  "$PY_BIN" bin/install-cron.py cron/watch.jobs     --feature watch     || true
+  "$PY_BIN" bin/install-cron.py cron/work.jobs      --feature work      || true
+  "$PY_BIN" bin/install-cron.py cron/evolution.jobs --feature evolution || true
   JOBS="$(./bin/hermes cron list 2>/dev/null | grep -cE '^  [0-9a-f]{12} \[' || true)"
-  if [ "${JOBS:-0}" -gt 0 ]; then ok "$JOBS WATCH jobs on the schedule"
+  if [ "${JOBS:-0}" -gt 0 ]; then ok "$JOBS jobs on the schedule"
   else warn "no cron jobs. bin/install-cron.py cron/watch.jobs says why."; fi
+  echo
+  "$PY_BIN" bin/features
 else
   skip "agent not installed, nothing to configure"
 fi

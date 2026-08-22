@@ -12,7 +12,11 @@ ignored. Fields:
   script    a file under scripts/, run instead of a prompt
   no_agent  true means no model is involved at all: the script is the job
 
-Usage: bin/install-cron.py cron/watch.jobs [--dry-run]
+Usage: bin/install-cron.py cron/watch.jobs [--dry-run] [--feature NAME]
+
+--feature is the on/off switch. With it, this script creates nothing at all
+unless that lane is on in estate.yaml. That is what makes a switched-off lane
+genuinely inert rather than merely discouraged: no job exists, so nothing fires.
 """
 import json
 import os
@@ -21,6 +25,17 @@ import sys
 
 HOME = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 HERMES = os.path.join(HOME, "bin", "hermes")
+FEATURES = os.path.join(HOME, "bin", "features")
+
+
+def feature_is_on(name):
+    """bin/features --check exits 0 when the lane is on, 1 when it is off."""
+    r = subprocess.run([sys.executable, FEATURES, "--check", name],
+                       capture_output=True, text=True)
+    if r.returncode not in (0, 1):
+        sys.exit(f"install-cron: cannot read feature '{name}': "
+                 f"{(r.stderr or r.stdout).strip()}")
+    return r.returncode == 0
 
 
 def existing_names():
@@ -70,6 +85,12 @@ def main():
         sys.exit(__doc__)
     path = sys.argv[1]
     dry = "--dry-run" in sys.argv
+    if "--feature" in sys.argv:
+        name = sys.argv[sys.argv.index("--feature") + 1]
+        if not feature_is_on(name):
+            print(f"  {name} is off in estate.yaml, so no jobs were created")
+            print(f"  switch it on with: bin/features {name} on")
+            return 0
     if not os.path.exists(path):
         sys.exit(f"install-cron: {path} does not exist")
 
@@ -90,8 +111,10 @@ def main():
         else:
             failed.append((job["name"], (r.stderr or r.stdout).strip().splitlines()[-1:]))
 
+    # "created" after a --dry-run is a claim about the world that did not
+    # happen. Say what actually happened, not what the code path was.
     for name in made:
-        print(f"  created {name}")
+        print(f"  {'would create' if dry else 'created'} {name}")
     if kept:
         print(f"  kept {len(kept)} already there: {', '.join(kept)}")
     for name, why in failed:

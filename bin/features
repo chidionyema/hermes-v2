@@ -1,0 +1,162 @@
+#!/usr/bin/env python3
+"""What is switched on, and the one command that changes it.
+
+Everything in this repo is built. This decides what actually runs. The point is
+that a lane you have not proved yet costs nothing and touches nothing, and that
+turning it on is one command rather than an install.
+
+  bin/features                 show every lane and its state
+  bin/features work on         switch one on
+  bin/features evolution off   switch one off
+  bin/features --check work    exit 0 if on, 1 if off  (for scripts)
+
+The state lives in estate.yaml under `features:`, beside everything else that
+describes this estate. Nothing else in the repo decides what runs.
+
+A lane that is off has no cron jobs created for it, so it cannot fire. That is
+the whole mechanism: `bin/install-cron.py --feature <name>` does nothing when
+the lane is off.
+"""
+import os
+import sys
+
+HOME = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+ESTATE = os.path.join(HOME, "estate.yaml")
+
+# Every lane, what it does, and what it costs you to switch on. The order is the
+# order the spec's build order (§12) turns them on in.
+LANES = [
+    ("watch", "§5",  "15-minute pulse, hourly estate map, 07:00 digest",
+     "reads only, never writes. The free lane."),
+    ("sunday_rituals", "§8", "Sunday review and three proposal issues",
+     "opens issues, merges nothing."),
+    ("work", "§6",  "the agent-go label opens pull requests",
+     "WRITES to your repo. Never merges. Turn on last."),
+    ("evolution", "§9", "nightly skill evolution, lands as a pull request",
+     "COSTS MONEY, $2-10 a night."),
+    ("bench", "§6b", "the on-demand local lane on this laptop",
+     "runs nothing by itself. You start it."),
+    ("screenshot_handler", "§15", "a Telegram photo becomes a GitHub issue",
+     "needs TELEGRAM_BOT_TOKEN."),
+]
+NAMES = [n for n, _, _, _ in LANES]
+
+# A lane that is on before anything has proved it is the failure this file
+# exists to prevent. Only the read-only ones start on.
+DEFAULTS = {n: (n in ("watch", "sunday_rituals")) for n in NAMES}
+
+
+def load():
+    try:
+        import yaml
+    except ImportError:
+        sys.exit("features: PyYAML is missing. Run ./install.")
+    if not os.path.exists(ESTATE):
+        sys.exit("features: estate.yaml does not exist. Run ./install.")
+    with open(ESTATE) as f:
+        return yaml.safe_load(f) or {}
+
+
+def current(estate):
+    got = estate.get("features") or {}
+    if not isinstance(got, dict):
+        sys.exit("features: estate.yaml's 'features:' is not a block of name: on/off")
+    for name in got:
+        if name not in DEFAULTS:
+            sys.exit(
+                f"features: estate.yaml switches '{name}', which is not a lane.\n"
+                f"          The lanes are: {', '.join(NAMES)}"
+            )
+    return {n: bool(got.get(n, DEFAULTS[n])) for n in NAMES}
+
+
+def write(name, value):
+    """Rewrite one line in place. estate.yaml is hand-edited, so the comments
+    around it have to survive; a yaml.dump would throw all of them away.
+
+    The edit is confined to the lines inside `features:`. Lane names collide
+    with keys elsewhere in the file - `models:` has its own `watch:` and
+    `work:` - and an unscoped match rewrites the wrong one. Measured
+    2026-08-22: `bin/features work on` replaced models.work, whose value was a
+    model name, with the string `on`.
+    """
+    with open(ESTATE) as f:
+        lines = f.read().split("\n")
+    want = "on" if value else "off"
+
+    start = next((i for i, l in enumerate(lines) if l.rstrip() == "features:"), None)
+    if start is not None:
+        # The block ends at the first line that is neither indented nor blank.
+        end = len(lines)
+        for i in range(start + 1, len(lines)):
+            if lines[i].strip() and not lines[i].startswith((" ", "\t")):
+                end = i
+                break
+        for i in range(start + 1, end):
+            line = lines[i]
+            if line.strip().startswith(f"{name}:") and line.startswith((" ", "\t")):
+                indent = line[: len(line) - len(line.lstrip())]
+                comment = "  " + line[line.index("#"):] if "#" in line else ""
+                lines[i] = f"{indent}{name}: {want}{comment}"
+                with open(ESTATE, "w") as f:
+                    f.write("\n".join(lines))
+                return True
+    # No features: block yet, so append a whole one rather than fail.
+    block = ["", "# Which lanes are switched on. bin/features changes these.", "features:"]
+    for n in NAMES:
+        v = value if n == name else DEFAULTS[n]
+        block.append(f"  {n}: {'on' if v else 'off'}")
+    with open(ESTATE, "w") as f:
+        f.write("\n".join(lines + block) + "\n")
+    return True
+
+
+def show(state):
+    print("  lane                 state  spec   what it does")
+    for name, section, what, caveat in LANES:
+        mark = " ON" if state[name] else "off"
+        print(f"  {name:<20} {mark:>5}  {section:<5}  {what}")
+        print(f"  {'':<20} {'':>5}  {'':<5}  {caveat}")
+    off = [n for n in NAMES if not state[n]]
+    if off:
+        print(f"\n  switch one on:  bin/features {off[0]} on")
+    print("  then prove it:  bin/verify")
+
+
+def main():
+    args = [a for a in sys.argv[1:]]
+    estate = load()
+    state = current(estate)
+
+    if args and args[0] == "--check":
+        if len(args) != 2:
+            sys.exit(f"features: --check takes one lane: {', '.join(NAMES)}")
+        if args[1] not in NAMES:
+            # Name the thing that was wrong. A caller that mistypes a lane needs
+            # to see its own word back, not a list it has to diff by eye.
+            sys.exit(f"features: '{args[1]}' is not a lane. "
+                     f"The lanes are: {', '.join(NAMES)}")
+        return 0 if state[args[1]] else 1
+
+    if not args:
+        show(state)
+        return 0
+
+    if len(args) != 2 or args[0] not in NAMES or args[1] not in ("on", "off"):
+        sys.exit(__doc__)
+
+    name, want = args[0], args[1] == "on"
+    if state[name] == want:
+        print(f"  {name} is already {'on' if want else 'off'}")
+        return 0
+    write(name, want)
+    print(f"  {name} -> {'on' if want else 'off'}")
+    if want:
+        print(f"  it does not run yet. Create its schedule:  ./install")
+    else:
+        print(f"  existing jobs keep running. Remove them:  ./bin/hermes cron list")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

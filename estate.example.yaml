@@ -46,3 +46,20 @@ models:
 limits:
   max_cost_usd_per_task: 5
   budget_hard_stop: true
+
+# Which lanes are switched on. Everything in this repo is built; this is what
+# actually runs. A lane that is off gets no cron jobs created for it, so it
+# cannot fire, cost anything or touch your repo.
+#
+# Turn one on, prove it with bin/verify, then turn on the next. Change them with
+# `bin/features work on`, or edit here and run ./install. `bin/features` on its
+# own prints the current state.
+#
+# The order below is the order the spec turns them on in (§12 build order).
+features:
+  watch: on                 # §5   read-only pulse and digest. The free lane.
+  sunday_rituals: on        # §8   weekly review, three proposal issues.
+  work: off                 # §6   WRITES pull requests. Turn on last.
+  evolution: off            # §9   COSTS MONEY, $2-10 a night.
+  bench: off                # §6b  the on-demand local lane.
+  screenshot_handler: off   # §15  a Telegram photo becomes a GitHub issue.

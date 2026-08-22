@@ -26,3 +26,37 @@ jobs:
           PR_BODY: ${{ github.event.pull_request.body }}
           PR_TITLE: ${{ github.event.pull_request.title }}
         run: node ci/evidence-gate.js
+
+      # LAW 22. The step above reads pasted text, and pasted text is typed by
+      # hand in seconds and reads identically whether the run happened or not.
+      # A picture of the run is not proof against a forger and is not meant to
+      # be; it raises the cost of a claim from zero, and zero is where every
+      # false green has come from.
+      #
+      # The image lives in the pull request's own branch, not GitHub's
+      # attachment store, so it leaves in the git bundle with the code.
+      - name: Check the PR carries a screenshot of the run
+        run: |
+          n="${{ github.event.pull_request.number }}"
+          dir="docs/evidence/pr-$n"
+          shopt -s nullglob
+          shots=("$dir"/*.png "$dir"/*.jpg "$dir"/*.jpeg)
+          if [ ${#shots[@]} -eq 0 ]; then
+            echo "FAIL: no screenshot in $dir/"
+            echo
+            echo "LAW 22: a pull request carries a picture of the thing passing,"
+            echo "taken from the runner's own screen, before review is asked for."
+            echo
+            echo "  pr-evidence shot - --out /tmp/p.png --title 'pytest -q' < run.log"
+            echo "  pr-evidence attach --pr $n /tmp/p.png --caption 'what it proves'"
+            echo
+            echo "What counts: the test summary line with the counts visible, the"
+            echo "page in a browser, the deployed thing answering, the failing case"
+            echo "now passing. What does not: a terminal showing only a prompt, a"
+            echo "cropped line with the counts cut off, a green tick with no numbers."
+            exit 1
+          fi
+          echo "PASS: ${#shots[@]} screenshot(s) in $dir/"
+          for s in "${shots[@]}"; do
+            echo "  $s ($(stat -c%s "$s") bytes)"
+          done
