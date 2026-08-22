@@ -618,13 +618,17 @@ neither. When a consult and a command disagree, the command is right.
 
 **Which model answers is not fixed, and the lane must not care.** The service
 tries several in order and the first one that is ready and not benched takes
-the question. On 2026-08-22 that meant a subscription model, then a free-tier
-one, then a 7B model running on the laptop with no network at all. A backend
-that fails three times in a row sits out for ten minutes, so a spent quota
-degrades the answer instead of stopping it. The reply names the backend that
-produced it. A lane that would only accept an answer from one particular model
-is asking for a provider, not a consult, and that is the out-of-scope case
-below.
+the question. On 2026-08-22 that meant a subscription model, then a 7B model
+running on the laptop with no network at all. A backend that fails three times
+in a row sits out for ten minutes, so a spent quota degrades the answer instead
+of stopping the call. The reply names the backend that produced it. A lane that
+would only accept an answer from one particular model is asking for a provider,
+not a consult, and that is the out-of-scope case below.
+
+A backend that cannot fail fast is worse than no backend, and one was removed
+on 2026-08-22 for exactly that: its CLI retried a rate-limit internally instead
+of returning it, so it spent its whole time cap on every consult and then
+failed anyway. Anything added to the cascade carries a time cap.
 
 **Three uses, no others.** Two failed attempts, a close design decision, or
 anything about to be done that cannot be undone. Never for a question a command

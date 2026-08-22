@@ -256,6 +256,7 @@ are tracked, so what you see below is the source they come from.
 | `.env.example` | Every credential the agent can use, each with an empty value and a line saying what it unlocks. `./install` copies it to `.env`, which is mode 600 and never tracked. |
 | `.gitignore` | What must never be committed: the generated files, the agent's runtime state, and `.env`. Most of its lines were added after a `git add -A` swept live state into a commit. |
 | `PINNED_VERSION` | The Hermes tag and commit this estate is known to work on. `bin/verify` fails when the running agent is a different commit, so an upgrade cannot happen by accident. |
+| `DECISIONS.md` | Rulings that outlive the pull request that caused them. A decision here is binding until a later entry overrides it, so nobody relitigates one in a review. |
 | `README.md` | This file. `bin/check-readme.py` fails the build when it stops describing what the repo ships. |
 | `SOUL.md` | The agent's base identity, read before anything else on every run. It is upstream Hermes text and is deliberately not estate-specific. |
 | `USER.md` | Who the agent works for and how to talk to them: tone, when to escalate, and the rule that nothing is done without the command output. Each lane overrides it. |
@@ -276,6 +277,7 @@ are tracked, so what you see below is the source they come from.
 | `bin/sync-scripts.sh` | Copies `bin/pulse.sh` into `scripts/`, because the scheduler refuses a symlink out of `scripts/`. It diffs afterwards so the two copies cannot drift. |
 | `bin/teardown` | Stops everything firing and keeps the estate. `--all` also removes the agent and its dependencies. |
 | `bin/verify` | The probe: one command that says whether the whole thing works, in a few seconds. `--full` also runs the requirement ledger. |
+| `bin/verify-consult` | The same probe for the consult service (§16): daemon, loopback bind, 401 without a token, a live round-trip timed cold and warm, and the token never appearing in a log. Rows that cannot apply on this machine SKIP rather than fail, so it still runs off the founder's laptop. |
 | `ci/` | The gates that run on a pull request. Each one refuses a mistake rather than reporting it. |
 | `ci/EVIDENCE_GATE_PROOF.md` | The evidence gate refusing ten dishonest pull request bodies and passing three honest ones, with the output. A gate nobody has watched refuse anything is a claim. |
 | `ci/evidence-gate.js` | Reads the pull request body and rejects a claim with no command output behind it. Placeholder blocks, and blocks that only repeat the claim, are rejected too. |
@@ -291,6 +293,7 @@ are tracked, so what you see below is the source they come from.
 | `docs/evidence/` | A screenshot of the passing run for each pull request, committed to the branch rather than uploaded to GitHub. Evidence stored in the vendor leaves with the vendor; an image in the branch travels out with the git bundle. |
 | `docs/evidence/pr-1/` | PR #1, the consult client: every gate and one live consult in a single frame. |
 | `docs/evidence/pr-1/gates-green.png` | `render --check`, `check-readme`, `check-requirements §16`, `verify`, and `bin/consult` returning an answer with exit 0. |
+| `docs/evidence/pr-1/20260822T083732Z-1.png` | The same frame as attached to the pull request, kept under its timestamp so a later attach never overwrites an earlier proof. |
 | `estate-evals/` | The incident record, and what each incident bought. |
 | `estate-evals/incidents.example.jsonl` | Worked examples of the incident format: symptom, root cause, the class of mistake, and the rung and artifact that now prevent it. Your own `incidents.jsonl` is not tracked. |
 | `estate.example.yaml` | The one file you edit, filled in and commented. Copy it, change it, and `./install --estate` sets a machine up without asking a single question. |
