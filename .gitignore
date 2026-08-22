@@ -102,3 +102,5 @@ kanban.db
 kanban.db-*
 kanban/
 cron/notepad.db
+kanban.db.dispatch.lock
+kanban.db.init.lock
