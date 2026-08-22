@@ -1,9 +1,0 @@
-# WATCH - perception only, cheap lane. Reads, opens issues, never writes code.
-# These are already installed. Prove it with: bin/hermes cron list
-#
-# schedule       job name           what it does
-0 * * * *      watch-estate-map   Run estate-map. If anything differs from MEMORY.md, run incident-triage. Otherwise say nothing.
-*/15 * * * *   watch-health       NO AGENT. Runs scripts/pulse.sh, not a model. curl with --no-follow; 2xx/3xx/401/403/404 is answering, 5xx or no answer is down. Silent unless two consecutive failures. As an agent task this cost $0.0298 a run, $85.92/month, to check two URLs.
-30 7 * * *     watch-board        The 07:00 digest. Read the open board, list anything in agent-go untouched for 3 days, one line each. Delivered to Telegram once the gateway is up.
-0 9 * * 0      sunday-review      Sunday review per RITUALS.md. Delete the lessons that did not help.
-0 10 * * 0     sunday-proposals   Open exactly 3 proposal issues: the three things most worth doing next week, each with the evidence that says so. Label them proposal, never agent-go.

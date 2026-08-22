@@ -1,0 +1,14 @@
+# WATCH - perception only, the cheap lane. Reads, opens issues, never writes
+# code. One job per line, JSON, created by `bin/install-cron.py cron/watch.jobs`
+# which ./install runs for you. Creating a job that already exists is skipped,
+# so running it again is safe.
+#
+# watch-health is the important one: --no-agent means no model is involved at
+# all. The script IS the job and its stdout is delivered verbatim, so silence
+# costs nothing. Measured 2026-08-22, the same check as an agent task cost
+# $0.0298 a run - $85.92 a month to curl a handful of URLs.
+{"name": "watch-health", "schedule": "*/15 * * * *", "script": "pulse.sh", "no_agent": true, "prompt": ""}
+{"name": "watch-estate-map", "schedule": "0 * * * *", "skills": ["estate-map", "incident-triage"], "prompt": "Run the estate-map skill. Compare what you find against MEMORY.md. If anything differs, run incident-triage. If nothing differs, say nothing at all."}
+{"name": "watch-board", "schedule": "30 7 * * *", "prompt": "Read the open board on {{ github.slug }}. List anything labelled agent-go that has not been touched in 3 days. One line each. Nothing else."}
+{"name": "sunday-review", "schedule": "0 9 * * 0", "prompt": "Run the Sunday review in RITUALS.md. Most of the job is deleting lessons that did not help. Report what you deleted, what climbed a rung, and what the week cost."}
+{"name": "sunday-proposals", "schedule": "0 10 * * 0", "prompt": "Open exactly three proposal issues on {{ github.slug }}: the three things most worth doing next week, each with the measurement that says so. Label each one proposal. Never label anything agent-go - that label is the founder tap."}

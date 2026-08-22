@@ -269,9 +269,12 @@ if [ -x .venv/bin/hermes ]; then
   else
     warn "profiles not installed yet. Run: bin/hermes profile create watch"
   fi
+  # WATCH only. WORK opens pull requests on a live repo, so it stays paused
+  # until someone decides it starts: bin/install-cron.py cron/work.jobs
+  "$PY_BIN" bin/install-cron.py cron/watch.jobs || true
   JOBS="$(./bin/hermes cron list 2>/dev/null | grep -cE '^  [0-9a-f]{12} \[' || true)"
-  if [ "${JOBS:-0}" -gt 0 ]; then ok "$JOBS cron jobs installed"
-  else warn "no cron jobs yet. See cron/watch.jobs for what to create."; fi
+  if [ "${JOBS:-0}" -gt 0 ]; then ok "$JOBS WATCH jobs on the schedule"
+  else warn "no cron jobs. bin/install-cron.py cron/watch.jobs says why."; fi
 else
   skip "agent not installed, nothing to configure"
 fi

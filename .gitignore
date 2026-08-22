@@ -54,6 +54,7 @@ REQUIREMENTS.jsonl
 RITUALS.md
 bin/prove-watch-readonly.sh
 bin/pulse.sh
+cron/watch.jobs
 cron/work.jobs
 egress-allowlist.txt
 handlers/screenshot_to_issue.py

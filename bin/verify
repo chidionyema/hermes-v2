@@ -120,11 +120,20 @@ JOBS="$(./bin/hermes cron list 2>/dev/null | grep -cE '^  [0-9a-f]{12} \[')"
 [ "${JOBS:-0}" -gt 0 ]; row "cron jobs installed" "$?" "${JOBS:-0} jobs"
 
 # 10. is anything actually running?
-if ./bin/hermes cron list 2>&1 | grep -q "Gateway is not running"; then
-  printf '  \033[33mIDLE\033[0m  %-34s %s\n' "the gateway is not running" "start it: ./bin/hermes gateway install"
-else
-  row "the gateway is running" 0 "jobs fire on schedule"
-fi
+# Ask the scheduler, not `cron list`. Reading it off cron list was wrong: with
+# no jobs installed that command prints no warning at all, and the absence of a
+# warning was reported as "the gateway is running - jobs fire on schedule".
+# `cron status` answers the question that matters, which is whether the ticker
+# is alive, not whether a process exists.
+CRON_STATUS="$(./bin/hermes cron status 2>&1)"
+case "$CRON_STATUS" in
+  *"cron jobs will fire automatically"*)
+    row "the gateway is running" 0 "cron ticker alive" ;;
+  *STALLED*)
+    row "the cron ticker is stalled" 1 "gateway up, jobs not firing: ./bin/hermes gateway restart" ;;
+  *)
+    printf '  \033[33mIDLE\033[0m  %-34s %s\n' "the gateway is not running" "start it: ./bin/hermes gateway install" ;;
+esac
 
 # --full: the whole requirement ledger, which is slower
 if [ "${1:-}" = "--full" ]; then

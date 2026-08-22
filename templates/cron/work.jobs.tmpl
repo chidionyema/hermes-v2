@@ -1,6 +1,11 @@
-# WORK - hands, frontier lane. Triggered by the agent-go label and nothing else.
-# The label is the leash: no label, no work. Spec §5, §10.
-# Loaded with: bin/hermes cron add --file cron/work.jobs
+# WORK - hands, the frontier lane. Triggered by the agent-go label and nothing
+# else. The label is the leash: no label, no work. Spec §5, §10.
 #
-*/20 * * * *   work   List issues on {{ github.slug }} labelled agent-go and not labelled in-progress. Take the oldest one only. Post your one-line interpretation on it, move it to in-progress, then follow the pr-discipline skill. Open a pull request and stop. Never merge, never deploy.
-0 8 * * *   work   For every issue labelled merged, run verify-to-prod. Move to verified only with two angles of evidence in the comment.
+# ./install does NOT create these. WORK stays paused until you decide it starts,
+# because it opens pull requests on a live repo. When you want it:
+#
+#   bin/install-cron.py cron/work.jobs
+#
+# Same format as cron/watch.jobs: one JSON job per line.
+{"name": "work-agent-go", "schedule": "*/20 * * * *", "skills": ["pr-discipline"], "prompt": "List issues on {{ github.slug }} labelled agent-go and not labelled in-progress. Take the oldest one only. Post your one-line interpretation on it, move it to in-progress, then follow the pr-discipline skill. Open a pull request and stop. Never merge, never deploy."}
+{"name": "work-verify", "schedule": "0 8 * * *", "skills": ["verify-to-prod"], "prompt": "For every issue labelled merged, run verify-to-prod. Move it to verified only when two angles of evidence are in the comment."}
