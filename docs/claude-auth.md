@@ -180,3 +180,25 @@ code to paste. Measured 2026-08-22: that entry's `mdat` was `20260822115444Z`,
 written by that run, while `~/.claude/.credentials.json` was untouched at 322
 bytes dated 4 August. Upstream's own `run_oauth_setup_token()` re-reads the
 credential store after the subprocess for exactly this reason.
+
+### The macOS keychain prompt, which is what actually stopped it twice
+
+Reading a keychain item's *attributes* is free. Reading its *value* with
+`security find-generic-password -w` needs the calling binary to be in that
+item's ACL, and macOS asks with a GUI prompt: "security wants to use your
+confidential information stored in Claude Code-credentials". No answer to that
+prompt means `-w` returns nothing.
+
+The script used to swallow that with `|| true` and report "no Claude Code
+credential in the Keychain", which is false and sends you off to re-run
+`setup-token` for nothing. Measured 2026-08-22: the item was present the whole
+time with `mdat=20260822115444Z` while `-w` yielded empty.
+
+It now checks for the item first and separates the two failures. If the value
+read is refused it says so and tells you to run it from a real Terminal.app
+window and click **Always Allow**. An agent's shell, an editor's task runner or
+any wrapper will not surface that prompt.
+
+Every run also tees to `/tmp/finish-cutover.log`. Nothing secret is printed —
+lengths and sha256 prefixes only — so that log is safe to read and safe to hand
+to whoever is debugging it.

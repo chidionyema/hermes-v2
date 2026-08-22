@@ -41,6 +41,25 @@ for a in "$@"; do
     esac
 done
 
+# Everything this prints also goes to a file, so diagnosing a failed run does not
+# depend on someone retyping what was on their screen. Nothing secret is printed
+# in the first place — lengths and sha256 prefixes only — so the log is safe to
+# read and safe to hand over.
+LOG=${CUTOVER_LOG:-/tmp/finish-cutover.log}
+if [ -z "${CUTOVER_TEEING:-}" ]; then
+    export CUTOVER_TEEING=1
+    printf 'logging this run to %s\n' "$LOG"
+    # `set -euo pipefail` is already in force, so a failing child would abort the
+    # parent here and the log path below would never print — on exactly the runs
+    # where it is wanted.
+    set +e
+    "$0" "$@" 2>&1 | tee "$LOG"
+    RC=${PIPESTATUS[0]}
+    set -e
+    printf '\nfull log: %s  (exit %s)\n' "$LOG" "$RC"
+    exit "$RC"
+fi
+
 say()  { printf '\n\033[1m== %s\033[0m\n' "$*"; }
 fail() { printf '\033[31mFAILED: %s\033[0m\n' "$*" >&2; exit 1; }
 
@@ -83,8 +102,39 @@ elif [ "$KEYCHAIN" = 1 ]; then
     # rotate the token, and if it does, THIS MAC'S Claude Code login can go
     # stale and need signing in again. Nothing is lost, it is just a re-login.
     command -v security >/dev/null || fail "the security command is missing; this mode is macOS only"
-    CREDS=$(security find-generic-password -s "Claude Code-credentials" -w 2>/dev/null || true)
-    [ -n "$CREDS" ] || fail "no Claude Code credential in the Keychain. Run: claude setup-token"
+
+    # Two different failures used to produce one wrong message. Reading the
+    # ATTRIBUTES of a keychain item is free; reading its VALUE (-w) needs the
+    # calling binary to be in the item's ACL, and macOS asks with a GUI prompt.
+    # No prompt answered means -w returns empty, and `|| true` turned that into
+    # "no Claude Code credential in the Keychain" — which is false, and sent the
+    # founder off to re-run setup-token for no reason. Measured 2026-08-22: the
+    # item is present with mdat 20260822115444Z while -w yielded nothing.
+    if ! security find-generic-password -s "Claude Code-credentials" >/dev/null 2>&1; then
+        fail "there is no 'Claude Code-credentials' item in your login keychain.
+  Run:  claude setup-token"
+    fi
+    echo "keychain item found: $(security find-generic-password -s 'Claude Code-credentials' 2>&1 \
+        | grep mdat | grep -o '[0-9]\{14\}Z' | head -1) (last written)"
+
+    set +e
+    CREDS=$(security find-generic-password -s "Claude Code-credentials" -w 2>/tmp/kc-err.$$)
+    KC_RC=$?
+    KC_ERR=$(cat /tmp/kc-err.$$ 2>/dev/null); rm -f /tmp/kc-err.$$
+    set -e
+    if [ "$KC_RC" -ne 0 ] || [ -z "$CREDS" ]; then
+        fail "the keychain item exists but macOS would not hand over its value (rc=$KC_RC).
+  ${KC_ERR:-no error text}
+
+  This is an authorisation prompt, not a missing credential. Run this in a real
+  Terminal.app window — not through an editor, an agent or a wrapper — and when
+  macOS asks 'security wants to use your confidential information', click
+  Always Allow:
+
+      cd ~/dev/code/hermes-v2 && ./deploy/fly/finish-cutover.sh --keychain
+
+  If the keychain is locked, unlock it first:  security unlock-keychain"
+    fi
     printf 'credential: %s bytes, sha256 %s\n' \
         "${#CREDS}" "$(printf %s "$CREDS" | shasum -a 256 | cut -c1-12)"
     TMP=$(mktemp -t cc-creds); trap 'rm -f "$TMP"' EXIT
