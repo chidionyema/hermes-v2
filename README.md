@@ -292,8 +292,7 @@ are tracked, so what you see below is the source they come from.
 | `docs/THE-ARCHITECT.md` | The spec. Every requirement row deep-links to the section it came from, so nothing is in this repo without a paragraph that asked for it. |
 | `docs/evidence/` | A screenshot of the passing run for each pull request, committed to the branch rather than uploaded to GitHub. Evidence stored in the vendor leaves with the vendor; an image in the branch travels out with the git bundle. |
 | `docs/evidence/pr-1/` | PR #1, the consult client: every gate and one live consult in a single frame. |
-| `docs/evidence/pr-1/gates-green.png` | `render --check`, `check-readme`, `check-requirements §16`, `verify`, and `bin/consult` returning an answer with exit 0. |
-| `docs/evidence/pr-1/20260822T083732Z-1.png` | The same frame as attached to the pull request, kept under its timestamp so a later attach never overwrites an earlier proof. |
+| `docs/evidence/pr-1/gates-green.png` | Every gate and one live consult in a single frame: `render --check`, `check-readme`, `check-requirements §16`, `verify`, `verify-consult`, and `bin/consult` returning an answer with exit 0. One image per pull request, overwritten rather than accumulated, so there is never a question about which frame is current. |
 | `estate-evals/` | The incident record, and what each incident bought. |
 | `estate-evals/incidents.example.jsonl` | Worked examples of the incident format: symptom, root cause, the class of mistake, and the rung and artifact that now prevent it. Your own `incidents.jsonl` is not tracked. |
 | `estate.example.yaml` | The one file you edit, filled in and commented. Copy it, change it, and `./install --estate` sets a machine up without asking a single question. |
