@@ -94,3 +94,11 @@ channel_directory.json
 cron/ticker_heartbeat
 cron/ticker_last_success
 state/
+gateway.pid
+gateway.lock
+gateway_state.json
+gateway-starts.log
+kanban.db
+kanban.db-*
+kanban/
+cron/notepad.db
