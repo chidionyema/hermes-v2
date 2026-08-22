@@ -78,10 +78,16 @@ for i in $(seq 1 20); do
     sleep 15
     RAW=$(fly ssh console -a "$NEW" \
         -C "/bin/sh -c 'cat /data/gateway_state.json 2>/dev/null || true'" 2>/dev/null | tr -d '\r')
-    # A state file naming a path that only exists on a Mac is not this container
-    # reporting on itself. Refuse it rather than reading it as a live answer.
+    # A live reading is one a process in this container wrote, and argv is what
+    # says so. The first version of this matched /Users/chidionyema anywhere in
+    # the file, which is wrong: hermes_home is a config value and legitimately
+    # holds a laptop path. Measured 2026-08-22: the cutover was aborted on a
+    # state file that said "connected", written by pid 667 inside the container
+    # eight seconds earlier, and stopping there left nothing serving.
     case "$RAW" in
-        *'/Users/chidionyema'*) fail "the state file names a laptop path; that is not a live reading" ;;
+        '')                            ;;  # not written yet, keep waiting
+        *'"argv":["/opt/hermes-v2/'*)  ;;  # this container wrote it
+        *) fail "the state file was not written by this container" ;;
     esac
     STATE=$(printf %s "$RAW" | grep -o '"state"[[:space:]]*:[[:space:]]*"[a-z]*"' | head -2 | tr '\n' ' ')
     printf '  %3ds  %s\n' "$((i*15))" "${STATE:-no state file yet}"
