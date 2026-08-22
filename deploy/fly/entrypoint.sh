@@ -35,30 +35,54 @@ done
 
 echo "[entrypoint] state linked to $D"
 
-# Identity is not state and is not code, so it is handled apart from both.
-# ~/.local/bin/hermes-auth-bridge runs on the founder's Mac under launchd and
-# writes the Claude credential to /data/dot-claude/.credentials.json. The
-# container reads it at $HOME/.claude/.credentials.json, and $HOME is /root.
+# Identity comes from the platform that runs this container, not from a daemon
+# on somebody's laptop. Fly injects secrets into init and its children, and this
+# script is init's child — that is how HERMES_GATEWAY_AUTOSTART reaches the
+# block below. A `fly ssh console` session is outside that tree and sees none of
+# them, which is what made a Fly secret look unreadable from inside the machine.
 #
-# The link has to be made here, on every boot. The root filesystem is recreated
-# from the image each time the machine starts, so a link made by hand from an
-# ssh session survives until the next restart and no longer. Measured
-# 2026-08-22: the bridge created it at 14:08, and it existed only because
-# nothing had restarted the machine since.
+# Two shapes are accepted, and they are NOT interchangeable:
+#
+#   CLAUDE_CODE_OAUTH_TOKEN   a setup-token string, from `claude setup-token`.
+#                             resolve_anthropic_token() returns it directly at
+#                             priority 2. Nothing is written to the volume and
+#                             there is nothing to refresh.
+#   CLAUDE_CREDENTIALS_JSON   the whole Claude Code credentials document. Seeded
+#                             onto the volume once, then owned by the container,
+#                             which refreshes it and writes it back.
+#
+# Never put the JSON in CLAUDE_CODE_OAUTH_TOKEN. Priority 2 hands back whatever
+# that variable holds, verbatim, as the bearer token, and it is checked before
+# the file at priority 4 — so the file would be perfect, resolution would
+# "succeed", and every API call would send a JSON document as its credential.
+# anthropic_adapter.py:1459-1465, and _prefer_refreshable_claude_code_token at
+# :1374 does not rescue it: a JSON blob fails _is_oauth_token and returns None.
 mkdir -p "$D/dot-claude"
 chmod 700 "$D/dot-claude"
+
+if [ ! -f "$D/dot-claude/.credentials.json" ] && [ -n "${CLAUDE_CREDENTIALS_JSON:-}" ]; then
+    echo "[entrypoint] identity: seeding the volume from CLAUDE_CREDENTIALS_JSON"
+    printf '%s' "$CLAUDE_CREDENTIALS_JSON" > "$D/dot-claude/.credentials.json"
+fi
+
+# The link is remade on every boot because the root filesystem is rebuilt from
+# the image on every boot. One made by hand from an ssh session lasts until the
+# next restart and no longer.
 if [ -d /root/.claude ] && [ ! -L /root/.claude ]; then
-    # An image that baked something in keeps it, once, on the volume.
     cp -a /root/.claude/. "$D/dot-claude/" 2>/dev/null || true
 fi
 rm -rf /root/.claude
 ln -sfn "$D/dot-claude" /root/.claude
 [ -f "$D/dot-claude/.credentials.json" ] && chmod 600 "$D/dot-claude/.credentials.json" || true
-if [ -f /root/.claude/.credentials.json ]; then
-    echo "[entrypoint] identity: /root/.claude -> $D/dot-claude (credential present)"
+
+if [ -n "${CLAUDE_CODE_OAUTH_TOKEN:-}" ]; then
+    echo "[entrypoint] identity: CLAUDE_CODE_OAUTH_TOKEN is set (env, no refresh)"
+elif [ -f "$D/dot-claude/.credentials.json" ]; then
+    echo "[entrypoint] identity: /root/.claude -> $D/dot-claude (credential file present)"
 else
-    echo "[entrypoint] identity: /root/.claude -> $D/dot-claude (no credential yet)"
+    echo "[entrypoint] identity: no credential from any source" >&2
 fi
+
 "$H/.venv/bin/hermes" --version || true
 
 # HERMES_GATEWAY_AUTOSTART is the cutover switch, and it only means something
@@ -67,45 +91,29 @@ fi
 # it to 1 changed an environment variable and nothing else, and the container
 # went on sleeping. Measured 2026-08-22: CMD was ["sleep","infinity"].
 if [ "${HERMES_GATEWAY_AUTOSTART:-0}" = "1" ]; then
-    # Identity arrives from outside this container. ~/.local/bin/hermes-auth-bridge
-    # runs on the founder's Mac under launchd and writes the Claude credential to
-    # /data/dot-claude/.credentials.json, which /root/.claude points at. A boot
-    # can therefore land before the credential does — after a restore, after a
-    # new volume, or in the four-hour gap between bridge runs.
+    # Fail fast rather than start degraded. Founder ruling, 2026-08-22. It is
+    # the right call now and was not before: with the credential seeded by the
+    # platform at boot, absence is a configuration error, not a race against a
+    # laptop daemon that might land the file thirty seconds later.
     #
-    # This used to refuse and sleep, on the reasoning that a gateway answering
-    # Telegram and failing every turn looks like a Hermes bug. That reasoning
-    # was half right and the remedy was wrong: refusing makes a missing file
-    # into a dead machine, and the cutover that is waiting on it cannot even
-    # verify. Wait a while, then start anyway. resolve_anthropic_token() reads
-    # the file each time it is called, so a gateway started without one picks
-    # the credential up when the bridge lands it, with no restart.
-    has_token() {
-        "$H/.venv/bin/python" -c "
+    # Know what this costs. fly.toml declares no services and no health checks,
+    # and there is one machine updated in place, so exiting non-zero is a crash
+    # loop on the machine that serves — not Fly holding an old version back. The
+    # protection against shipping a broken credential is the cutover script,
+    # which proves a real turn before it stops the old gateway.
+    if ! "$H/.venv/bin/python" -c "
 import sys
 sys.path.insert(0, '$H/hermes-agent')
 from agent.anthropic_adapter import resolve_anthropic_token
 sys.exit(0 if resolve_anthropic_token() else 1)
-" 2>/dev/null
-    }
-
-    if has_token; then
-        echo "[entrypoint] an Anthropic credential resolves"
-    else
-        echo "[entrypoint] no Anthropic credential yet; waiting up to 300s for the bridge" >&2
-        for _ in $(seq 1 30); do
-            sleep 10
-            if has_token; then break; fi
-        done
-        if has_token; then
-            echo "[entrypoint] the credential arrived"
-        else
-            echo "[entrypoint] DEGRADED: starting without an Anthropic credential." >&2
-            echo "[entrypoint] Telegram will connect; turns will fail until one lands." >&2
-            echo "[entrypoint] On the Mac, run: ~/.local/bin/hermes-auth-bridge --force" >&2
-            echo "[entrypoint] See docs/claude-auth.md." >&2
-        fi
+" 2>/dev/null; then
+        echo "[entrypoint] ERROR no Anthropic credential resolves; refusing to start." >&2
+        echo "[entrypoint] Set one on the platform, then restart:" >&2
+        echo "[entrypoint]   fly secrets set CLAUDE_CODE_OAUTH_TOKEN=... -a <app>" >&2
+        echo "[entrypoint] See docs/claude-auth.md." >&2
+        exit 1
     fi
+    echo "[entrypoint] a credential resolves"
 
     echo "[entrypoint] starting the gateway"
     cd "$H"
