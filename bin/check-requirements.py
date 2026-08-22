@@ -8,6 +8,11 @@ import json, os, subprocess, sys, collections
 
 HOME = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 LEDGER = os.path.join(HOME, "REQUIREMENTS.jsonl")
+# The ledger is generated from templates/REQUIREMENTS.jsonl.tmpl, so writing
+# status back into it made bin/render --check report drift every time a sweep
+# ran. Status is derived anyway - it is whatever the commands said this run -
+# so it belongs in its own file, next to the run that produced it.
+STATUS = os.path.join(HOME, "logs", "requirements-status.json")
 args = [a for a in sys.argv[1:] if not a.startswith("-")]
 only = args[0] if args else None
 
@@ -39,9 +44,16 @@ for row in rows:
         row["status"] = "open"
         failed.append(row)
 
-with open(LEDGER, "w") as f:
-    for row in rows:
-        f.write(json.dumps(row) + "\n")
+# Only rows this run actually executed get a status. A filtered run must not
+# report the other 109 rows as measured - the template ships a status field and
+# copying it here would present a stale value as a fresh reading.
+ran = {r["id"] for r in passed + failed + blocked}
+os.makedirs(os.path.dirname(STATUS), exist_ok=True)
+with open(STATUS, "w") as f:
+    json.dump({"filter": only or "all",
+               "measured": {r["id"]: r["status"] for r in rows if r["id"] in ran},
+               "not_measured_this_run": sorted(r["id"] for r in rows if r["id"] not in ran)},
+              f, indent=1, sort_keys=True)
 
 by_phase = collections.Counter(r["phase"] for r in passed)
 tot_phase = collections.Counter(r["phase"] for r in (passed + failed + blocked))

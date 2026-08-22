@@ -1,10 +1,10 @@
 # WATCH reaches these and nothing else. Logs are attacker-influenceable text;
 # this list is the control, not the agent's judgement. Spec §5, §10.
+#
+# Generated from estate.yaml: one line per service, plus egress_extra.
 api.github.com
 api.fly.io
-{{ service.engine.app }}.fly.dev
-{{ service.store-api.app }}.fly.dev
-{{ service.store-web.app }}.fly.dev
-{{ estate.name }}-hermes.fly.dev
-api.telegram.org
+{{#services}}{{host}}
+{{/services}}{{#egress_extra}}{{.}}
+{{/egress_extra}}api.telegram.org
 api.anthropic.com

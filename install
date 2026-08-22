@@ -219,11 +219,19 @@ if [ "$SKIP_DEPS" = 1 ]; then
 elif [ -x .venv/bin/hermes ]; then
   skip "already installed at .venv/bin/hermes"
 else
+  # One commit, not the whole history. Measured 2026-08-22 on this machine:
+  # a full clone is 946MB and 312s; fetching just the pinned commit is 254MB
+  # and 12s. The pin is a sha, so there is nothing in the rest of the history
+  # this install could ever use.
   if [ ! -d hermes-agent/.git ]; then
-    echo "  cloning $AGENT_REPO (this is the slow part, roughly 900MB)"
-    git clone --quiet "$AGENT_REPO" hermes-agent
+    echo "  fetching the agent at $PIN_TAG, one commit only (about 250MB)"
+    mkdir -p hermes-agent
+    git -C hermes-agent init --quiet
+    git -C hermes-agent remote add origin "$AGENT_REPO" 2>/dev/null || true
   fi
-  git -C hermes-agent fetch --quiet --tags origin
+  if ! git -C hermes-agent cat-file -e "$PIN_SHA^{commit}" 2>/dev/null; then
+    git -C hermes-agent fetch --quiet --depth 1 origin "$PIN_SHA"
+  fi
   git -C hermes-agent checkout --quiet "$PIN_SHA"
   ok "hermes-agent at $PIN_TAG ($(git -C hermes-agent rev-parse --short HEAD))"
 

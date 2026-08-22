@@ -1,6 +1,6 @@
 ---
 name: estate-map
-description: Print the current shape of the estate - Fly apps, health, repos, open board items. Use at the start of any task that touches the platform, and whenever you are about to guess where something lives.
+description: Print the current shape of the estate - apps, health, repos, open board items. Use at the start of any task that touches the platform, and whenever you are about to guess where something lives.
 ---
 
 # estate-map
@@ -10,53 +10,49 @@ Never answer "what is running?" from memory. Run this.
 ## The apps
 
 ```bash
-fly apps list
+{{ platform.cli }} apps list
 ```
 
-Expected live: `{{ service.engine.app }}`, `{{ service.store-web.app }}`, `{{ service.store-api.app }}`,
-`{{ estate.name }}-hermes`, `{{ estate.name }}-searxng`.
-Expected suspended: `hermes-ci`, `{{ estate.name }}-ci`, `{{ estate.name }}-verifier-lab`, `tie-*`.
-A suspended app in the live list, or a live app missing, is an issue.
+What this estate declares, from `estate.yaml`:
+
+| key | app | probe | healthy | notes |
+|---|---|---|---|---|
+{{#services}}| {{key}} | `{{app}}` | `{{url}}` | {{expect}} |{{note_suffix}} |
+{{/services}}
+An app in that table missing from the list, or showing suspended, is an issue.
+Anything in the list that is not in the table is not this agent's business.
 
 ## Is it serving
 
 ```bash
-fly status -a {{ service.engine.app }}
+{{#services}}# {{key}}
+{{ platform.cli }} status -a {{app}}
 # NO -L. Never follow the redirect.
-curl -s -o /dev/null -w '%{http_code}\n' {{ service.engine.url }}
-curl -s -o /dev/null -w '%{http_code}\n' {{ service.store-web.url }}
-```
+curl -s -o /dev/null -w '%{http_code}\n' {{url}}
+{{/services}}```
 
-**Healthy is not "200".** {{ service.engine.app }} sits behind a login: every path
-returns `307` to `/login?next=...`. Follow that redirect and you get `200` from
-the login page, which is green whether the app works or not. Measured
-2026-08-22:
-
-```
-$ curl -s -o /dev/null -w '%{http_code}' {{ service.engine.url }}
-307
-$ curl -sL -o /dev/null -w '%{http_code} %{url_effective}' {{ service.engine.url }}
-200 https://{{ service.engine.app }}.fly.dev/login?next=%2Fhealth
-```
+**Healthy is not always "200".** A service can answer for itself with a `307` to
+a login page, or a `404` on a path that was never there. Both prove the app is
+up and routing. Follow a login redirect with `-L` and you get `200` from the
+login page, which is green whether the app works or not, so do not follow it.
 
 So: the server answering for itself is healthy - `2xx`, `3xx`, `401`, `403`,
 `404`. A `5xx` or no answer at all is not. `bin/pulse.sh` implements exactly
 this and runs every 15 minutes with no model attached.
 
-Known open question: `{{ service.store-api.app }}` returns 404 on `/`, `/health`,
-`/healthz`, `/api/health`, `/openapi.json`, `/docs` and `/v1/health`, measured
-2026-08-22. Its real health path is not known. Do not report the API as down
-because of a 404 on a path nobody has confirmed. Do open an issue asking for the
-path, once.
+Anything narrower than that rule is in the notes column above, per service.
+That column is the only place estate-specific health knowledge belongs; when
+you learn something new about a service, put it in `estate.yaml` and run
+`bin/render`, not in this file.
 
 ## The repos
 
 ```bash
-gh repo list chidionyema --limit 30 --json name,pushedAt,isArchived \
+gh repo list {{ github.owner }} --limit 30 --json name,pushedAt,isArchived \
   --jq '.[] | select(.isArchived==false) | "\(.pushedAt[0:10])  \(.name)"' | sort -r
 ```
 
-`{{ estate.name }}` is the platform. `hermes-config` is this estate's home.
+`{{ github.repo }}` is the platform. `$HERMES_HOME` is this estate's home.
 
 ## The board
 
@@ -73,10 +69,8 @@ else. A threshold buried in code is a decision nobody can see.
 
 | what | healthy | open an issue when |
 |---|---|---|
-| engine /health | 307 to /login | two consecutive 5xx or no-answer, 15 min apart |
-| store-web / | 200 | two consecutive 5xx or no-answer |
-| machines started | all | any machine not `started` for 10 minutes |
-| region | lhr | any machine outside lhr |
+{{#services}}| {{key}} probe | {{expect}} | two consecutive 5xx or no-answer, 15 min apart |
+{{/services}}| machines started | all | any machine not `started` for 10 minutes |
 | agent-go age | under 3 days | older than 7 days, untouched |
 | open issues | any | a jump of more than 20 in a day |
 

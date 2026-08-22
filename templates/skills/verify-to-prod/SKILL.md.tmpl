@@ -17,21 +17,29 @@ gh pr view <n> -R {{ github.slug }} --json state,mergedAt,mergeCommit \
 
 ## 2. Deployed - the pipeline ran and the app took the release
 
+Pick the app the change went to:
+
+| key | app | probe | healthy | notes |
+|---|---|---|---|---|
+{{#services}}| {{key}} | `{{app}}` | `{{url}}` | {{expect}} |{{note_suffix}} |
+{{/services}}
 ```bash
+APP=<the app from the table>
+URL=<its probe url from the table>
 gh run list -R {{ github.slug }} --branch main --limit 3 \
   --json conclusion,headSha,displayTitle \
   --jq '.[] | "\(.conclusion) \(.headSha[0:8]) \(.displayTitle)"'
-fly releases -a {{ service.engine.app }} | head -3
-fly status -a {{ service.engine.app }}
+{{ platform.cli }} releases -a "$APP" | head -3
+{{ platform.cli }} status -a "$APP"
 ```
 
 The release must be newer than the merge, and every machine `started`. A green
-Action with no new Fly release means the deploy step did not run.
+Action with no new release means the deploy step did not run.
 
 ## 3. Working - the behaviour the issue asked for
 
 ```bash
-curl -s -o /dev/null -w '%{http_code}\n' {{ service.engine.url }}
+curl -s -o /dev/null -w '%{http_code}\n' "$URL"
 ```
 
 Then the specific thing. Health being 200 says the process is up; it says

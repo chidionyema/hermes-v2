@@ -13,13 +13,25 @@ suspicion filed as an incident wastes the next agent's morning. The template
 below has an evidence slot for exactly this reason: an empty slot means do not
 file.
 
-## 1. Confirm it twice, from two angles
+## 1. Name the app, then confirm it twice from two angles
+
+Everything below runs against one app. Set it once, from the table, and the
+commands are copy-paste from there.
+
+| key | app | probe | healthy | notes |
+|---|---|---|---|---|
+{{#services}}| {{key}} | `{{app}}` | `{{url}}` | {{expect}} |{{note_suffix}} |
+{{/services}}
+```bash
+APP=<the app from the table>
+URL=<its probe url from the table>
+```
 
 A single failed probe is a reading, not a fact. Get the code and the process.
 
 ```bash
-curl -s -o /dev/null -w '%{http_code}\n' {{ service.engine.url }}
-fly status -a {{ service.engine.app }}
+curl -s -o /dev/null -w '%{http_code}\n' "$URL"
+{{ platform.cli }} status -a "$APP"
 ```
 
 If the HTTP code is bad and `fly status` shows every machine `started`, that is a
@@ -28,8 +40,8 @@ different incident from both agreeing. Say which you got.
 ## 2. Get the reason, not the symptom
 
 ```bash
-fly logs -a {{ service.engine.app }} --no-tail | tail -100
-fly machine list -a {{ service.engine.app }}
+{{ platform.cli }} logs -a "$APP" --no-tail | tail -100
+{{ platform.cli }} machine list -a "$APP"
 ```
 
 Find the first error line, not the last. The last one is usually a consequence.
@@ -37,7 +49,7 @@ Find the first error line, not the last. The last one is usually a consequence.
 ## 3. What changed
 
 ```bash
-fly releases -a {{ service.engine.app }} | head -5
+{{ platform.cli }} releases -a "$APP" | head -5
 gh run list -R {{ github.slug }} --limit 5 \
   --json displayTitle,conclusion,createdAt --jq '.[] | "\(.createdAt[0:16]) \(.conclusion) \(.displayTitle)"'
 ```

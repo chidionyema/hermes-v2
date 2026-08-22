@@ -2,44 +2,47 @@
 # The 15-minute pulse. No model, no tokens, no bill.
 #
 # Measured 2026-08-22: running this as an agent task cost $0.0298 a time, which
-# is $85.92 a month to check two URLs. curl does the same job for nothing. The
-# agent is only worth waking when something is actually wrong.
+# is $85.92 a month to check a handful of URLs. curl does the same job for
+# nothing. The agent is only worth waking when something is actually wrong.
 #
 # Silence means healthy. Cron delivers nothing when stdout is empty.
 #
-# What counts as healthy, and why it is not "200":
-#   {{ service.engine.app }} is behind a login. Every path 307s to /login?next=...
-#   Following that redirect gives 200 - the login page. A monitor that follows
-#   redirects reports green forever, even with the app dead behind the door.
-#   So: do not follow. A 307 to /login means the app is up and routing.
-#   5xx, or no answer at all, means it is not.
-set -uo pipefail
+# What counts as healthy, and why it is not always "200": a service can answer
+# for itself with a 307 to a login page, or a 404 on a path that was never
+# there. Both prove the app is up and routing. 5xx, or no answer at all, does
+# not. Redirects are deliberately not followed - a monitor that follows them
+# reports green off the login page forever, with the app dead behind the door.
+#
+# What this estate probes, and anything a human should know about it:
+{{#services}}#   {{key}} -> {{url}} (expect {{expect}}){{note_suffix}}
+{{/services}}set -uo pipefail
 H="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 STATE="$H/logs/pulse.state"
 mkdir -p "$H/logs"
 
-probe() {  # url -> prints "code" or "dead"
+probe() {  # url -> prints "code" or "000"
   curl -s -o /dev/null -w '%{http_code}' --max-time 10 "$1" 2>/dev/null || echo "000"
 }
 
-healthy() {  # code -> 0 if the server is answering for itself
-  case "$1" in
-    2*|3*|401|403|404) return 0 ;;   # answering, even if gated or missing
-    *) return 1 ;;                    # 5xx, 000: not answering
+healthy() {  # code expect -> 0 if the server is answering for itself
+  case "$2" in
+    2xx) case "$1" in 2*) return 0 ;; *) return 1 ;; esac ;;
+    3xx) case "$1" in 3*) return 0 ;; *) return 1 ;; esac ;;
+    *)   case "$1" in
+           2*|3*|401|403|404) return 0 ;;   # answering, even if gated or missing
+           *) return 1 ;;                    # 5xx, 000: not answering
+         esac ;;
   esac
 }
 
 FAILS=""
-for target in \
-  "engine|{{ service.engine.url }}" \
-  "store-web|{{ service.store-web.url }}" \
-  "store-api|{{ service.store-api.url }}"
-do
-  name="${target%%|*}"; url="${target#*|}"
-  code="$(probe "$url")"
-  healthy "$code" || FAILS="$FAILS $name=$code"
-done
+check() {  # key url expect
+  code="$(probe "$2")"
+  healthy "$code" "$3" || FAILS="$FAILS $1=$code"
+}
 
+{{#services}}check "{{key}}" "{{url}}" "{{expect}}"
+{{/services}}
 PREV="$(cat "$STATE" 2>/dev/null || true)"
 echo "${FAILS# }" > "$STATE"
 
@@ -48,10 +51,10 @@ if [ -n "$FAILS" ] && [ -n "$PREV" ]; then
   echo "PLATFORM RED, two consecutive checks:$FAILS"
   echo "previous: $PREV"
   echo
-  echo "fly status:"
-  for a in {{ service.engine.app }} {{ service.store-web.app }} {{ service.store-api.app }}; do
+  echo "{{ platform.cli }} status:"
+  for a in {{#services}}{{app}} {{/services}}; do
     echo "  -- $a"
-    fly status -a "$a" 2>&1 | sed -n '2,8p' | sed 's/^/    /'
+    {{ platform.cli }} status -a "$a" 2>&1 | sed -n '2,8p' | sed 's/^/    /'
   done
   echo
   echo "Run the incident-triage skill against this."

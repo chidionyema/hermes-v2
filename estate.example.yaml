@@ -28,6 +28,10 @@ services:
     expect: "2xx"
     note: ""
 
+# Anything else the agent is allowed to reach on the network. Empty is normal.
+# The probed services above are added to the allowlist for you.
+egress_extra: []
+
 # Where the services run. Used only to decide which CLI the skills reach for.
 platform:
   kind: fly            # fly | render | railway | heroku | none

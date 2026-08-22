@@ -11,16 +11,24 @@ fills them in.
 
 The template language is deliberately tiny. Two forms and no more:
 
-  {{ github.slug }}                      one value, dotted path into estate.yaml
-  {{#services}} ... {{/services}}        repeat the block once per service,
-                                         with {{key}} {{app}} {{url}} {{note}}
+  {{ github.slug }}          one value, dotted path into estate.yaml
+  {{#services}}...{{/services}}   repeat the block once per item of that list
+
+Inside a list block the item's own fields are the placeholders: {{app}} for a
+service, or {{.}} when the list holds plain strings. Any top-level list in
+estate.yaml can be looped over, not just services.
 
 A placeholder with no value is an error, not an empty string. A silent blank in
 a health probe is how you get a monitor that watches nothing.
+
+No template may name one particular service. {{ service.engine.app }} would
+build fine here and then fail on the next estate, which is exactly the bug
+this file exists to prevent, so it is refused.
 """
 import os
 import re
 import sys
+from urllib.parse import urlparse
 
 HOME = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 TEMPLATES = os.path.join(HOME, "templates")
@@ -48,14 +56,21 @@ def load_estate():
         sys.exit("render: estate.yaml lists no services. The pulse would watch nothing.")
     # Derived values, so a template never has to build a string itself.
     d["github"]["slug"] = f"{d['github']['owner']}/{d['github']['repo']}"
-    # Templates address one service by name: {{ service.engine.url }}
-    d["service"] = {s["key"]: s for s in d["services"]}
     for s in d["services"]:
         for field in ("key", "app", "url"):
             if not s.get(field):
                 sys.exit(f"render: a service is missing '{field}:' -> {s}")
+        # The host is what an allowlist needs, and it is already in the url.
+        # Deriving it means no template has to assume a platform's domain.
+        s["host"] = urlparse(s["url"]).netloc
         s.setdefault("expect", "any-answer")
         s.setdefault("note", "")
+        # A note reads as a sentence after the facts, or as nothing at all.
+        s["note_suffix"] = f" {s['note']}" if s["note"] else ""
+    # Hosts this estate reaches that are not one of the probed services.
+    # Optional, and empty is the normal answer.
+    if not d.get("egress_extra"):
+        d["egress_extra"] = []
     return d
 
 
@@ -69,24 +84,53 @@ def lookup(estate, path):
     return str(node)
 
 
-SECTION = re.compile(r"\{\{#services\}\}(.*?)\{\{/services\}\}", re.S)
+SECTION = re.compile(r"\{\{#([a-zA-Z0-9_]+)\}\}(.*?)\{\{/\1\}\}", re.S)
 # Hyphens are legal in a service key ("store-web"), so they are legal here.
 SCALAR = re.compile(r"\{\{\s*([a-zA-Z0-9_.-]+)\s*\}\}")
 
 
+def field(chunk, name, value):
+    """Replace {{name}} and {{ name }} alike, inside a list block."""
+    return re.sub(r"\{\{\s*" + re.escape(name) + r"\s*\}\}", lambda _: value, chunk)
+
+
 def render_text(text, estate):
-    def one_service(match):
-        body = match.group(1)
+    def one_list(match):
+        name, body = match.group(1), match.group(2)
+        items = estate.get(name)
+        if items is None:
+            sys.exit(f"render: estate.yaml has no list '{name}:' for "
+                     f"{{{{#{name}}}}}")
+        if not isinstance(items, list):
+            sys.exit(f"render: estate.yaml's '{name}:' is not a list, "
+                     f"so {{{{#{name}}}}} cannot repeat over it")
         out = []
-        for s in estate["services"]:
+        for item in items:
             chunk = body
-            for k, v in s.items():
-                chunk = chunk.replace("{{" + k + "}}", str(v))
+            if isinstance(item, dict):
+                for k, v in item.items():
+                    chunk = field(chunk, k, str(v))
+            else:
+                chunk = field(chunk, ".", str(item))
             out.append(chunk)
         return "".join(out)
 
-    text = SECTION.sub(one_service, text)
-    return SCALAR.sub(lambda m: lookup(estate, m.group(1)), text)
+    text = SECTION.sub(one_list, text)
+
+    def one_value(match):
+        path = match.group(1)
+        if path.startswith("service."):
+            sys.exit(
+                f"render: a template asks for '{{{{ {path} }}}}'.\n"
+                "        Naming one service hardcodes this estate into a\n"
+                "        template, and the next estate will not have that\n"
+                "        key. Loop instead: {{#services}} ... {{/services}}."
+            )
+        return lookup(estate, path)
+
+    text = SCALAR.sub(one_value, text)
+    # An empty {{note}} would otherwise leave the line trailing whitespace.
+    return "\n".join(line.rstrip() for line in text.split("\n"))
 
 
 def targets():
