@@ -42,22 +42,46 @@ echo "[entrypoint] state linked to $D"
 # it to 1 changed an environment variable and nothing else, and the container
 # went on sleeping. Measured 2026-08-22: CMD was ["sleep","infinity"].
 if [ "${HERMES_GATEWAY_AUTOSTART:-0}" = "1" ]; then
-    # Refuse to start without a resolvable Anthropic credential. On this image
-    # the Claude Code Keychain and ~/.claude are both absent, so the only
-    # sources that can work are the env vars — see docs/claude-auth.md. Starting
-    # anyway gives a gateway that answers Telegram and fails every turn, which
-    # looks like a Hermes bug rather than a missing secret.
-    if ! "$H/.venv/bin/python" -c "
+    # Identity arrives from outside this container. ~/.local/bin/hermes-auth-bridge
+    # runs on the founder's Mac under launchd and writes the Claude credential to
+    # /data/dot-claude/.credentials.json, which /root/.claude points at. A boot
+    # can therefore land before the credential does — after a restore, after a
+    # new volume, or in the four-hour gap between bridge runs.
+    #
+    # This used to refuse and sleep, on the reasoning that a gateway answering
+    # Telegram and failing every turn looks like a Hermes bug. That reasoning
+    # was half right and the remedy was wrong: refusing makes a missing file
+    # into a dead machine, and the cutover that is waiting on it cannot even
+    # verify. Wait a while, then start anyway. resolve_anthropic_token() reads
+    # the file each time it is called, so a gateway started without one picks
+    # the credential up when the bridge lands it, with no restart.
+    has_token() {
+        "$H/.venv/bin/python" -c "
 import sys
 sys.path.insert(0, '$H/hermes-agent')
 from agent.anthropic_adapter import resolve_anthropic_token
 sys.exit(0 if resolve_anthropic_token() else 1)
-" 2>/dev/null; then
-        echo "[entrypoint] REFUSING to start the gateway: no Anthropic token resolves." >&2
-        echo "[entrypoint] Set CLAUDE_CODE_OAUTH_TOKEN (preferred) or ANTHROPIC_API_KEY." >&2
-        echo "[entrypoint] See docs/claude-auth.md. Sleeping so the machine stays reachable." >&2
-        exec sleep infinity
+" 2>/dev/null
+    }
+
+    if has_token; then
+        echo "[entrypoint] an Anthropic credential resolves"
+    else
+        echo "[entrypoint] no Anthropic credential yet; waiting up to 300s for the bridge" >&2
+        for _ in $(seq 1 30); do
+            sleep 10
+            if has_token; then break; fi
+        done
+        if has_token; then
+            echo "[entrypoint] the credential arrived"
+        else
+            echo "[entrypoint] DEGRADED: starting without an Anthropic credential." >&2
+            echo "[entrypoint] Telegram will connect; turns will fail until one lands." >&2
+            echo "[entrypoint] On the Mac, run: ~/.local/bin/hermes-auth-bridge --force" >&2
+            echo "[entrypoint] See docs/claude-auth.md." >&2
+        fi
     fi
+
     echo "[entrypoint] starting the gateway"
     cd "$H"
     exec "$H/.venv/bin/hermes" gateway run --replace --external-supervisor
