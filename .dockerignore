@@ -1,0 +1,21 @@
+# The build context is 1.2 GB without this, and almost none of it is source.
+.git
+.venv
+node_modules
+audio_cache
+image_cache
+cache
+models
+backups
+logs
+*.db
+*.db-wal
+*.db-shm
+*.lock
+__pycache__
+**/__pycache__
+*.pyc
+.pytest_cache
+.ruff_cache
+auth.json
+.env
