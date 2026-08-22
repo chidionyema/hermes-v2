@@ -12,15 +12,20 @@ args = [a for a in sys.argv[1:] if not a.startswith("-")]
 only = args[0] if args else None
 
 rows = [json.loads(l) for l in open(LEDGER) if l.strip()]
-passed, failed, blocked = [], [], []
+passed, failed, blocked, timed_out = [], [], [], []
 for row in rows:
     if only and only not in (row["phase"], row["section"], row["id"]):
         continue
+    # 25s was too tight: REQ-005 runs `hermes doctor`, which talks to the
+    # provider and took 9.1s on a good run. It tipped over 25s sometimes, and a
+    # timeout counted as a failure, so two sweeps a minute apart printed 107 and
+    # 106. A green that moves on its own is worse than a red.
     try:
         rc = subprocess.run(["bash", "-c", row["acceptance_cmd"]],
-                            capture_output=True, timeout=25).returncode
+                            capture_output=True, timeout=120).returncode
     except subprocess.TimeoutExpired:
         rc = 124
+        timed_out.append(row["id"])
     if rc == 0:
         row["status"] = "done"
         passed.append(row)
@@ -52,3 +57,8 @@ if failed and "-v" in sys.argv:
     print("\nopen:")
     for r in failed:
         print(f"  {r['id']} {r['section']:5s} {r['statement']}")
+
+if timed_out:
+    # Say it out loud. A row that ran out of time was not measured, and calling
+    # that a failure is the same lie in the other direction.
+    print("TIMED OUT (not measured, not failed): " + ", ".join(timed_out))

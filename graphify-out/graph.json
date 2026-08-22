@@ -37,7 +37,7 @@
       "label": "The Telegram token is shared",
       "file_type": "document",
       "source_file": "CUTOVER.md",
-      "source_location": "L60",
+      "source_location": "L62",
       "_origin": "ast",
       "id": "cutover_the_telegram_token_is_shared",
       "community": 14,
@@ -47,7 +47,7 @@
       "label": "Order of cutover",
       "file_type": "document",
       "source_file": "CUTOVER.md",
-      "source_location": "L72",
+      "source_location": "L74",
       "_origin": "ast",
       "id": "cutover_order_of_cutover",
       "community": 14,
@@ -57,7 +57,7 @@
       "label": "Going back",
       "file_type": "document",
       "source_file": "CUTOVER.md",
-      "source_location": "L81",
+      "source_location": "L83",
       "_origin": "ast",
       "id": "cutover_going_back",
       "community": 14,
@@ -69,9 +69,9 @@
       "source_file": "MEMORY.md",
       "source_location": "L1",
       "_origin": "ast",
-      "id": "memory",
       "community": 26,
-      "norm_label": "memory.md"
+      "norm_label": "memory.md",
+      "id": "memory"
     },
     {
       "label": "Platform map",
@@ -79,9 +79,9 @@
       "source_file": "MEMORY.md",
       "source_location": "L1",
       "_origin": "ast",
-      "id": "memory_platform_map",
       "community": 26,
-      "norm_label": "platform map"
+      "norm_label": "platform map",
+      "id": "memory_platform_map"
     },
     {
       "label": "RITUALS.md",
@@ -89,9 +89,9 @@
       "source_file": "RITUALS.md",
       "source_location": "L1",
       "_origin": "ast",
-      "id": "rituals",
       "community": 15,
-      "norm_label": "rituals.md"
+      "norm_label": "rituals.md",
+      "id": "rituals"
     },
     {
       "label": "Rituals",
@@ -99,9 +99,9 @@
       "source_file": "RITUALS.md",
       "source_location": "L1",
       "_origin": "ast",
-      "id": "rituals_rituals",
       "community": 15,
-      "norm_label": "rituals"
+      "norm_label": "rituals",
+      "id": "rituals_rituals"
     },
     {
       "label": "The lesson ladder",
@@ -109,9 +109,9 @@
       "source_file": "RITUALS.md",
       "source_location": "L7",
       "_origin": "ast",
-      "id": "rituals_the_lesson_ladder",
       "community": 15,
-      "norm_label": "the lesson ladder"
+      "norm_label": "the lesson ladder",
+      "id": "rituals_the_lesson_ladder"
     },
     {
       "label": "Sunday review - 20 minutes",
@@ -119,9 +119,9 @@
       "source_file": "RITUALS.md",
       "source_location": "L31",
       "_origin": "ast",
-      "id": "rituals_sunday_review_20_minutes",
       "community": 15,
-      "norm_label": "sunday review - 20 minutes"
+      "norm_label": "sunday review - 20 minutes",
+      "id": "rituals_sunday_review_20_minutes"
     },
     {
       "label": "USER.md",
@@ -129,9 +129,9 @@
       "source_file": "USER.md",
       "source_location": "L1",
       "_origin": "ast",
-      "id": "user",
       "community": 29,
-      "norm_label": "user.md"
+      "norm_label": "user.md",
+      "id": "user"
     },
     {
       "label": "audit-append.sh",
@@ -143,9 +143,9 @@
         "kind": "file"
       },
       "_origin": "ast",
-      "id": "bin_audit_append",
       "community": 17,
-      "norm_label": "audit-append.sh"
+      "norm_label": "audit-append.sh",
+      "id": "bin_audit_append"
     },
     {
       "label": "audit-append.sh script",
@@ -157,9 +157,9 @@
         "kind": "bash_entrypoint"
       },
       "_origin": "ast",
-      "id": "users_chidionyema_documents_code_hermes_v2_bin_audit_append_sh__entry",
       "community": 17,
-      "norm_label": "audit-append.sh script"
+      "norm_label": "audit-append.sh script",
+      "id": "users_chidionyema_documents_code_hermes_v2_bin_audit_append_sh__entry"
     },
     {
       "label": "backup-state.sh",
@@ -171,9 +171,9 @@
         "kind": "file"
       },
       "_origin": "ast",
-      "id": "bin_backup_state",
       "community": 18,
-      "norm_label": "backup-state.sh"
+      "norm_label": "backup-state.sh",
+      "id": "bin_backup_state"
     },
     {
       "label": "backup-state.sh script",
@@ -185,9 +185,9 @@
         "kind": "bash_entrypoint"
       },
       "_origin": "ast",
-      "id": "users_chidionyema_documents_code_hermes_v2_bin_backup_state_sh__entry",
       "community": 18,
-      "norm_label": "backup-state.sh script"
+      "norm_label": "backup-state.sh script",
+      "id": "users_chidionyema_documents_code_hermes_v2_bin_backup_state_sh__entry"
     },
     {
       "label": "check-requirements.py",
@@ -195,9 +195,9 @@
       "source_file": "bin/check-requirements.py",
       "source_location": "L1",
       "_origin": "ast",
-      "id": "bin_check_requirements",
       "community": 0,
-      "norm_label": "check-requirements.py"
+      "norm_label": "check-requirements.py",
+      "id": "bin_check_requirements"
     },
     {
       "label": "cost-report.sh",
@@ -209,9 +209,9 @@
         "kind": "file"
       },
       "_origin": "ast",
-      "id": "bin_cost_report",
       "community": 19,
-      "norm_label": "cost-report.sh"
+      "norm_label": "cost-report.sh",
+      "id": "bin_cost_report"
     },
     {
       "label": "cost-report.sh script",
@@ -223,9 +223,9 @@
         "kind": "bash_entrypoint"
       },
       "_origin": "ast",
-      "id": "users_chidionyema_documents_code_hermes_v2_bin_cost_report_sh__entry",
       "community": 19,
-      "norm_label": "cost-report.sh script"
+      "norm_label": "cost-report.sh script",
+      "id": "users_chidionyema_documents_code_hermes_v2_bin_cost_report_sh__entry"
     },
     {
       "label": "curator-report.sh",
@@ -237,9 +237,9 @@
         "kind": "file"
       },
       "_origin": "ast",
-      "id": "bin_curator_report",
       "community": 20,
-      "norm_label": "curator-report.sh"
+      "norm_label": "curator-report.sh",
+      "id": "bin_curator_report"
     },
     {
       "label": "curator-report.sh script",
@@ -251,9 +251,9 @@
         "kind": "bash_entrypoint"
       },
       "_origin": "ast",
-      "id": "users_chidionyema_documents_code_hermes_v2_bin_curator_report_sh__entry",
       "community": 20,
-      "norm_label": "curator-report.sh script"
+      "norm_label": "curator-report.sh script",
+      "id": "users_chidionyema_documents_code_hermes_v2_bin_curator_report_sh__entry"
     },
     {
       "label": "prove-watch-readonly.sh",
@@ -265,9 +265,9 @@
         "kind": "file"
       },
       "_origin": "ast",
-      "id": "bin_prove_watch_readonly",
       "community": 21,
-      "norm_label": "prove-watch-readonly.sh"
+      "norm_label": "prove-watch-readonly.sh",
+      "id": "bin_prove_watch_readonly"
     },
     {
       "label": "prove-watch-readonly.sh script",
@@ -279,9 +279,9 @@
         "kind": "bash_entrypoint"
       },
       "_origin": "ast",
-      "id": "users_chidionyema_documents_code_hermes_v2_bin_prove_watch_readonly_sh__entry",
       "community": 21,
-      "norm_label": "prove-watch-readonly.sh script"
+      "norm_label": "prove-watch-readonly.sh script",
+      "id": "users_chidionyema_documents_code_hermes_v2_bin_prove_watch_readonly_sh__entry"
     },
     {
       "label": "skill-drift-commit.sh",
@@ -293,9 +293,9 @@
         "kind": "file"
       },
       "_origin": "ast",
-      "id": "bin_skill_drift_commit",
       "community": 22,
-      "norm_label": "skill-drift-commit.sh"
+      "norm_label": "skill-drift-commit.sh",
+      "id": "bin_skill_drift_commit"
     },
     {
       "label": "skill-drift-commit.sh script",
@@ -307,9 +307,9 @@
         "kind": "bash_entrypoint"
       },
       "_origin": "ast",
-      "id": "users_chidionyema_documents_code_hermes_v2_bin_skill_drift_commit_sh__entry",
       "community": 22,
-      "norm_label": "skill-drift-commit.sh script"
+      "norm_label": "skill-drift-commit.sh script",
+      "id": "users_chidionyema_documents_code_hermes_v2_bin_skill_drift_commit_sh__entry"
     },
     {
       "label": "EVIDENCE_GATE_PROOF.md",
@@ -317,9 +317,9 @@
       "source_file": "ci/EVIDENCE_GATE_PROOF.md",
       "source_location": "L1",
       "_origin": "ast",
-      "id": "ci_evidence_gate_proof",
       "community": 23,
-      "norm_label": "evidence_gate_proof.md"
+      "norm_label": "evidence_gate_proof.md",
+      "id": "ci_evidence_gate_proof"
     },
     {
       "label": "Evidence gate: proof it refuses",
@@ -327,9 +327,9 @@
       "source_file": "ci/EVIDENCE_GATE_PROOF.md",
       "source_location": "L1",
       "_origin": "ast",
-      "id": "ci_evidence_gate_proof_evidence_gate_proof_it_refuses",
       "community": 23,
-      "norm_label": "evidence gate: proof it refuses"
+      "norm_label": "evidence gate: proof it refuses",
+      "id": "ci_evidence_gate_proof_evidence_gate_proof_it_refuses"
     },
     {
       "label": "evidence-gate.js",
@@ -337,9 +337,9 @@
       "source_file": "ci/evidence-gate.js",
       "source_location": "L1",
       "_origin": "ast",
-      "id": "ci_evidence_gate",
       "community": 12,
-      "norm_label": "evidence-gate.js"
+      "norm_label": "evidence-gate.js",
+      "id": "ci_evidence_gate"
     },
     {
       "label": "CLAIM_WORDS",
@@ -347,9 +347,9 @@
       "source_file": "ci/evidence-gate.js",
       "source_location": "L14",
       "_origin": "ast",
-      "id": "ci_evidence_gate_claim_words",
       "community": 12,
-      "norm_label": "claim_words"
+      "norm_label": "claim_words",
+      "id": "ci_evidence_gate_claim_words"
     },
     {
       "label": "PLACEHOLDERS",
@@ -357,9 +357,9 @@
       "source_file": "ci/evidence-gate.js",
       "source_location": "L20",
       "_origin": "ast",
-      "id": "ci_evidence_gate_placeholders",
       "community": 12,
-      "norm_label": "placeholders"
+      "norm_label": "placeholders",
+      "id": "ci_evidence_gate_placeholders"
     },
     {
       "label": "fencedBlocks()",
@@ -367,9 +367,9 @@
       "source_file": "ci/evidence-gate.js",
       "source_location": "L26",
       "_origin": "ast",
-      "id": "ci_evidence_gate_fencedblocks",
       "community": 12,
-      "norm_label": "fencedblocks()"
+      "norm_label": "fencedblocks()",
+      "id": "ci_evidence_gate_fencedblocks"
     },
     {
       "label": "isRealOutput()",
@@ -377,9 +377,9 @@
       "source_file": "ci/evidence-gate.js",
       "source_location": "L34",
       "_origin": "ast",
-      "id": "ci_evidence_gate_isrealoutput",
       "community": 12,
-      "norm_label": "isrealoutput()"
+      "norm_label": "isrealoutput()",
+      "id": "ci_evidence_gate_isrealoutput"
     },
     {
       "label": "findClaims()",
@@ -387,9 +387,9 @@
       "source_file": "ci/evidence-gate.js",
       "source_location": "L70",
       "_origin": "ast",
-      "id": "ci_evidence_gate_findclaims",
       "community": 12,
-      "norm_label": "findclaims()"
+      "norm_label": "findclaims()",
+      "id": "ci_evidence_gate_findclaims"
     },
     {
       "label": "main()",
@@ -397,9 +397,9 @@
       "source_file": "ci/evidence-gate.js",
       "source_location": "L88",
       "_origin": "ast",
-      "id": "ci_evidence_gate_main",
       "community": 12,
-      "norm_label": "main()"
+      "norm_label": "main()",
+      "id": "ci_evidence_gate_main"
     },
     {
       "label": "test_evidence_gate_gaming.py",
@@ -407,9 +407,9 @@
       "source_file": "ci/tests/test_evidence_gate_gaming.py",
       "source_location": "L1",
       "_origin": "ast",
-      "id": "tests_test_evidence_gate_gaming",
       "community": 16,
-      "norm_label": "test_evidence_gate_gaming.py"
+      "norm_label": "test_evidence_gate_gaming.py",
+      "id": "tests_test_evidence_gate_gaming"
     },
     {
       "label": "gate()",
@@ -417,9 +417,9 @@
       "source_file": "ci/tests/test_evidence_gate_gaming.py",
       "source_location": "L18",
       "_origin": "ast",
-      "id": "tests_test_evidence_gate_gaming_gate",
       "community": 16,
-      "norm_label": "gate()"
+      "norm_label": "gate()",
+      "id": "tests_test_evidence_gate_gaming_gate"
     },
     {
       "label": "main()",
@@ -427,9 +427,9 @@
       "source_file": "ci/tests/test_evidence_gate_gaming.py",
       "source_location": "L70",
       "_origin": "ast",
-      "id": "tests_test_evidence_gate_gaming_main",
       "community": 16,
-      "norm_label": "main()"
+      "norm_label": "main()",
+      "id": "tests_test_evidence_gate_gaming_main"
     },
     {
       "label": "screenshot_to_issue.py",
@@ -437,9 +437,9 @@
       "source_file": "handlers/screenshot_to_issue.py",
       "source_location": "L1",
       "_origin": "ast",
-      "id": "handlers_screenshot_to_issue",
       "community": 10,
-      "norm_label": "screenshot_to_issue.py"
+      "norm_label": "screenshot_to_issue.py",
+      "id": "handlers_screenshot_to_issue"
     },
     {
       "label": "HandlerError",
@@ -447,9 +447,9 @@
       "source_file": "handlers/screenshot_to_issue.py",
       "source_location": "L48",
       "_origin": "ast",
-      "id": "handlers_screenshot_to_issue_handlererror",
       "community": 10,
-      "norm_label": "handlererror"
+      "norm_label": "handlererror",
+      "id": "handlers_screenshot_to_issue_handlererror"
     },
     {
       "label": "Exception",
@@ -457,9 +457,9 @@
       "source_file": "",
       "source_location": "",
       "_origin": "ast",
-      "id": "exception",
       "community": 10,
-      "norm_label": "exception"
+      "norm_label": "exception",
+      "id": "exception"
     },
     {
       "label": "Result",
@@ -467,9 +467,9 @@
       "source_file": "handlers/screenshot_to_issue.py",
       "source_location": "L53",
       "_origin": "ast",
-      "id": "handlers_screenshot_to_issue_result",
       "community": 10,
-      "norm_label": "result"
+      "norm_label": "result",
+      "id": "handlers_screenshot_to_issue_result"
     },
     {
       "label": "sniff_image()",
@@ -477,9 +477,9 @@
       "source_file": "handlers/screenshot_to_issue.py",
       "source_location": "L60",
       "_origin": "ast",
-      "id": "handlers_screenshot_to_issue_sniff_image",
       "community": 10,
-      "norm_label": "sniff_image()"
+      "norm_label": "sniff_image()",
+      "id": "handlers_screenshot_to_issue_sniff_image"
     },
     {
       "label": "read_image()",
@@ -487,9 +487,9 @@
       "source_file": "handlers/screenshot_to_issue.py",
       "source_location": "L71",
       "_origin": "ast",
-      "id": "handlers_screenshot_to_issue_read_image",
       "community": 10,
-      "norm_label": "read_image()"
+      "norm_label": "read_image()",
+      "id": "handlers_screenshot_to_issue_read_image"
     },
     {
       "label": "clean_caption()",
@@ -497,9 +497,9 @@
       "source_file": "handlers/screenshot_to_issue.py",
       "source_location": "L87",
       "_origin": "ast",
-      "id": "handlers_screenshot_to_issue_clean_caption",
       "community": 10,
-      "norm_label": "clean_caption()"
+      "norm_label": "clean_caption()",
+      "id": "handlers_screenshot_to_issue_clean_caption"
     },
     {
       "label": "token()",
@@ -507,9 +507,9 @@
       "source_file": "handlers/screenshot_to_issue.py",
       "source_location": "L98",
       "_origin": "ast",
-      "id": "handlers_screenshot_to_issue_token",
       "community": 10,
-      "norm_label": "token()"
+      "norm_label": "token()",
+      "id": "handlers_screenshot_to_issue_token"
     },
     {
       "label": "build_body()",
@@ -517,9 +517,9 @@
       "source_file": "handlers/screenshot_to_issue.py",
       "source_location": "L109",
       "_origin": "ast",
-      "id": "handlers_screenshot_to_issue_build_body",
       "community": 10,
-      "norm_label": "build_body()"
+      "norm_label": "build_body()",
+      "id": "handlers_screenshot_to_issue_build_body"
     },
     {
       "label": "_default_post()",
@@ -527,9 +527,9 @@
       "source_file": "handlers/screenshot_to_issue.py",
       "source_location": "L126",
       "_origin": "ast",
-      "id": "handlers_screenshot_to_issue_default_post",
       "community": 10,
-      "norm_label": "_default_post()"
+      "norm_label": "_default_post()",
+      "id": "handlers_screenshot_to_issue_default_post"
     },
     {
       "label": "create_issue()",
@@ -537,9 +537,9 @@
       "source_file": "handlers/screenshot_to_issue.py",
       "source_location": "L152",
       "_origin": "ast",
-      "id": "handlers_screenshot_to_issue_create_issue",
       "community": 10,
-      "norm_label": "create_issue()"
+      "norm_label": "create_issue()",
+      "id": "handlers_screenshot_to_issue_create_issue"
     },
     {
       "label": "handle()",
@@ -547,9 +547,9 @@
       "source_file": "handlers/screenshot_to_issue.py",
       "source_location": "L193",
       "_origin": "ast",
-      "id": "handlers_screenshot_to_issue_handle",
       "community": 10,
-      "norm_label": "handle()"
+      "norm_label": "handle()",
+      "id": "handlers_screenshot_to_issue_handle"
     },
     {
       "label": "main()",
@@ -557,9 +557,9 @@
       "source_file": "handlers/screenshot_to_issue.py",
       "source_location": "L205",
       "_origin": "ast",
-      "id": "handlers_screenshot_to_issue_main",
       "community": 10,
-      "norm_label": "main()"
+      "norm_label": "main()",
+      "id": "handlers_screenshot_to_issue_main"
     },
     {
       "label": "Something we can explain to the founder in one line.",
@@ -567,9 +567,9 @@
       "source_file": "handlers/screenshot_to_issue.py",
       "source_location": "L49",
       "_origin": "ast",
-      "id": "handlers_screenshot_to_issue_rationale_49",
       "community": 10,
-      "norm_label": "something we can explain to the founder in one line."
+      "norm_label": "something we can explain to the founder in one line.",
+      "id": "handlers_screenshot_to_issue_rationale_49"
     },
     {
       "label": "Return the format, or raise. Never trust the file extension.",
@@ -577,9 +577,9 @@
       "source_file": "handlers/screenshot_to_issue.py",
       "source_location": "L61",
       "_origin": "ast",
-      "id": "handlers_screenshot_to_issue_rationale_61",
       "community": 10,
-      "norm_label": "return the format, or raise. never trust the file extension."
+      "norm_label": "return the format, or raise. never trust the file extension.",
+      "id": "handlers_screenshot_to_issue_rationale_61"
     },
     {
       "label": "A caption is a hint, never a command. Truncate it and never execute it.",
@@ -587,9 +587,9 @@
       "source_file": "handlers/screenshot_to_issue.py",
       "source_location": "L88",
       "_origin": "ast",
-      "id": "handlers_screenshot_to_issue_rationale_88",
       "community": 10,
-      "norm_label": "a caption is a hint, never a command. truncate it and never execute it."
+      "norm_label": "a caption is a hint, never a command. truncate it and never execute it.",
+      "id": "handlers_screenshot_to_issue_rationale_88"
     },
     {
       "label": "POST the issue. Retry only what is worth retrying.",
@@ -597,9 +597,9 @@
       "source_file": "handlers/screenshot_to_issue.py",
       "source_location": "L159",
       "_origin": "ast",
-      "id": "handlers_screenshot_to_issue_rationale_159",
       "community": 10,
-      "norm_label": "post the issue. retry only what is worth retrying."
+      "norm_label": "post the issue. retry only what is worth retrying.",
+      "id": "handlers_screenshot_to_issue_rationale_159"
     },
     {
       "label": "test_screenshot_to_issue.py",
@@ -607,9 +607,9 @@
       "source_file": "handlers/tests/test_screenshot_to_issue.py",
       "source_location": "L1",
       "_origin": "ast",
-      "id": "tests_test_screenshot_to_issue",
       "community": 11,
-      "norm_label": "test_screenshot_to_issue.py"
+      "norm_label": "test_screenshot_to_issue.py",
+      "id": "tests_test_screenshot_to_issue"
     },
     {
       "label": "check()",
@@ -617,9 +617,9 @@
       "source_file": "handlers/tests/test_screenshot_to_issue.py",
       "source_location": "L22",
       "_origin": "ast",
-      "id": "tests_test_screenshot_to_issue_check",
       "community": 11,
-      "norm_label": "check()"
+      "norm_label": "check()",
+      "id": "tests_test_screenshot_to_issue_check"
     },
     {
       "label": "raises()",
@@ -627,9 +627,9 @@
       "source_file": "handlers/tests/test_screenshot_to_issue.py",
       "source_location": "L34",
       "_origin": "ast",
-      "id": "tests_test_screenshot_to_issue_raises",
       "community": 11,
-      "norm_label": "raises()"
+      "norm_label": "raises()",
+      "id": "tests_test_screenshot_to_issue_raises"
     },
     {
       "label": "tmp()",
@@ -637,9 +637,9 @@
       "source_file": "handlers/tests/test_screenshot_to_issue.py",
       "source_location": "L43",
       "_origin": "ast",
-      "id": "tests_test_screenshot_to_issue_tmp",
       "community": 11,
-      "norm_label": "tmp()"
+      "norm_label": "tmp()",
+      "id": "tests_test_screenshot_to_issue_tmp"
     },
     {
       "label": "caption_cases()",
@@ -647,9 +647,9 @@
       "source_file": "handlers/tests/test_screenshot_to_issue.py",
       "source_location": "L74",
       "_origin": "ast",
-      "id": "tests_test_screenshot_to_issue_caption_cases",
       "community": 11,
-      "norm_label": "caption_cases()"
+      "norm_label": "caption_cases()",
+      "id": "tests_test_screenshot_to_issue_caption_cases"
     },
     {
       "label": "no_token()",
@@ -657,9 +657,9 @@
       "source_file": "handlers/tests/test_screenshot_to_issue.py",
       "source_location": "L89",
       "_origin": "ast",
-      "id": "tests_test_screenshot_to_issue_no_token",
       "community": 11,
-      "norm_label": "no_token()"
+      "norm_label": "no_token()",
+      "id": "tests_test_screenshot_to_issue_no_token"
     },
     {
       "label": "short_token()",
@@ -667,9 +667,9 @@
       "source_file": "handlers/tests/test_screenshot_to_issue.py",
       "source_location": "L103",
       "_origin": "ast",
-      "id": "tests_test_screenshot_to_issue_short_token",
       "community": 11,
-      "norm_label": "short_token()"
+      "norm_label": "short_token()",
+      "id": "tests_test_screenshot_to_issue_short_token"
     },
     {
       "label": "expired_token()",
@@ -677,9 +677,9 @@
       "source_file": "handlers/tests/test_screenshot_to_issue.py",
       "source_location": "L119",
       "_origin": "ast",
-      "id": "tests_test_screenshot_to_issue_expired_token",
       "community": 11,
-      "norm_label": "expired_token()"
+      "norm_label": "expired_token()",
+      "id": "tests_test_screenshot_to_issue_expired_token"
     },
     {
       "label": "retry_then_succeed()",
@@ -687,9 +687,9 @@
       "source_file": "handlers/tests/test_screenshot_to_issue.py",
       "source_location": "L135",
       "_origin": "ast",
-      "id": "tests_test_screenshot_to_issue_retry_then_succeed",
       "community": 11,
-      "norm_label": "retry_then_succeed()"
+      "norm_label": "retry_then_succeed()",
+      "id": "tests_test_screenshot_to_issue_retry_then_succeed"
     },
     {
       "label": "gives_up()",
@@ -697,9 +697,9 @@
       "source_file": "handlers/tests/test_screenshot_to_issue.py",
       "source_location": "L151",
       "_origin": "ast",
-      "id": "tests_test_screenshot_to_issue_gives_up",
       "community": 11,
-      "norm_label": "gives_up()"
+      "norm_label": "gives_up()",
+      "id": "tests_test_screenshot_to_issue_gives_up"
     },
     {
       "label": "honours_retry_after()",
@@ -707,9 +707,9 @@
       "source_file": "handlers/tests/test_screenshot_to_issue.py",
       "source_location": "L162",
       "_origin": "ast",
-      "id": "tests_test_screenshot_to_issue_honours_retry_after",
       "community": 11,
-      "norm_label": "honours_retry_after()"
+      "norm_label": "honours_retry_after()",
+      "id": "tests_test_screenshot_to_issue_honours_retry_after"
     },
     {
       "label": "no_retry_on_422()",
@@ -717,9 +717,9 @@
       "source_file": "handlers/tests/test_screenshot_to_issue.py",
       "source_location": "L174",
       "_origin": "ast",
-      "id": "tests_test_screenshot_to_issue_no_retry_on_422",
       "community": 11,
-      "norm_label": "no_retry_on_422()"
+      "norm_label": "no_retry_on_422()",
+      "id": "tests_test_screenshot_to_issue_no_retry_on_422"
     },
     {
       "label": "wait_is_capped()",
@@ -727,9 +727,9 @@
       "source_file": "handlers/tests/test_screenshot_to_issue.py",
       "source_location": "L188",
       "_origin": "ast",
-      "id": "tests_test_screenshot_to_issue_wait_is_capped",
       "community": 11,
-      "norm_label": "wait_is_capped()"
+      "norm_label": "wait_is_capped()",
+      "id": "tests_test_screenshot_to_issue_wait_is_capped"
     },
     {
       "label": "dry_run_files_nothing()",
@@ -737,9 +737,9 @@
       "source_file": "handlers/tests/test_screenshot_to_issue.py",
       "source_location": "L199",
       "_origin": "ast",
-      "id": "tests_test_screenshot_to_issue_dry_run_files_nothing",
       "community": 11,
-      "norm_label": "dry_run_files_nothing()"
+      "norm_label": "dry_run_files_nothing()",
+      "id": "tests_test_screenshot_to_issue_dry_run_files_nothing"
     },
     {
       "label": "body_never_labels_agent_go()",
@@ -747,9 +747,9 @@
       "source_file": "handlers/tests/test_screenshot_to_issue.py",
       "source_location": "L207",
       "_origin": "ast",
-      "id": "tests_test_screenshot_to_issue_body_never_labels_agent_go",
       "community": 11,
-      "norm_label": "body_never_labels_agent_go()"
+      "norm_label": "body_never_labels_agent_go()",
+      "id": "tests_test_screenshot_to_issue_body_never_labels_agent_go"
     },
     {
       "label": "MEMORY.md",
@@ -757,9 +757,9 @@
       "source_file": "profiles/watch/MEMORY.md",
       "source_location": "L1",
       "_origin": "ast",
-      "id": "watch_memory",
       "community": 27,
-      "norm_label": "memory.md"
+      "norm_label": "memory.md",
+      "id": "watch_memory"
     },
     {
       "label": "Platform map",
@@ -767,9 +767,9 @@
       "source_file": "profiles/watch/MEMORY.md",
       "source_location": "L1",
       "_origin": "ast",
-      "id": "watch_memory_platform_map",
       "community": 27,
-      "norm_label": "platform map"
+      "norm_label": "platform map",
+      "id": "watch_memory_platform_map"
     },
     {
       "label": "USER.md",
@@ -777,9 +777,9 @@
       "source_file": "profiles/watch/USER.md",
       "source_location": "L1",
       "_origin": "ast",
-      "id": "watch_user",
       "community": 30,
-      "norm_label": "user.md"
+      "norm_label": "user.md",
+      "id": "watch_user"
     },
     {
       "label": "MEMORY.md",
@@ -787,9 +787,9 @@
       "source_file": "profiles/work/MEMORY.md",
       "source_location": "L1",
       "_origin": "ast",
-      "id": "work_memory",
       "community": 28,
-      "norm_label": "memory.md"
+      "norm_label": "memory.md",
+      "id": "work_memory"
     },
     {
       "label": "Platform map",
@@ -797,9 +797,9 @@
       "source_file": "profiles/work/MEMORY.md",
       "source_location": "L1",
       "_origin": "ast",
-      "id": "work_memory_platform_map",
       "community": 28,
-      "norm_label": "platform map"
+      "norm_label": "platform map",
+      "id": "work_memory_platform_map"
     },
     {
       "label": "USER.md",
@@ -807,9 +807,9 @@
       "source_file": "profiles/work/USER.md",
       "source_location": "L1",
       "_origin": "ast",
-      "id": "work_user",
       "community": 31,
-      "norm_label": "user.md"
+      "norm_label": "user.md",
+      "id": "work_user"
     },
     {
       "label": "hermes-upgrade.md",
@@ -817,9 +817,9 @@
       "source_file": "runbooks/hermes-upgrade.md",
       "source_location": "L1",
       "_origin": "ast",
-      "id": "runbooks_hermes_upgrade",
       "community": 13,
-      "norm_label": "hermes-upgrade.md"
+      "norm_label": "hermes-upgrade.md",
+      "id": "runbooks_hermes_upgrade"
     },
     {
       "label": "Runbook: upgrading Hermes",
@@ -827,9 +827,9 @@
       "source_file": "runbooks/hermes-upgrade.md",
       "source_location": "L1",
       "_origin": "ast",
-      "id": "runbooks_hermes_upgrade_runbook_upgrading_hermes",
       "community": 13,
-      "norm_label": "runbook: upgrading hermes"
+      "norm_label": "runbook: upgrading hermes",
+      "id": "runbooks_hermes_upgrade_runbook_upgrading_hermes"
     },
     {
       "label": "Before",
@@ -837,9 +837,9 @@
       "source_file": "runbooks/hermes-upgrade.md",
       "source_location": "L9",
       "_origin": "ast",
-      "id": "runbooks_hermes_upgrade_before",
       "community": 13,
-      "norm_label": "before"
+      "norm_label": "before",
+      "id": "runbooks_hermes_upgrade_before"
     },
     {
       "label": "The upgrade",
@@ -847,9 +847,9 @@
       "source_file": "runbooks/hermes-upgrade.md",
       "source_location": "L20",
       "_origin": "ast",
-      "id": "runbooks_hermes_upgrade_the_upgrade",
       "community": 13,
-      "norm_label": "the upgrade"
+      "norm_label": "the upgrade",
+      "id": "runbooks_hermes_upgrade_the_upgrade"
     },
     {
       "label": "After - prove it, do not assume it",
@@ -857,9 +857,9 @@
       "source_file": "runbooks/hermes-upgrade.md",
       "source_location": "L36",
       "_origin": "ast",
-      "id": "runbooks_hermes_upgrade_after_prove_it_do_not_assume_it",
       "community": 13,
-      "norm_label": "after - prove it, do not assume it"
+      "norm_label": "after - prove it, do not assume it",
+      "id": "runbooks_hermes_upgrade_after_prove_it_do_not_assume_it"
     },
     {
       "label": "Going back",
@@ -867,9 +867,9 @@
       "source_file": "runbooks/hermes-upgrade.md",
       "source_location": "L49",
       "_origin": "ast",
-      "id": "runbooks_hermes_upgrade_going_back",
       "community": 13,
-      "norm_label": "going back"
+      "norm_label": "going back",
+      "id": "runbooks_hermes_upgrade_going_back"
     },
     {
       "label": "Known breakages",
@@ -877,9 +877,9 @@
       "source_file": "runbooks/hermes-upgrade.md",
       "source_location": "L57",
       "_origin": "ast",
-      "id": "runbooks_hermes_upgrade_known_breakages",
       "community": 13,
-      "norm_label": "known breakages"
+      "norm_label": "known breakages",
+      "id": "runbooks_hermes_upgrade_known_breakages"
     },
     {
       "label": "PLATFORM_GATING.md",
@@ -887,9 +887,9 @@
       "source_file": "skills/PLATFORM_GATING.md",
       "source_location": "L1",
       "_origin": "ast",
-      "id": "skills_platform_gating",
       "community": 9,
-      "norm_label": "platform_gating.md"
+      "norm_label": "platform_gating.md",
+      "id": "skills_platform_gating"
     },
     {
       "label": "Platform gating",
@@ -897,9 +897,9 @@
       "source_file": "skills/PLATFORM_GATING.md",
       "source_location": "L1",
       "_origin": "ast",
-      "id": "skills_platform_gating_platform_gating",
       "community": 9,
-      "norm_label": "platform gating"
+      "norm_label": "platform gating",
+      "id": "skills_platform_gating_platform_gating"
     },
     {
       "label": "Surfaces",
@@ -907,9 +907,9 @@
       "source_file": "skills/PLATFORM_GATING.md",
       "source_location": "L21",
       "_origin": "ast",
-      "id": "skills_platform_gating_surfaces",
       "community": 9,
-      "norm_label": "surfaces"
+      "norm_label": "surfaces",
+      "id": "skills_platform_gating_surfaces"
     },
     {
       "label": "VETTED.md",
@@ -917,9 +917,9 @@
       "source_file": "skills/VETTED.md",
       "source_location": "L1",
       "_origin": "ast",
-      "id": "skills_vetted",
       "community": 8,
-      "norm_label": "vetted.md"
+      "norm_label": "vetted.md",
+      "id": "skills_vetted"
     },
     {
       "label": "Vetted third-party skills",
@@ -927,9 +927,9 @@
       "source_file": "skills/VETTED.md",
       "source_location": "L1",
       "_origin": "ast",
-      "id": "skills_vetted_vetted_third_party_skills",
       "community": 8,
-      "norm_label": "vetted third-party skills"
+      "norm_label": "vetted third-party skills",
+      "id": "skills_vetted_vetted_third_party_skills"
     },
     {
       "label": "Reviewed and installed",
@@ -937,9 +937,9 @@
       "source_file": "skills/VETTED.md",
       "source_location": "L10",
       "_origin": "ast",
-      "id": "skills_vetted_reviewed_and_installed",
       "community": 8,
-      "norm_label": "reviewed and installed"
+      "norm_label": "reviewed and installed",
+      "id": "skills_vetted_reviewed_and_installed"
     },
     {
       "label": "Not installed - could not be found",
@@ -947,9 +947,9 @@
       "source_file": "skills/VETTED.md",
       "source_location": "L14",
       "_origin": "ast",
-      "id": "skills_vetted_not_installed_could_not_be_found",
       "community": 8,
-      "norm_label": "not installed - could not be found"
+      "norm_label": "not installed - could not be found",
+      "id": "skills_vetted_not_installed_could_not_be_found"
     },
     {
       "label": "Reviewed and rejected",
@@ -957,9 +957,9 @@
       "source_file": "skills/VETTED.md",
       "source_location": "L35",
       "_origin": "ast",
-      "id": "skills_vetted_reviewed_and_rejected",
       "community": 8,
-      "norm_label": "reviewed and rejected"
+      "norm_label": "reviewed and rejected",
+      "id": "skills_vetted_reviewed_and_rejected"
     },
     {
       "label": "How to review one",
@@ -967,9 +967,9 @@
       "source_file": "skills/VETTED.md",
       "source_location": "L39",
       "_origin": "ast",
-      "id": "skills_vetted_how_to_review_one",
       "community": 8,
-      "norm_label": "how to review one"
+      "norm_label": "how to review one",
+      "id": "skills_vetted_how_to_review_one"
     },
     {
       "label": "SKILL.md",
@@ -977,9 +977,9 @@
       "source_file": "skills/estate-map/SKILL.md",
       "source_location": "L1",
       "_origin": "ast",
-      "id": "estate_map_skill",
       "community": 4,
-      "norm_label": "skill.md"
+      "norm_label": "skill.md",
+      "id": "estate_map_skill"
     },
     {
       "label": "estate-map",
@@ -987,9 +987,9 @@
       "source_file": "skills/estate-map/SKILL.md",
       "source_location": "L6",
       "_origin": "ast",
-      "id": "estate_map_skill_estate_map",
       "community": 4,
-      "norm_label": "estate-map"
+      "norm_label": "estate-map",
+      "id": "estate_map_skill_estate_map"
     },
     {
       "label": "The apps",
@@ -997,9 +997,9 @@
       "source_file": "skills/estate-map/SKILL.md",
       "source_location": "L10",
       "_origin": "ast",
-      "id": "estate_map_skill_the_apps",
       "community": 4,
-      "norm_label": "the apps"
+      "norm_label": "the apps",
+      "id": "estate_map_skill_the_apps"
     },
     {
       "label": "Is it serving",
@@ -1007,9 +1007,9 @@
       "source_file": "skills/estate-map/SKILL.md",
       "source_location": "L21",
       "_origin": "ast",
-      "id": "estate_map_skill_is_it_serving",
       "community": 4,
-      "norm_label": "is it serving"
+      "norm_label": "is it serving",
+      "id": "estate_map_skill_is_it_serving"
     },
     {
       "label": "The repos",
@@ -1017,9 +1017,9 @@
       "source_file": "skills/estate-map/SKILL.md",
       "source_location": "L37",
       "_origin": "ast",
-      "id": "estate_map_skill_the_repos",
       "community": 4,
-      "norm_label": "the repos"
+      "norm_label": "the repos",
+      "id": "estate_map_skill_the_repos"
     },
     {
       "label": "The board",
@@ -1027,9 +1027,9 @@
       "source_file": "skills/estate-map/SKILL.md",
       "source_location": "L46",
       "_origin": "ast",
-      "id": "estate_map_skill_the_board",
       "community": 4,
-      "norm_label": "the board"
+      "norm_label": "the board",
+      "id": "estate_map_skill_the_board"
     },
     {
       "label": "Thresholds",
@@ -1037,9 +1037,9 @@
       "source_file": "skills/estate-map/SKILL.md",
       "source_location": "L53",
       "_origin": "ast",
-      "id": "estate_map_skill_thresholds",
       "community": 4,
-      "norm_label": "thresholds"
+      "norm_label": "thresholds",
+      "id": "estate_map_skill_thresholds"
     },
     {
       "label": "Report shape",
@@ -1047,9 +1047,9 @@
       "source_file": "skills/estate-map/SKILL.md",
       "source_location": "L71",
       "_origin": "ast",
-      "id": "estate_map_skill_report_shape",
       "community": 4,
-      "norm_label": "report shape"
+      "norm_label": "report shape",
+      "id": "estate_map_skill_report_shape"
     },
     {
       "label": "SKILL.md",
@@ -1057,9 +1057,9 @@
       "source_file": "skills/incident-triage/SKILL.md",
       "source_location": "L1",
       "_origin": "ast",
-      "id": "incident_triage_skill",
       "community": 5,
-      "norm_label": "skill.md"
+      "norm_label": "skill.md",
+      "id": "incident_triage_skill"
     },
     {
       "label": "incident-triage",
@@ -1067,9 +1067,9 @@
       "source_file": "skills/incident-triage/SKILL.md",
       "source_location": "L6",
       "_origin": "ast",
-      "id": "incident_triage_skill_incident_triage",
       "community": 5,
-      "norm_label": "incident-triage"
+      "norm_label": "incident-triage",
+      "id": "incident_triage_skill_incident_triage"
     },
     {
       "label": "1. Confirm it twice, from two angles",
@@ -1077,9 +1077,9 @@
       "source_file": "skills/incident-triage/SKILL.md",
       "source_location": "L16",
       "_origin": "ast",
-      "id": "incident_triage_skill_1_confirm_it_twice_from_two_angles",
       "community": 5,
-      "norm_label": "1. confirm it twice, from two angles"
+      "norm_label": "1. confirm it twice, from two angles",
+      "id": "incident_triage_skill_1_confirm_it_twice_from_two_angles"
     },
     {
       "label": "2. Get the reason, not the symptom",
@@ -1087,9 +1087,9 @@
       "source_file": "skills/incident-triage/SKILL.md",
       "source_location": "L28",
       "_origin": "ast",
-      "id": "incident_triage_skill_2_get_the_reason_not_the_symptom",
       "community": 5,
-      "norm_label": "2. get the reason, not the symptom"
+      "norm_label": "2. get the reason, not the symptom",
+      "id": "incident_triage_skill_2_get_the_reason_not_the_symptom"
     },
     {
       "label": "3. What changed",
@@ -1097,9 +1097,9 @@
       "source_file": "skills/incident-triage/SKILL.md",
       "source_location": "L37",
       "_origin": "ast",
-      "id": "incident_triage_skill_3_what_changed",
       "community": 5,
-      "norm_label": "3. what changed"
+      "norm_label": "3. what changed",
+      "id": "incident_triage_skill_3_what_changed"
     },
     {
       "label": "4. Open exactly one issue",
@@ -1107,9 +1107,9 @@
       "source_file": "skills/incident-triage/SKILL.md",
       "source_location": "L48",
       "_origin": "ast",
-      "id": "incident_triage_skill_4_open_exactly_one_issue",
       "community": 5,
-      "norm_label": "4. open exactly one issue"
+      "norm_label": "4. open exactly one issue",
+      "id": "incident_triage_skill_4_open_exactly_one_issue"
     },
     {
       "label": "Never",
@@ -1117,9 +1117,9 @@
       "source_file": "skills/incident-triage/SKILL.md",
       "source_location": "L85",
       "_origin": "ast",
-      "id": "incident_triage_skill_never",
       "community": 5,
-      "norm_label": "never"
+      "norm_label": "never",
+      "id": "incident_triage_skill_never"
     },
     {
       "label": "README.md",
@@ -1127,9 +1127,9 @@
       "source_file": "tests/incidents/README.md",
       "source_location": "L1",
       "_origin": "ast",
-      "id": "incidents_readme",
       "community": 24,
-      "norm_label": "readme.md"
+      "norm_label": "readme.md",
+      "id": "incidents_readme"
     },
     {
       "label": "Incident regression tests",
@@ -1137,9 +1137,9 @@
       "source_file": "tests/incidents/README.md",
       "source_location": "L1",
       "_origin": "ast",
-      "id": "incidents_readme_incident_regression_tests",
       "community": 24,
-      "norm_label": "incident regression tests"
+      "norm_label": "incident regression tests",
+      "id": "incidents_readme_incident_regression_tests"
     },
     {
       "label": "test_incidents_have_guards.py",
@@ -1147,9 +1147,9 @@
       "source_file": "tests/incidents/test_incidents_have_guards.py",
       "source_location": "L1",
       "_origin": "ast",
-      "id": "incidents_test_incidents_have_guards",
       "community": 25,
-      "norm_label": "test_incidents_have_guards.py"
+      "norm_label": "test_incidents_have_guards.py",
+      "id": "incidents_test_incidents_have_guards"
     },
     {
       "label": "main()",
@@ -1157,9 +1157,9 @@
       "source_file": "tests/incidents/test_incidents_have_guards.py",
       "source_location": "L15",
       "_origin": "ast",
-      "id": "incidents_test_incidents_have_guards_main",
       "community": 25,
-      "norm_label": "main()"
+      "norm_label": "main()",
+      "id": "incidents_test_incidents_have_guards_main"
     },
     {
       "label": "SKILL.md",
@@ -1469,9 +1469,9 @@
       "source_file": "CUTOVER.md",
       "source_location": "L1",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "cutover",
-      "target": "cutover_cutover",
-      "confidence_score": 1.0
+      "target": "cutover_cutover"
     },
     {
       "relation": "contains",
@@ -1479,9 +1479,9 @@
       "source_file": "CUTOVER.md",
       "source_location": "L6",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "cutover_cutover",
-      "target": "cutover_blocked_on_a_founder_decision_not_on_work",
-      "confidence_score": 1.0
+      "target": "cutover_blocked_on_a_founder_decision_not_on_work"
     },
     {
       "relation": "contains",
@@ -1489,9 +1489,9 @@
       "source_file": "CUTOVER.md",
       "source_location": "L81",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "cutover_cutover",
-      "target": "cutover_going_back",
-      "confidence_score": 1.0
+      "target": "cutover_going_back"
     },
     {
       "relation": "contains",
@@ -1499,9 +1499,9 @@
       "source_file": "CUTOVER.md",
       "source_location": "L72",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "cutover_cutover",
-      "target": "cutover_order_of_cutover",
-      "confidence_score": 1.0
+      "target": "cutover_order_of_cutover"
     },
     {
       "relation": "contains",
@@ -1509,9 +1509,9 @@
       "source_file": "CUTOVER.md",
       "source_location": "L60",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "cutover_cutover",
-      "target": "cutover_the_telegram_token_is_shared",
-      "confidence_score": 1.0
+      "target": "cutover_the_telegram_token_is_shared"
     },
     {
       "relation": "contains",
@@ -1519,9 +1519,9 @@
       "source_file": "MEMORY.md",
       "source_location": "L1",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "memory",
-      "target": "memory_platform_map",
-      "confidence_score": 1.0
+      "target": "memory_platform_map"
     },
     {
       "relation": "contains",
@@ -1529,9 +1529,9 @@
       "source_file": "RITUALS.md",
       "source_location": "L1",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "rituals",
-      "target": "rituals_rituals",
-      "confidence_score": 1.0
+      "target": "rituals_rituals"
     },
     {
       "relation": "contains",
@@ -1539,9 +1539,9 @@
       "source_file": "RITUALS.md",
       "source_location": "L31",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "rituals_rituals",
-      "target": "rituals_sunday_review_20_minutes",
-      "confidence_score": 1.0
+      "target": "rituals_sunday_review_20_minutes"
     },
     {
       "relation": "contains",
@@ -1549,9 +1549,9 @@
       "source_file": "RITUALS.md",
       "source_location": "L7",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "rituals_rituals",
-      "target": "rituals_the_lesson_ladder",
-      "confidence_score": 1.0
+      "target": "rituals_the_lesson_ladder"
     },
     {
       "relation": "contains",
@@ -1559,9 +1559,9 @@
       "source_file": "bin/audit-append.sh",
       "source_location": "L1",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "bin_audit_append",
-      "target": "users_chidionyema_documents_code_hermes_v2_bin_audit_append_sh__entry",
-      "confidence_score": 1.0
+      "target": "users_chidionyema_documents_code_hermes_v2_bin_audit_append_sh__entry"
     },
     {
       "relation": "contains",
@@ -1569,9 +1569,9 @@
       "source_file": "bin/backup-state.sh",
       "source_location": "L1",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "bin_backup_state",
-      "target": "users_chidionyema_documents_code_hermes_v2_bin_backup_state_sh__entry",
-      "confidence_score": 1.0
+      "target": "users_chidionyema_documents_code_hermes_v2_bin_backup_state_sh__entry"
     },
     {
       "relation": "contains",
@@ -1579,9 +1579,9 @@
       "source_file": "bin/cost-report.sh",
       "source_location": "L1",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "bin_cost_report",
-      "target": "users_chidionyema_documents_code_hermes_v2_bin_cost_report_sh__entry",
-      "confidence_score": 1.0
+      "target": "users_chidionyema_documents_code_hermes_v2_bin_cost_report_sh__entry"
     },
     {
       "relation": "contains",
@@ -1589,9 +1589,9 @@
       "source_file": "bin/curator-report.sh",
       "source_location": "L1",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "bin_curator_report",
-      "target": "users_chidionyema_documents_code_hermes_v2_bin_curator_report_sh__entry",
-      "confidence_score": 1.0
+      "target": "users_chidionyema_documents_code_hermes_v2_bin_curator_report_sh__entry"
     },
     {
       "relation": "contains",
@@ -1599,9 +1599,9 @@
       "source_file": "bin/prove-watch-readonly.sh",
       "source_location": "L1",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "bin_prove_watch_readonly",
-      "target": "users_chidionyema_documents_code_hermes_v2_bin_prove_watch_readonly_sh__entry",
-      "confidence_score": 1.0
+      "target": "users_chidionyema_documents_code_hermes_v2_bin_prove_watch_readonly_sh__entry"
     },
     {
       "relation": "contains",
@@ -1609,9 +1609,9 @@
       "source_file": "bin/skill-drift-commit.sh",
       "source_location": "L1",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "bin_skill_drift_commit",
-      "target": "users_chidionyema_documents_code_hermes_v2_bin_skill_drift_commit_sh__entry",
-      "confidence_score": 1.0
+      "target": "users_chidionyema_documents_code_hermes_v2_bin_skill_drift_commit_sh__entry"
     },
     {
       "relation": "contains",
@@ -1619,9 +1619,9 @@
       "source_file": "ci/EVIDENCE_GATE_PROOF.md",
       "source_location": "L1",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "ci_evidence_gate_proof",
-      "target": "ci_evidence_gate_proof_evidence_gate_proof_it_refuses",
-      "confidence_score": 1.0
+      "target": "ci_evidence_gate_proof_evidence_gate_proof_it_refuses"
     },
     {
       "relation": "contains",
@@ -1629,9 +1629,9 @@
       "source_file": "ci/evidence-gate.js",
       "source_location": "L14",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "ci_evidence_gate",
-      "target": "ci_evidence_gate_claim_words",
-      "confidence_score": 1.0
+      "target": "ci_evidence_gate_claim_words"
     },
     {
       "relation": "contains",
@@ -1639,9 +1639,9 @@
       "source_file": "ci/evidence-gate.js",
       "source_location": "L26",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "ci_evidence_gate",
-      "target": "ci_evidence_gate_fencedblocks",
-      "confidence_score": 1.0
+      "target": "ci_evidence_gate_fencedblocks"
     },
     {
       "relation": "contains",
@@ -1649,9 +1649,9 @@
       "source_file": "ci/evidence-gate.js",
       "source_location": "L70",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "ci_evidence_gate",
-      "target": "ci_evidence_gate_findclaims",
-      "confidence_score": 1.0
+      "target": "ci_evidence_gate_findclaims"
     },
     {
       "relation": "contains",
@@ -1659,9 +1659,9 @@
       "source_file": "ci/evidence-gate.js",
       "source_location": "L34",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "ci_evidence_gate",
-      "target": "ci_evidence_gate_isrealoutput",
-      "confidence_score": 1.0
+      "target": "ci_evidence_gate_isrealoutput"
     },
     {
       "relation": "contains",
@@ -1669,9 +1669,9 @@
       "source_file": "ci/evidence-gate.js",
       "source_location": "L88",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "ci_evidence_gate",
-      "target": "ci_evidence_gate_main",
-      "confidence_score": 1.0
+      "target": "ci_evidence_gate_main"
     },
     {
       "relation": "contains",
@@ -1679,9 +1679,9 @@
       "source_file": "ci/evidence-gate.js",
       "source_location": "L20",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "ci_evidence_gate",
-      "target": "ci_evidence_gate_placeholders",
-      "confidence_score": 1.0
+      "target": "ci_evidence_gate_placeholders"
     },
     {
       "relation": "calls",
@@ -1690,9 +1690,9 @@
       "source_file": "ci/evidence-gate.js",
       "source_location": "L99",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "ci_evidence_gate_main",
-      "target": "ci_evidence_gate_fencedblocks",
-      "confidence_score": 1.0
+      "target": "ci_evidence_gate_fencedblocks"
     },
     {
       "relation": "calls",
@@ -1701,9 +1701,9 @@
       "source_file": "ci/evidence-gate.js",
       "source_location": "L98",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "ci_evidence_gate_main",
-      "target": "ci_evidence_gate_findclaims",
-      "confidence_score": 1.0
+      "target": "ci_evidence_gate_findclaims"
     },
     {
       "relation": "contains",
@@ -1711,9 +1711,9 @@
       "source_file": "ci/tests/test_evidence_gate_gaming.py",
       "source_location": "L18",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "tests_test_evidence_gate_gaming",
-      "target": "tests_test_evidence_gate_gaming_gate",
-      "confidence_score": 1.0
+      "target": "tests_test_evidence_gate_gaming_gate"
     },
     {
       "relation": "contains",
@@ -1721,9 +1721,9 @@
       "source_file": "ci/tests/test_evidence_gate_gaming.py",
       "source_location": "L70",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "tests_test_evidence_gate_gaming",
-      "target": "tests_test_evidence_gate_gaming_main",
-      "confidence_score": 1.0
+      "target": "tests_test_evidence_gate_gaming_main"
     },
     {
       "relation": "calls",
@@ -1732,9 +1732,9 @@
       "source_file": "ci/tests/test_evidence_gate_gaming.py",
       "source_location": "L73",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "tests_test_evidence_gate_gaming_main",
-      "target": "tests_test_evidence_gate_gaming_gate",
-      "confidence_score": 1.0
+      "target": "tests_test_evidence_gate_gaming_gate"
     },
     {
       "relation": "contains",
@@ -1742,9 +1742,9 @@
       "source_file": "handlers/screenshot_to_issue.py",
       "source_location": "L109",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "handlers_screenshot_to_issue",
-      "target": "handlers_screenshot_to_issue_build_body",
-      "confidence_score": 1.0
+      "target": "handlers_screenshot_to_issue_build_body"
     },
     {
       "relation": "contains",
@@ -1752,9 +1752,9 @@
       "source_file": "handlers/screenshot_to_issue.py",
       "source_location": "L87",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "handlers_screenshot_to_issue",
-      "target": "handlers_screenshot_to_issue_clean_caption",
-      "confidence_score": 1.0
+      "target": "handlers_screenshot_to_issue_clean_caption"
     },
     {
       "relation": "contains",
@@ -1762,9 +1762,9 @@
       "source_file": "handlers/screenshot_to_issue.py",
       "source_location": "L152",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "handlers_screenshot_to_issue",
-      "target": "handlers_screenshot_to_issue_create_issue",
-      "confidence_score": 1.0
+      "target": "handlers_screenshot_to_issue_create_issue"
     },
     {
       "relation": "contains",
@@ -1772,9 +1772,9 @@
       "source_file": "handlers/screenshot_to_issue.py",
       "source_location": "L126",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "handlers_screenshot_to_issue",
-      "target": "handlers_screenshot_to_issue_default_post",
-      "confidence_score": 1.0
+      "target": "handlers_screenshot_to_issue_default_post"
     },
     {
       "relation": "contains",
@@ -1782,9 +1782,9 @@
       "source_file": "handlers/screenshot_to_issue.py",
       "source_location": "L193",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "handlers_screenshot_to_issue",
-      "target": "handlers_screenshot_to_issue_handle",
-      "confidence_score": 1.0
+      "target": "handlers_screenshot_to_issue_handle"
     },
     {
       "relation": "contains",
@@ -1792,9 +1792,9 @@
       "source_file": "handlers/screenshot_to_issue.py",
       "source_location": "L48",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "handlers_screenshot_to_issue",
-      "target": "handlers_screenshot_to_issue_handlererror",
-      "confidence_score": 1.0
+      "target": "handlers_screenshot_to_issue_handlererror"
     },
     {
       "relation": "contains",
@@ -1802,9 +1802,9 @@
       "source_file": "handlers/screenshot_to_issue.py",
       "source_location": "L205",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "handlers_screenshot_to_issue",
-      "target": "handlers_screenshot_to_issue_main",
-      "confidence_score": 1.0
+      "target": "handlers_screenshot_to_issue_main"
     },
     {
       "relation": "contains",
@@ -1812,9 +1812,9 @@
       "source_file": "handlers/screenshot_to_issue.py",
       "source_location": "L71",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "handlers_screenshot_to_issue",
-      "target": "handlers_screenshot_to_issue_read_image",
-      "confidence_score": 1.0
+      "target": "handlers_screenshot_to_issue_read_image"
     },
     {
       "relation": "contains",
@@ -1822,9 +1822,9 @@
       "source_file": "handlers/screenshot_to_issue.py",
       "source_location": "L53",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "handlers_screenshot_to_issue",
-      "target": "handlers_screenshot_to_issue_result",
-      "confidence_score": 1.0
+      "target": "handlers_screenshot_to_issue_result"
     },
     {
       "relation": "contains",
@@ -1832,9 +1832,9 @@
       "source_file": "handlers/screenshot_to_issue.py",
       "source_location": "L60",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "handlers_screenshot_to_issue",
-      "target": "handlers_screenshot_to_issue_sniff_image",
-      "confidence_score": 1.0
+      "target": "handlers_screenshot_to_issue_sniff_image"
     },
     {
       "relation": "contains",
@@ -1842,9 +1842,9 @@
       "source_file": "handlers/screenshot_to_issue.py",
       "source_location": "L98",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "handlers_screenshot_to_issue",
-      "target": "handlers_screenshot_to_issue_token",
-      "confidence_score": 1.0
+      "target": "handlers_screenshot_to_issue_token"
     },
     {
       "relation": "calls",
@@ -1853,9 +1853,9 @@
       "source_file": "handlers/screenshot_to_issue.py",
       "source_location": "L171",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "handlers_screenshot_to_issue_create_issue",
-      "target": "handlers_screenshot_to_issue_handlererror",
-      "confidence_score": 1.0
+      "target": "handlers_screenshot_to_issue_handlererror"
     },
     {
       "relation": "calls",
@@ -1864,9 +1864,9 @@
       "source_file": "handlers/screenshot_to_issue.py",
       "source_location": "L149",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "handlers_screenshot_to_issue_default_post",
-      "target": "handlers_screenshot_to_issue_handlererror",
-      "confidence_score": 1.0
+      "target": "handlers_screenshot_to_issue_handlererror"
     },
     {
       "relation": "inherits",
@@ -1874,9 +1874,9 @@
       "source_file": "handlers/screenshot_to_issue.py",
       "source_location": "L48",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "handlers_screenshot_to_issue_handlererror",
-      "target": "exception",
-      "confidence_score": 1.0
+      "target": "exception"
     },
     {
       "relation": "rationale_for",
@@ -1884,9 +1884,9 @@
       "source_file": "handlers/screenshot_to_issue.py",
       "source_location": "L49",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "handlers_screenshot_to_issue_rationale_49",
-      "target": "handlers_screenshot_to_issue_handlererror",
-      "confidence_score": 1.0
+      "target": "handlers_screenshot_to_issue_handlererror"
     },
     {
       "relation": "calls",
@@ -1895,9 +1895,9 @@
       "source_file": "handlers/screenshot_to_issue.py",
       "source_location": "L74",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "handlers_screenshot_to_issue_read_image",
-      "target": "handlers_screenshot_to_issue_handlererror",
-      "confidence_score": 1.0
+      "target": "handlers_screenshot_to_issue_handlererror"
     },
     {
       "relation": "calls",
@@ -1906,9 +1906,9 @@
       "source_file": "handlers/screenshot_to_issue.py",
       "source_location": "L68",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "handlers_screenshot_to_issue_sniff_image",
-      "target": "handlers_screenshot_to_issue_handlererror",
-      "confidence_score": 1.0
+      "target": "handlers_screenshot_to_issue_handlererror"
     },
     {
       "relation": "calls",
@@ -1917,9 +1917,9 @@
       "source_file": "handlers/screenshot_to_issue.py",
       "source_location": "L101",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "handlers_screenshot_to_issue_token",
-      "target": "handlers_screenshot_to_issue_handlererror",
-      "confidence_score": 1.0
+      "target": "handlers_screenshot_to_issue_handlererror"
     },
     {
       "relation": "references",
@@ -1928,9 +1928,9 @@
       "source_file": "handlers/screenshot_to_issue.py",
       "source_location": "L152",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "handlers_screenshot_to_issue_create_issue",
-      "target": "handlers_screenshot_to_issue_result",
-      "confidence_score": 1.0
+      "target": "handlers_screenshot_to_issue_result"
     },
     {
       "relation": "references",
@@ -1939,9 +1939,9 @@
       "source_file": "handlers/screenshot_to_issue.py",
       "source_location": "L193",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "handlers_screenshot_to_issue_handle",
-      "target": "handlers_screenshot_to_issue_result",
-      "confidence_score": 1.0
+      "target": "handlers_screenshot_to_issue_result"
     },
     {
       "relation": "rationale_for",
@@ -1949,9 +1949,9 @@
       "source_file": "handlers/screenshot_to_issue.py",
       "source_location": "L61",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "handlers_screenshot_to_issue_rationale_61",
-      "target": "handlers_screenshot_to_issue_sniff_image",
-      "confidence_score": 1.0
+      "target": "handlers_screenshot_to_issue_sniff_image"
     },
     {
       "relation": "calls",
@@ -1960,9 +1960,9 @@
       "source_file": "handlers/screenshot_to_issue.py",
       "source_location": "L84",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "handlers_screenshot_to_issue_read_image",
-      "target": "handlers_screenshot_to_issue_sniff_image",
-      "confidence_score": 1.0
+      "target": "handlers_screenshot_to_issue_sniff_image"
     },
     {
       "relation": "calls",
@@ -1971,9 +1971,9 @@
       "source_file": "handlers/screenshot_to_issue.py",
       "source_location": "L194",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "handlers_screenshot_to_issue_handle",
-      "target": "handlers_screenshot_to_issue_read_image",
-      "confidence_score": 1.0
+      "target": "handlers_screenshot_to_issue_read_image"
     },
     {
       "relation": "calls",
@@ -1982,9 +1982,9 @@
       "source_file": "handlers/screenshot_to_issue.py",
       "source_location": "L195",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "handlers_screenshot_to_issue_handle",
-      "target": "handlers_screenshot_to_issue_clean_caption",
-      "confidence_score": 1.0
+      "target": "handlers_screenshot_to_issue_clean_caption"
     },
     {
       "relation": "rationale_for",
@@ -1992,9 +1992,9 @@
       "source_file": "handlers/screenshot_to_issue.py",
       "source_location": "L88",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "handlers_screenshot_to_issue_rationale_88",
-      "target": "handlers_screenshot_to_issue_clean_caption",
-      "confidence_score": 1.0
+      "target": "handlers_screenshot_to_issue_clean_caption"
     },
     {
       "relation": "calls",
@@ -2003,9 +2003,9 @@
       "source_file": "handlers/screenshot_to_issue.py",
       "source_location": "L160",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "handlers_screenshot_to_issue_create_issue",
-      "target": "handlers_screenshot_to_issue_token",
-      "confidence_score": 1.0
+      "target": "handlers_screenshot_to_issue_token"
     },
     {
       "relation": "calls",
@@ -2014,9 +2014,9 @@
       "source_file": "handlers/screenshot_to_issue.py",
       "source_location": "L198",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "handlers_screenshot_to_issue_handle",
-      "target": "handlers_screenshot_to_issue_build_body",
-      "confidence_score": 1.0
+      "target": "handlers_screenshot_to_issue_build_body"
     },
     {
       "relation": "calls",
@@ -2025,9 +2025,9 @@
       "source_file": "handlers/screenshot_to_issue.py",
       "source_location": "L202",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "handlers_screenshot_to_issue_handle",
-      "target": "handlers_screenshot_to_issue_create_issue",
-      "confidence_score": 1.0
+      "target": "handlers_screenshot_to_issue_create_issue"
     },
     {
       "relation": "rationale_for",
@@ -2035,9 +2035,9 @@
       "source_file": "handlers/screenshot_to_issue.py",
       "source_location": "L159",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "handlers_screenshot_to_issue_rationale_159",
-      "target": "handlers_screenshot_to_issue_create_issue",
-      "confidence_score": 1.0
+      "target": "handlers_screenshot_to_issue_create_issue"
     },
     {
       "relation": "calls",
@@ -2046,9 +2046,9 @@
       "source_file": "handlers/screenshot_to_issue.py",
       "source_location": "L212",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "handlers_screenshot_to_issue_main",
-      "target": "handlers_screenshot_to_issue_handle",
-      "confidence_score": 1.0
+      "target": "handlers_screenshot_to_issue_handle"
     },
     {
       "relation": "contains",
@@ -2056,9 +2056,9 @@
       "source_file": "handlers/tests/test_screenshot_to_issue.py",
       "source_location": "L207",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "tests_test_screenshot_to_issue",
-      "target": "tests_test_screenshot_to_issue_body_never_labels_agent_go",
-      "confidence_score": 1.0
+      "target": "tests_test_screenshot_to_issue_body_never_labels_agent_go"
     },
     {
       "relation": "contains",
@@ -2066,9 +2066,9 @@
       "source_file": "handlers/tests/test_screenshot_to_issue.py",
       "source_location": "L74",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "tests_test_screenshot_to_issue",
-      "target": "tests_test_screenshot_to_issue_caption_cases",
-      "confidence_score": 1.0
+      "target": "tests_test_screenshot_to_issue_caption_cases"
     },
     {
       "relation": "contains",
@@ -2076,9 +2076,9 @@
       "source_file": "handlers/tests/test_screenshot_to_issue.py",
       "source_location": "L22",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "tests_test_screenshot_to_issue",
-      "target": "tests_test_screenshot_to_issue_check",
-      "confidence_score": 1.0
+      "target": "tests_test_screenshot_to_issue_check"
     },
     {
       "relation": "contains",
@@ -2086,9 +2086,9 @@
       "source_file": "handlers/tests/test_screenshot_to_issue.py",
       "source_location": "L199",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "tests_test_screenshot_to_issue",
-      "target": "tests_test_screenshot_to_issue_dry_run_files_nothing",
-      "confidence_score": 1.0
+      "target": "tests_test_screenshot_to_issue_dry_run_files_nothing"
     },
     {
       "relation": "contains",
@@ -2096,9 +2096,9 @@
       "source_file": "handlers/tests/test_screenshot_to_issue.py",
       "source_location": "L119",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "tests_test_screenshot_to_issue",
-      "target": "tests_test_screenshot_to_issue_expired_token",
-      "confidence_score": 1.0
+      "target": "tests_test_screenshot_to_issue_expired_token"
     },
     {
       "relation": "contains",
@@ -2106,9 +2106,9 @@
       "source_file": "handlers/tests/test_screenshot_to_issue.py",
       "source_location": "L151",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "tests_test_screenshot_to_issue",
-      "target": "tests_test_screenshot_to_issue_gives_up",
-      "confidence_score": 1.0
+      "target": "tests_test_screenshot_to_issue_gives_up"
     },
     {
       "relation": "contains",
@@ -2116,9 +2116,9 @@
       "source_file": "handlers/tests/test_screenshot_to_issue.py",
       "source_location": "L162",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "tests_test_screenshot_to_issue",
-      "target": "tests_test_screenshot_to_issue_honours_retry_after",
-      "confidence_score": 1.0
+      "target": "tests_test_screenshot_to_issue_honours_retry_after"
     },
     {
       "relation": "contains",
@@ -2126,9 +2126,9 @@
       "source_file": "handlers/tests/test_screenshot_to_issue.py",
       "source_location": "L174",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "tests_test_screenshot_to_issue",
-      "target": "tests_test_screenshot_to_issue_no_retry_on_422",
-      "confidence_score": 1.0
+      "target": "tests_test_screenshot_to_issue_no_retry_on_422"
     },
     {
       "relation": "contains",
@@ -2136,9 +2136,9 @@
       "source_file": "handlers/tests/test_screenshot_to_issue.py",
       "source_location": "L89",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "tests_test_screenshot_to_issue",
-      "target": "tests_test_screenshot_to_issue_no_token",
-      "confidence_score": 1.0
+      "target": "tests_test_screenshot_to_issue_no_token"
     },
     {
       "relation": "contains",
@@ -2146,9 +2146,9 @@
       "source_file": "handlers/tests/test_screenshot_to_issue.py",
       "source_location": "L34",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "tests_test_screenshot_to_issue",
-      "target": "tests_test_screenshot_to_issue_raises",
-      "confidence_score": 1.0
+      "target": "tests_test_screenshot_to_issue_raises"
     },
     {
       "relation": "contains",
@@ -2156,9 +2156,9 @@
       "source_file": "handlers/tests/test_screenshot_to_issue.py",
       "source_location": "L135",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "tests_test_screenshot_to_issue",
-      "target": "tests_test_screenshot_to_issue_retry_then_succeed",
-      "confidence_score": 1.0
+      "target": "tests_test_screenshot_to_issue_retry_then_succeed"
     },
     {
       "relation": "contains",
@@ -2166,9 +2166,9 @@
       "source_file": "handlers/tests/test_screenshot_to_issue.py",
       "source_location": "L103",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "tests_test_screenshot_to_issue",
-      "target": "tests_test_screenshot_to_issue_short_token",
-      "confidence_score": 1.0
+      "target": "tests_test_screenshot_to_issue_short_token"
     },
     {
       "relation": "contains",
@@ -2176,9 +2176,9 @@
       "source_file": "handlers/tests/test_screenshot_to_issue.py",
       "source_location": "L43",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "tests_test_screenshot_to_issue",
-      "target": "tests_test_screenshot_to_issue_tmp",
-      "confidence_score": 1.0
+      "target": "tests_test_screenshot_to_issue_tmp"
     },
     {
       "relation": "contains",
@@ -2186,9 +2186,9 @@
       "source_file": "handlers/tests/test_screenshot_to_issue.py",
       "source_location": "L188",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "tests_test_screenshot_to_issue",
-      "target": "tests_test_screenshot_to_issue_wait_is_capped",
-      "confidence_score": 1.0
+      "target": "tests_test_screenshot_to_issue_wait_is_capped"
     },
     {
       "relation": "calls",
@@ -2197,9 +2197,9 @@
       "source_file": "handlers/tests/test_screenshot_to_issue.py",
       "source_location": "L126",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "tests_test_screenshot_to_issue_expired_token",
-      "target": "tests_test_screenshot_to_issue_raises",
-      "confidence_score": 1.0
+      "target": "tests_test_screenshot_to_issue_raises"
     },
     {
       "relation": "calls",
@@ -2208,9 +2208,9 @@
       "source_file": "handlers/tests/test_screenshot_to_issue.py",
       "source_location": "L155",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "tests_test_screenshot_to_issue_gives_up",
-      "target": "tests_test_screenshot_to_issue_raises",
-      "confidence_score": 1.0
+      "target": "tests_test_screenshot_to_issue_raises"
     },
     {
       "relation": "calls",
@@ -2219,9 +2219,9 @@
       "source_file": "handlers/tests/test_screenshot_to_issue.py",
       "source_location": "L181",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "tests_test_screenshot_to_issue_no_retry_on_422",
-      "target": "tests_test_screenshot_to_issue_raises",
-      "confidence_score": 1.0
+      "target": "tests_test_screenshot_to_issue_raises"
     },
     {
       "relation": "calls",
@@ -2230,9 +2230,9 @@
       "source_file": "handlers/tests/test_screenshot_to_issue.py",
       "source_location": "L93",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "tests_test_screenshot_to_issue_no_token",
-      "target": "tests_test_screenshot_to_issue_raises",
-      "confidence_score": 1.0
+      "target": "tests_test_screenshot_to_issue_raises"
     },
     {
       "relation": "calls",
@@ -2241,9 +2241,9 @@
       "source_file": "handlers/tests/test_screenshot_to_issue.py",
       "source_location": "L108",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "tests_test_screenshot_to_issue_short_token",
-      "target": "tests_test_screenshot_to_issue_raises",
-      "confidence_score": 1.0
+      "target": "tests_test_screenshot_to_issue_raises"
     },
     {
       "relation": "calls",
@@ -2252,9 +2252,9 @@
       "source_file": "handlers/tests/test_screenshot_to_issue.py",
       "source_location": "L200",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "tests_test_screenshot_to_issue_dry_run_files_nothing",
-      "target": "tests_test_screenshot_to_issue_tmp",
-      "confidence_score": 1.0
+      "target": "tests_test_screenshot_to_issue_tmp"
     },
     {
       "relation": "contains",
@@ -2262,9 +2262,9 @@
       "source_file": "profiles/watch/MEMORY.md",
       "source_location": "L1",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "watch_memory",
-      "target": "watch_memory_platform_map",
-      "confidence_score": 1.0
+      "target": "watch_memory_platform_map"
     },
     {
       "relation": "contains",
@@ -2272,9 +2272,9 @@
       "source_file": "profiles/work/MEMORY.md",
       "source_location": "L1",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "work_memory",
-      "target": "work_memory_platform_map",
-      "confidence_score": 1.0
+      "target": "work_memory_platform_map"
     },
     {
       "relation": "contains",
@@ -2282,9 +2282,9 @@
       "source_file": "runbooks/hermes-upgrade.md",
       "source_location": "L1",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "runbooks_hermes_upgrade",
-      "target": "runbooks_hermes_upgrade_runbook_upgrading_hermes",
-      "confidence_score": 1.0
+      "target": "runbooks_hermes_upgrade_runbook_upgrading_hermes"
     },
     {
       "relation": "contains",
@@ -2292,9 +2292,9 @@
       "source_file": "runbooks/hermes-upgrade.md",
       "source_location": "L36",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "runbooks_hermes_upgrade_runbook_upgrading_hermes",
-      "target": "runbooks_hermes_upgrade_after_prove_it_do_not_assume_it",
-      "confidence_score": 1.0
+      "target": "runbooks_hermes_upgrade_after_prove_it_do_not_assume_it"
     },
     {
       "relation": "contains",
@@ -2302,9 +2302,9 @@
       "source_file": "runbooks/hermes-upgrade.md",
       "source_location": "L9",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "runbooks_hermes_upgrade_runbook_upgrading_hermes",
-      "target": "runbooks_hermes_upgrade_before",
-      "confidence_score": 1.0
+      "target": "runbooks_hermes_upgrade_before"
     },
     {
       "relation": "contains",
@@ -2312,9 +2312,9 @@
       "source_file": "runbooks/hermes-upgrade.md",
       "source_location": "L49",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "runbooks_hermes_upgrade_runbook_upgrading_hermes",
-      "target": "runbooks_hermes_upgrade_going_back",
-      "confidence_score": 1.0
+      "target": "runbooks_hermes_upgrade_going_back"
     },
     {
       "relation": "contains",
@@ -2322,9 +2322,9 @@
       "source_file": "runbooks/hermes-upgrade.md",
       "source_location": "L57",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "runbooks_hermes_upgrade_runbook_upgrading_hermes",
-      "target": "runbooks_hermes_upgrade_known_breakages",
-      "confidence_score": 1.0
+      "target": "runbooks_hermes_upgrade_known_breakages"
     },
     {
       "relation": "contains",
@@ -2332,9 +2332,9 @@
       "source_file": "runbooks/hermes-upgrade.md",
       "source_location": "L20",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "runbooks_hermes_upgrade_runbook_upgrading_hermes",
-      "target": "runbooks_hermes_upgrade_the_upgrade",
-      "confidence_score": 1.0
+      "target": "runbooks_hermes_upgrade_the_upgrade"
     },
     {
       "relation": "contains",
@@ -2352,9 +2352,9 @@
       "source_file": "skills/PLATFORM_GATING.md",
       "source_location": "L21",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "skills_platform_gating_platform_gating",
-      "target": "skills_platform_gating_surfaces",
-      "confidence_score": 1.0
+      "target": "skills_platform_gating_surfaces"
     },
     {
       "relation": "contains",
@@ -2382,9 +2382,9 @@
       "source_file": "skills/VETTED.md",
       "source_location": "L14",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "skills_vetted_vetted_third_party_skills",
-      "target": "skills_vetted_not_installed_could_not_be_found",
-      "confidence_score": 1.0
+      "target": "skills_vetted_not_installed_could_not_be_found"
     },
     {
       "relation": "contains",
@@ -2472,9 +2472,9 @@
       "source_file": "skills/estate-map/SKILL.md",
       "source_location": "L53",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "estate_map_skill_estate_map",
-      "target": "estate_map_skill_thresholds",
-      "confidence_score": 1.0
+      "target": "estate_map_skill_thresholds"
     },
     {
       "relation": "contains",
@@ -2542,9 +2542,9 @@
       "source_file": "tests/incidents/README.md",
       "source_location": "L1",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "incidents_readme",
-      "target": "incidents_readme_incident_regression_tests",
-      "confidence_score": 1.0
+      "target": "incidents_readme_incident_regression_tests"
     },
     {
       "relation": "contains",
@@ -2552,9 +2552,9 @@
       "source_file": "tests/incidents/test_incidents_have_guards.py",
       "source_location": "L15",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "incidents_test_incidents_have_guards",
-      "target": "incidents_test_incidents_have_guards_main",
-      "confidence_score": 1.0
+      "target": "incidents_test_incidents_have_guards_main"
     },
     {
       "relation": "contains",
@@ -2808,5 +2808,5 @@
     }
   ],
   "hyperedges": [],
-  "built_at_commit": "e2a638871a72316fd49c5a4bf5c8ff3ac87d87ea"
+  "built_at_commit": "420cf15822227b29ea91f7c096d6014ced83cc41"
 }

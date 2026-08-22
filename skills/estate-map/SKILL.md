@@ -22,11 +22,26 @@ A suspended app in the live list, or a live app missing, is an issue.
 
 ```bash
 fly status -a prospector-engine
+# NO -L. Never follow the redirect.
 curl -s -o /dev/null -w '%{http_code}\n' https://prospector-engine.fly.dev/health
 curl -s -o /dev/null -w '%{http_code}\n' https://prospector-store-web.fly.dev/
 ```
 
-Healthy is `200` from both, and `fly status` showing state `started` in `lhr`.
+**Healthy is not "200".** prospector-engine sits behind a login: every path
+returns `307` to `/login?next=...`. Follow that redirect and you get `200` from
+the login page, which is green whether the app works or not. Measured
+2026-08-22:
+
+```
+$ curl -s -o /dev/null -w '%{http_code}' https://prospector-engine.fly.dev/health
+307
+$ curl -sL -o /dev/null -w '%{http_code} %{url_effective}' https://prospector-engine.fly.dev/health
+200 https://prospector-engine.fly.dev/login?next=%2Fhealth
+```
+
+So: the server answering for itself is healthy - `2xx`, `3xx`, `401`, `403`,
+`404`. A `5xx` or no answer at all is not. `bin/pulse.sh` implements exactly
+this and runs every 15 minutes with no model attached.
 
 Known open question: `prospector-store-api` returns 404 on `/`, `/health`,
 `/healthz`, `/api/health`, `/openapi.json`, `/docs` and `/v1/health`, measured
@@ -58,8 +73,8 @@ else. A threshold buried in code is a decision nobody can see.
 
 | what | healthy | open an issue when |
 |---|---|---|
-| engine /health | 200 | two consecutive non-200, 15 minutes apart |
-| store-web / | 200 | two consecutive non-200 |
+| engine /health | 307 to /login | two consecutive 5xx or no-answer, 15 min apart |
+| store-web / | 200 | two consecutive 5xx or no-answer |
 | machines started | all | any machine not `started` for 10 minutes |
 | region | lhr | any machine outside lhr |
 | agent-go age | under 3 days | older than 7 days, untouched |

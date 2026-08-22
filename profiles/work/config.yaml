@@ -1,7 +1,13 @@
 # WORK - hands. Triggered by the agent-go label. Worktree and PR only.
 model:
   provider: "anthropic"   # not OpenRouter - see config.yaml
-  default: "claude-opus-4-6"    # frontier lane, spec §2
+  # Cheapest first. The spec asked for a frontier model here; the founder asked
+  # for the cheapest Claude, and the founder outranks the spec.
+  # If WORK starts opening bad PRs, escalate ONE step at a time and say why:
+  #   claude-haiku-4-5  $1/$5    <- here now
+  #   claude-sonnet-5   $2/$10   <- first escalation
+  #   claude-opus-4-6   $5/$25   <- only with a measured reason
+  default: "claude-haiku-4-5"
 agent:
   max_turns: 90
 memory:

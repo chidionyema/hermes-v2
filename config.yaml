@@ -6,7 +6,16 @@ model:
   # HTTP 402, credits exhausted, and the first WATCH run failed on it. Routing
   # through an account with no credit is a dead estate that looks configured.
   provider: "anthropic"
-  default: "claude-opus-4-6"             # frontier lane; WATCH overrides to haiku
+  # Cheapest current Claude, and it is the default for everything.
+  # Measured from the price table shipped in hermes-agent/agent/usage_pricing.py,
+  # sourced from https://platform.claude.com/docs/en/about-claude/pricing:
+  #   claude-haiku-4-5  $1 in / $5 out per MTok   (cache read $0.10, write $1.25)
+  #   claude-sonnet-5   $2 in / $10 out           - 2x haiku
+  #   claude-opus-4-6   $5 in / $25 out           - 5x haiku
+  # Use the dateless ID. "claude-haiku-4-5-20251001" is NOT in the price table,
+  # and a model the table does not know reports cost_status "unknown" - measured
+  # on the first run, 2026-08-22. An unpriced model is an unmeasurable bill.
+  default: "claude-haiku-4-5"
 
 agent:
   max_turns: 90
@@ -36,16 +45,17 @@ approvals:
 # Auxiliary lane. Summaries, titles, the curator, memory extraction - none of it
 # needs a frontier model, and all of it runs constantly. Spec §11.
 aux:
-  model: "claude-haiku-4-5-20251001"
+  model: "claude-haiku-4-5"
   provider: "anthropic"
 
 # When the primary route dies, try these in order. Measured 2026-08-22: the
 # OpenRouter account is out of credit, so it sits last, not first.
 fallback_providers:
   - provider: "anthropic"
-    model: "claude-haiku-4-5-20251001"
-  - provider: "openrouter"
-    model: "anthropic/claude-haiku-4.5"
+    model: "claude-haiku-4-5"
+  # No OpenRouter route here. Two reasons, both measured 2026-08-22: the
+  # account returned HTTP 402 (no credit), and hermes cannot price an
+  # "anthropic/..." route, so a fallback onto it would spend money invisibly.
 
 memory:
   memory_enabled: true
