@@ -202,3 +202,43 @@ any wrapper will not surface that prompt.
 Every run also tees to `/tmp/finish-cutover.log`. Nothing secret is printed —
 lengths and sha256 prefixes only — so that log is safe to read and safe to hand
 to whoever is debugging it.
+
+## The platform holds the secret (2026-08-22, current design)
+
+Identity is given to the platform that runs the container. The container seeds
+itself at boot. Nothing on a laptop is in the path at runtime.
+
+```
+fly secrets set CLAUDE_CODE_OAUTH_TOKEN="$(claude setup-token)" -a prospector-hermes-v2
+```
+
+The same image works anywhere the platform can set an environment variable:
+ECS task-definition secrets, `gcloud run services update --set-secrets`,
+`kubectl create secret`, a compose `.env`, systemd `EnvironmentFile`. Only the
+command that sets the variable changes.
+
+**A Fly secret is readable by the entrypoint and not by `fly ssh console`.**
+Fly injects secrets into init and its children. `entrypoint.sh` is one; an ssh
+session is not. Measured on `prospector-hermes`: an ssh shell reports
+`ANTHROPIC_TOKEN absent / CLAUDE_CODE_OAUTH_TOKEN absent / ANTHROPIC_API_KEY
+absent`, while `HERMES_GATEWAY_AUTOSTART`, set the same way, reaches the
+entrypoint and starts the gateway. A whole afternoon was lost to reading the
+first measurement as "Fly secrets do not reach this container".
+
+**The two variables are not interchangeable.**
+
+| variable | holds | what the resolver does |
+|---|---|---|
+| `CLAUDE_CODE_OAUTH_TOKEN` | a setup-token string | returns it verbatim at priority 2 |
+| `CLAUDE_CREDENTIALS_JSON` | the credentials document | seeded to the volume, read at priority 4, refreshed by the container |
+
+Putting the JSON document in `CLAUDE_CODE_OAUTH_TOKEN` is the trap. Priority 2
+is checked before the file at priority 4 and hands back whatever the variable
+holds, so resolution succeeds, the entrypoint's check passes, and every request
+sends a JSON document as its bearer token. `_prefer_refreshable_claude_code_token`
+does not rescue it: a JSON blob fails `_is_oauth_token` and the helper returns
+`None` (`anthropic_adapter.py:1374`, `:1459`).
+
+A setup-token does not refresh; when it expires, set the secret again. The JSON
+route refreshes itself and writes back to the volume, which is why the volume
+still matters and why `/root/.claude` is symlinked to it on every boot.
