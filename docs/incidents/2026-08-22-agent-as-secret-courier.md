@@ -82,8 +82,10 @@ being deleted, so nobody rediscovers the idea.
   `hermes_home` naming `~/Documents/code/hermes-v2`, written 08:59Z by a process
   that has never run in that container. The cutover polled it for `"connected"`.
   It happened to say `disconnected`, so it would have timed out rather than
-  declared a false green. That is luck. The file is now deleted before the flip
-  and any reading naming a Mac path is refused.
+  declared a false green. That is luck. The file is now deleted before the flip,
+  and a reading is accepted only when `argv` names `/opt/hermes-v2`. The first
+  version of that guard matched a Mac path anywhere in the file and was wrong —
+  see the outcome below.
 - `entrypoint.sh` refused to boot without a credential, which turned a missing
   file into a dead machine the cutover could not even verify. It now waits 300s
   and starts degraded. `resolve_anthropic_token` is uncached and is called per
@@ -102,3 +104,50 @@ An agent does not carry a credential between a human's machine and a server. If
 a design needs it to, the design is wrong — build the trusted local component
 and take the agent out of the path. The refusals are not an obstacle to route
 around; they are the specification.
+
+## Outcome, and three defects the report did not yet know about
+
+The cutover finished at 13:21Z on 2026-08-22. `prospector-hermes-v2` runs the
+gateway, Telegram polling is healthy at generation 3, and a one-shot turn inside
+the container answers:
+
+    hermes -z "Reply with exactly one word: pong"   ->  pong
+
+That is the first end-to-end proof in this whole incident. Everything before it
+proved a file existed.
+
+Three defects surfaced between drafting this report and the cutover working, and
+two of them are mine.
+
+**1. The container's root filesystem is rebuilt on every boot.** The bridge made
+`/root/.claude -> /data/dot-claude` from an ssh session, so it existed until the
+next restart and no longer. Nothing in the estate joined the credential on the
+volume to the path the container reads. `entrypoint.sh` now makes the link on
+every boot and logs which case it hit. Proven by a restart: the link carries the
+boot's timestamp, and the log line reads `identity: /root/.claude ->
+/data/dot-claude (credential present)`.
+
+**2. The bridge's own check could not fail.** It asked the container "does a
+token resolve?". Five sources can answer that, so it printed `OK` on a run whose
+upload it had not confirmed. When a stale reading then showed the directory
+empty, the check's own success made the obvious conclusion — that the upload had
+silently failed — look proven. It had not; the upload was fine and the reading
+was wrong. Both the check and the conclusion were bad, and they agreed with each
+other, which is how a single angle behaves (LAW 15). The bridge now compares
+digests: the token in the file, the token the resolver hands the gateway, and
+the token this run sent. `token=2d35dfd04a15bd0a in-use=2d35dfd04a15bd0a` says
+something the old check could not.
+
+**3. A guard I wrote stopped the cutover in the one gap where nothing serves.**
+The laptop-path refusal matched `/Users/chidionyema` anywhere in the state file.
+`hermes_home` legitimately holds a laptop path in this deployment, so a healthy
+state file — `"state":"connected"`, written by pid 667 inside the container eight
+seconds earlier — was refused as forged. The script aborted after stopping the
+old gateway and before confirming the new one. Service was down until I noticed.
+The guard now tests `argv`.
+
+The class in 2 and 3 is the same and it is not the courier problem: **a check
+written to catch a specific bad case, verified only against the good case.**
+Neither guard was ever shown refusing what it was built to refuse, or accepting
+a real reading. A guard is code, and code that has never run against its own
+failing input is untested code standing in the critical path.
