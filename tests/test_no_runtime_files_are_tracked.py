@@ -60,3 +60,31 @@ def test_gitignore_covers_what_the_gateway_writes():
         "state/",
     ):
         assert name in ignored, f".gitignore does not cover {name}"
+
+
+def test_no_compiled_binary_is_tracked():
+    # bin/tirith, a 21MB x86_64 Mach-O, was swept in by `git add -A` in b0d65e0
+    # and nothing in the spec, the requirements, the README or install named it.
+    # This repo is text: templates, scripts, markdown and a JSONL register.
+    import subprocess as sp
+
+    binaries = []
+    for path in tracked():
+        full = os.path.join(HOME, path)
+        if not os.path.isfile(full):
+            continue
+        kind = sp.run(["file", "-b", full], capture_output=True, text=True).stdout
+        if "Mach-O" in kind or "ELF " in kind:
+            binaries.append(f"{path} ({kind.strip()})")
+    assert not binaries, "compiled binaries must not be tracked:\n  " + "\n  ".join(binaries)
+
+
+def test_no_tracked_file_is_absurdly_large():
+    # A quarter of a megabyte is generous for text. Anything past it is either a
+    # binary or a data dump, and both want a reason stated in the spec first.
+    big = []
+    for path in tracked():
+        full = os.path.join(HOME, path)
+        if os.path.isfile(full) and os.path.getsize(full) > 256_000:
+            big.append(f"{path} ({os.path.getsize(full):,} bytes)")
+    assert not big, "tracked files over 256KB:\n  " + "\n  ".join(big)

@@ -104,3 +104,8 @@ kanban/
 cron/notepad.db
 kanban.db.dispatch.lock
 kanban.db.init.lock
+
+# A 21MB x86_64 Mach-O binary that nothing in the spec, the requirements, the
+# README or install mentions. Swept in by a `git add -A` in b0d65e0. Left on
+# disk, out of the build.
+bin/tirith
