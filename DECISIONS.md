@@ -77,3 +77,41 @@ because the one you wanted was missing.
 
 `~/Documents/code/hermes-v2.ARCHIVED.20260822` holds no unique commits and is
 retired.
+
+## Kimi reaches the estate through a browser bridge, with ollama underneath
+
+2026-08-22. Kimi For Coding is a separate subscription from the Kimi web app,
+and it cannot be bought right now: the account is on a waiting list. Measured on
+the same working OAuth token, `GET api.kimi.com/coding/v1/me` returns 200 while
+`/models` and `/chat/completions` return 402. Every other paid provider on this
+machine is out of credit as well: DeepSeek 402, MiniMax status 2056, OpenRouter
+10 of 10 credits spent. The free local floor cannot be raised either, because a
+14B model is 9GB against 11GB of free disk.
+
+So the bridge drives the signed-in web session instead. It is the primary
+consult backend and ollama sits under it.
+
+**What it is.** `~/.claude/scripts/kimi_bridge.py`, a daemon on 127.0.0.1:8766
+speaking `/query` and `/health`. A dedicated Chromium profile at
+`~/.kimi-bridge/profile`, never the founder's own browser. Session state in
+SQLite at `~/.kimi-bridge/session.db`, 0600. Health probed every 60 seconds with
+an automatic restart when it goes stale, and three retries at 2, 4 and 8 seconds.
+Fingerprint patches so the page sees a hand-driven browser. Logs redact anything
+shaped like a credential before it is written.
+
+**Two ways to read an answer, on purpose.** The network capture reads the
+response the page itself received, so it survives a redesign. The DOM settle
+watcher is the fallback and only survives until someone renames a class. The
+bridge reports which one answered. A single detector that silently stops
+matching returns an empty string, which is worse than an honest failure.
+
+**Two interpreters, one port.** The bridge needs Playwright and runs in its own
+virtualenv. `consultd.py` runs under Apple's signed `/usr/bin/python3` so macOS
+does not re-prompt on every launch. They share nothing but loopback HTTP, and
+`consultd.py` imports the shim inside a `try`, so a broken Playwright install
+starts the cascade one backend shorter instead of stopping the daemon.
+
+**Known and accepted.** This is against Moonshot's terms and the account it
+risks is the one in daily use. The founder was told twice and decided twice; it
+is logged here so the next agent inherits the trade rather than relitigating it.
+A UI change will break it, it will retry, and then ollama answers.
