@@ -78,6 +78,41 @@ the whole control surface.
 
 ---
 
+## What is switched on
+
+Everything in this repo is built. A `features:` block in `estate.yaml` decides
+what actually runs, and only the two lanes that cannot write anything ship on.
+
+```bash
+bin/features                 # what is on right now
+bin/features work on         # switch one on
+bin/features evolution off   # switch one off
+```
+
+```
+  lane                 state  spec   what it does
+  watch                   ON  §5     15-minute pulse, hourly estate map, 07:00 digest
+                                     reads only, never writes. The free lane.
+  sunday_rituals          ON  §8     Sunday review and three proposal issues
+                                     opens issues, merges nothing.
+  work                   off  §6     the agent-go label opens pull requests
+                                     WRITES to your repo. Never merges. Turn on last.
+  evolution              off  §9     nightly skill evolution, lands as a pull request
+                                     COSTS MONEY, $2-10 a night.
+  bench                  off  §6b    the on-demand local lane on this laptop
+                                     runs nothing by itself. You start it.
+  screenshot_handler     off  §15    a Telegram photo becomes a GitHub issue
+                                     needs TELEGRAM_BOT_TOKEN.
+```
+
+Off means no cron job exists for that lane, so it cannot fire, cost anything or
+touch your repository. That is why the switch is worth having: a lane you have
+not proved yet is inert rather than merely discouraged.
+
+Turn one on, run `bin/verify`, then turn on the next.
+
+---
+
 ## What it costs
 
 Measured on this build, not estimated:
@@ -182,7 +217,7 @@ learns is never overwritten by a template.
 | `bin/prove-watch-readonly.sh` | Proves WATCH cannot write code by attempting a write and requiring it to fail. Needs the read-only PAT before it can run. |
 | `bin/pulse.sh` | The free health check. Probes every service in `estate.yaml` and prints nothing when all are healthy. No model, no cost. |
 | `cron/watch.jobs` | The WATCH schedule, one JSON job per line. `bin/install-cron.py` reads this; `./install` runs it for you. |
-| `cron/work.jobs` | The WORK schedule, same format. Deliberately **not** installed by `./install` — WORK opens pull requests, so you start it by hand. |
+| `cron/work.jobs` | The WORK schedule, same format. `./install` reads it but creates nothing while the `work` feature is off, which is how it ships. |
 | `egress-allowlist.txt` | Every host this estate is allowed to reach: your services, `egress_extra`, and the APIs it needs. Everything else is refused. |
 | `handlers/screenshot_to_issue.py` | Turns a screenshot sent over chat into a well-formed GitHub issue, so a photo of a broken screen becomes work. |
 | `profiles/watch/MEMORY.md` | The WATCH lane's own memory. Seeded from the same platform map, then diverges as that lane learns. |
@@ -201,14 +236,137 @@ learns is never overwritten by a template.
 
 ---
 
+## Every file in this repo
+
+Every tracked file, and every directory holding one, is listed below with what
+it is for. `bin/check-readme.py` fails if a tracked path is missing from this
+table, described twice, or listed with no description, so adding a file without
+saying why it exists turns `./bin/verify` red. The count is in that command's
+output rather than written here, because a number in prose is the first thing
+to go stale.
+
+Nothing generated appears here. Those are in the table above and none of them
+are tracked, so what you see below is the source they come from.
+
+<!-- tracked: column 1 is checked against `git ls-files` by bin/check-readme.py -->
+
+| path | why it exists |
+|---|---|
+| `.env.example` | Every credential the agent can use, each with an empty value and a line saying what it unlocks. `./install` copies it to `.env`, which is mode 600 and never tracked. |
+| `.gitignore` | What must never be committed: the generated files, the agent's runtime state, and `.env`. Most of its lines were added after a `git add -A` swept live state into a commit. |
+| `PINNED_VERSION` | The Hermes tag and commit this estate is known to work on. `bin/verify` fails when the running agent is a different commit, so an upgrade cannot happen by accident. |
+| `README.md` | This file. `bin/check-readme.py` fails the build when it stops describing what the repo ships. |
+| `SOUL.md` | The agent's base identity, read before anything else on every run. It is upstream Hermes text and is deliberately not estate-specific. |
+| `USER.md` | Who the agent works for and how to talk to them: tone, when to escalate, and the rule that nothing is done without the command output. Each lane overrides it. |
+| `bin/` | Everything a human types. One command per file, each with a single job, none of them generated. |
+| `bin/audit-append.sh` | Appends one line per tool call to a log kept outside this directory, so the record survives the estate being deleted. |
+| `bin/backup-state.sh` | Nightly `sqlite3 .backup` of `state.db`, gzipped and copied off-box. It does not use `cp`, because copying a live database gives a torn file. |
+| `bin/check-models-priced.py` | Refuses any model that is not in the shipped price table. A model nobody can price spends money invisibly. |
+| `bin/check-readme.py` | Fails when this README no longer lists every generated file, every cron job and every tracked path. It checks the half a machine can know. |
+| `bin/check-requirements.py` | Runs the `acceptance_cmd` of all 133 requirement rows and writes the result to `logs/requirements-status.json`. A row closes on exit 0, never on anyone asserting it. |
+| `bin/cost-report.sh` | What the agent has actually spent, read out of the usage ledger rather than estimated. |
+| `bin/curator-report.sh` | Weekly. Asks the skill curator what it makes of the skills and writes it to `logs/curator/REPORT.md`. It changes nothing; the report is an input to the Sunday review. |
+| `bin/features` | The on/off switch. Reads and writes the `features:` block in `estate.yaml`, and `--check` gives the scheduler an exit code so an off lane gets no jobs. |
+| `bin/hermes` | The wrapper you must always use. Bare `hermes` defaults to `~/.hermes`, which is a different estate; this sets `HERMES_HOME` to this directory. |
+| `bin/install-cron.py` | Turns a `.jobs` file into scheduled jobs, idempotently. With `--feature` it creates nothing at all while that lane is off. |
+| `bin/render` | The only thing that writes a generated file. It fills the templates from `estate.yaml` and refuses a template that names one of your services. |
+| `bin/skill-drift-commit.sh` | Hourly. The agent edits its own skills, and without this a skill that quietly rewrote itself last Tuesday has no diff and no way back. |
+| `bin/sync-scripts.sh` | Copies `bin/pulse.sh` into `scripts/`, because the scheduler refuses a symlink out of `scripts/`. It diffs afterwards so the two copies cannot drift. |
+| `bin/teardown` | Stops everything firing and keeps the estate. `--all` also removes the agent and its dependencies. |
+| `bin/verify` | The probe: one command that says whether the whole thing works, in a few seconds. `--full` also runs the requirement ledger. |
+| `ci/` | The gates that run on a pull request. Each one refuses a mistake rather than reporting it. |
+| `ci/EVIDENCE_GATE_PROOF.md` | The evidence gate refusing ten dishonest pull request bodies and passing three honest ones, with the output. A gate nobody has watched refuse anything is a claim. |
+| `ci/evidence-gate.js` | Reads the pull request body and rejects a claim with no command output behind it. Placeholder blocks, and blocks that only repeat the claim, are rejected too. |
+| `ci/evidence-gate.yml` | The workflow that runs the gate: first the body check, then the check that a screenshot of the run is committed under `docs/evidence/pr-<n>/`. |
+| `ci/static-gates.yml` | ruff, pyright strict, pip-audit and deptry as required checks on main. A red job here is not advisory. |
+| `ci/tests/` | Tests of the gates themselves, because a gate that passes everything looks exactly like a gate that works. |
+| `ci/tests/test_evidence_gate_gaming.py` | Thirteen pull request bodies, ten of them ways somebody tried to talk past the gate. It is what makes `EVIDENCE_GATE_PROOF.md` reproducible. |
+| `config.yaml` | The agent's own settings: provider, default model, and `max_turns: 90` against an upstream default of 500, because a task needing more than 90 turns has gone wrong and should stop. |
+| `cron/` | The scheduler's working directory. Only `.jobs` files belong to the repo; everything else in here is written while it runs and is ignored. |
+| `cron/evolution.jobs` | The nightly skill-evolution schedule. Written by hand rather than rendered, because nothing in it varies from one estate to the next. |
+| `docs/` | Written for a person to read, not for the machine to parse. |
+| `docs/THE-ARCHITECT.md` | The spec. Every requirement row deep-links to the section it came from, so nothing is in this repo without a paragraph that asked for it. |
+| `estate-evals/` | The incident record, and what each incident bought. |
+| `estate-evals/incidents.example.jsonl` | Worked examples of the incident format: symptom, root cause, the class of mistake, and the rung and artifact that now prevent it. Your own `incidents.jsonl` is not tracked. |
+| `estate.example.yaml` | The one file you edit, filled in and commented. Copy it, change it, and `./install --estate` sets a machine up without asking a single question. |
+| `handlers/` | Code the agent runs when a message arrives, rather than when a clock fires. |
+| `handlers/tests/` | Proof that a handler still behaves when the input is bad, which for a handler is the normal case. |
+| `handlers/tests/test_screenshot_to_issue.py` | Proves a photo with almost no words still yields a well-formed issue, and that failing to read one opens nothing rather than opening a blank issue. |
+| `install` | The whole setup: five questions, a venv, the agent, the rendered files, the schedule, then `bin/verify` to prove the result. Safe to run twice. |
+| `profiles/` | One directory per lane. The profile is what gives a lane different powers from its neighbour, which is why the powers are a file and not a prompt. |
+| `profiles/watch/` | The reading lane's profile. |
+| `profiles/watch/USER.md` | WATCH's standing instructions: it never fixes anything, and its only output is a GitHub issue with the raw evidence in it. |
+| `profiles/watch/config.yaml` | WATCH's model and toolset — the cheapest Claude, because noticing is cheap. |
+| `profiles/work/` | The writing lane's profile. |
+| `profiles/work/USER.md` | WORK's standing instructions: never merges, never deploys, and reproduces a bug before it fixes one. |
+| `profiles/work/config.yaml` | WORK's model, its per-task cost hard stop, and the escalation ladder written out so raising the model is a decision with a number attached. |
+| `runbooks/` | What a person does by hand, in order, when the thing being done is rare and dangerous. |
+| `runbooks/hermes-upgrade.md` | Upgrading Hermes: confirm the pinned commit, back up `state.db`, read the diff of the config defaults, and the way back. Never a `git pull`. |
+| `skills/` | What the agent knows how to do. Every `SKILL.md` in here is generated; only the vetting list is tracked. |
+| `skills/VETTED.md` | Which third-party skills have been read line by line and may be installed. A skill is someone else's shell commands running with your credentials. |
+| `templates/` | The source of every generated file. Editing a generated file loses the edit the next time anyone runs `bin/render`; edit the template instead. |
+| `templates/CUTOVER.md.tmpl` | The cutover plan: which reversible step replaces the old estate next, and what is still waiting on a decision only you can make. |
+| `templates/MEMORY.md.seed.tmpl` | The agent's first memory of your platform. A `.seed` is written once and never rendered over, so what it learns afterwards is never overwritten. |
+| `templates/REQUIREMENTS.jsonl.tmpl` | All 133 requirements, each with the shell command that closes it and a deep link to the spec section that asked for it. The largest file here, and the ledger. |
+| `templates/RITUALS.md.tmpl` | The two Sunday reviews and what each must produce, which is what stops a weekly ritual becoming a weekly summary nobody reads. |
+| `templates/bin/` | Scripts that need a value from `estate.yaml` baked in, so they cannot live in `bin/` as they are. |
+| `templates/bin/prove-watch-readonly.sh.tmpl` | Proves WATCH cannot write code, by trying a write and requiring it to fail. A permission boundary nobody has tested is a hope. |
+| `templates/bin/pulse.sh.tmpl` | The free health check. It probes each service, never follows a redirect, and needs two failures fifteen minutes apart before it says anything. |
+| `templates/cron/` | The schedules, one job per line, which `bin/install-cron.py` reads. |
+| `templates/cron/watch.jobs.tmpl` | The five WATCH jobs. These are the ones `./install` creates, because none of them can write. |
+| `templates/cron/work.jobs.tmpl` | The two WORK jobs. They open pull requests on a live repository, so the `work` feature ships off. |
+| `templates/egress-allowlist.txt.tmpl` | Every host this estate may reach: your services, `egress_extra`, and the APIs it needs. Everything else is refused rather than logged. |
+| `templates/handlers/` | Message handlers that need estate values, on the same rule as `templates/bin/`. |
+| `templates/handlers/screenshot_to_issue.py.tmpl` | Turns a screenshot sent over chat into a well-formed GitHub issue, so a photo of a broken screen becomes tracked work. |
+| `templates/profiles/` | The per-lane files that differ between WATCH and WORK and cannot be shared. |
+| `templates/profiles/watch/` | WATCH's generated files. |
+| `templates/profiles/watch/MEMORY.md.seed.tmpl` | WATCH's own first memory, seeded from the same platform map and then diverging as that lane learns. |
+| `templates/profiles/watch/egress-allowlist.txt.tmpl` | WATCH's narrower allowlist. Logs are attacker-influenceable text, so what that lane may reach is a control rather than a judgement call. |
+| `templates/profiles/work/` | WORK's generated files. |
+| `templates/profiles/work/MEMORY.md.seed.tmpl` | WORK's own first memory, seeded the same way. |
+| `templates/scripts/` | The copy of a script at the path the scheduler resolves, which is not the path a human types. |
+| `templates/scripts/pulse.sh.tmpl` | The pulse script where `cron create --script` looks for it. `bin/sync-scripts.sh` keeps it identical to the one in `bin/`. |
+| `templates/skills/` | One directory per skill. A skill is a prompt with shell commands in it, so each is reviewed as code. |
+| `templates/skills/PLATFORM_GATING.md.tmpl` | What each skill needs before it may run. A skill whose platform is missing must fail at the top rather than half-run. |
+| `templates/skills/estate-map/` | The estate-map skill. |
+| `templates/skills/estate-map/SKILL.md.tmpl` | Print the current shape of the estate — apps, health, repos, open board — which is what you run instead of guessing where something lives. |
+| `templates/skills/incident-triage/` | The incident-triage skill. |
+| `templates/skills/incident-triage/SKILL.md.tmpl` | Turn a red platform into one GitHub issue with real evidence in it. It never fixes anything, which is what keeps it usable while the fire is lit. |
+| `templates/skills/post-mortem/` | The post-mortem skill. |
+| `templates/skills/post-mortem/SKILL.md.tmpl` | Close an incident by naming the class of mistake and adding the guard. It runs after the platform is serving again, never during. |
+| `templates/skills/pr-discipline/` | The pr-discipline skill. |
+| `templates/skills/pr-discipline/SKILL.md.tmpl` | How a change gets made: worktree, reproduce, smallest diff, pull request, stop. It never merges. |
+| `templates/skills/screenshot-to-story/` | The screenshot-to-story skill. |
+| `templates/skills/screenshot-to-story/SKILL.md.tmpl` | Turn a photo the founder sends into a well-formed issue, for the message that is an image and almost no words. |
+| `templates/skills/verify-to-prod/` | The verify-to-prod skill. |
+| `templates/skills/verify-to-prod/SKILL.md.tmpl` | Prove a merged change is actually running in production, from two angles, before anything is called done. |
+| `tests/` | The guards. Each one is a mistake that already happened here and cannot now happen quietly. |
+| `tests/incidents/` | One test per incident, named for its row in the incident ledger. |
+| `tests/incidents/README.md` | The rule these files exist under: a post-mortem that adds no test here has not closed its class. |
+| `tests/incidents/test_incidents_have_guards.py` | Refuses an incident row that states a lesson without naming the rung and the artifact that enforce it, so no incident closes on a sentence. |
+| `tests/test_evidence_gate_checks_screenshots.py` | Refuses an evidence gate that reads pasted text and not the committed screenshot. Pasted text reads the same whether the command ran or not. |
+| `tests/test_features_switch.py` | Refuses a feature flip that edits another block of `estate.yaml`, and an off lane that still gets jobs created. Both happened while the switch was being built. |
+| `tests/test_no_runtime_files_are_tracked.py` | Refuses a tracked file that the running agent writes. The repo and the agent's home are the same directory, so this is a live risk on every tick. |
+| `tests/test_spec_links_resolve.py` | Refuses a requirement whose `spec` link does not resolve to a real anchor in the spec, which is what keeps the traceability honest rather than decorative. |
+
+<!-- /tracked -->
+
+---
+
 ## The schedule
 
-Seven jobs. `./install` creates the five WATCH ones and stops there. The two WORK
-jobs open pull requests on a live repository, so nothing starts them but you:
+Seven jobs, and which of them exist is decided by the feature switch above.
+`./install` creates the five WATCH ones, because none of them can write. The two
+WORK jobs open pull requests on a live repository, so they are created only once
+you say so:
 
 ```bash
-bin/install-cron.py cron/work.jobs
+bin/features work on
+./install                # creates them, and leaves everything else alone
 ```
+
+The nightly evolution job in `cron/evolution.jobs` is on the same footing behind
+the `evolution` feature. It costs $2-10 a night, so it ships off.
 
 <!-- cron: columns 1 and 2 are checked against templates/cron/*.jobs.tmpl by bin/check-readme.py -->
 
@@ -270,8 +428,9 @@ agent and its dependencies: `bin/teardown --all`.
 | `./bin/verify` | prove it works — a few seconds |
 | `./bin/verify --full` | also run the whole requirement ledger, a few minutes |
 | `./bin/hermes ...` | the agent itself; **always** use this wrapper, never bare `hermes` |
+| `bin/features` | what is switched on; `bin/features work on` switches one |
 | `bin/render` | push `estate.yaml` into every generated file |
-| `bin/check-readme.py` | fail if this README no longer lists every generated file and cron job |
+| `bin/check-readme.py` | fail if this README no longer accounts for every file, generated file and cron job |
 | `bin/install-cron.py cron/watch.jobs` | put the WATCH jobs on the schedule; safe to run twice |
 | `bin/install-cron.py cron/work.jobs` | start the WORK lane, which opens pull requests |
 | `bin/pulse.sh` | the free health check; silence means healthy |
@@ -299,10 +458,11 @@ command you can run.
   of examples, and a note somebody has to remember is the weakest thing on the
   list.
 - **A README that cannot go stale.** `bin/check-readme.py` compares the file
-  table above against what `bin/render` actually generates, and the schedule
-  table against `templates/cron/*.jobs.tmpl`. Add a generated file or change a
-  cron schedule without saying so here and `./bin/verify` fails. It checks the
-  half a machine can know; what a file *does* is prose, and prose is on you.
+  table above against what `bin/render` actually generates, the schedule table
+  against `templates/cron/*.jobs.tmpl`, and the table of every file in the repo
+  against `git ls-files`. Add a file, add a generated file, or change a cron
+  schedule without saying so here and `./bin/verify` fails. It checks the half a
+  machine can know; what a file *does* is prose, and prose is on you.
 - **An evidence gate in CI.** A pull request body that claims a fix without
   showing the command output is rejected. `ci/evidence-gate.js` has 10 tests,
   each one a way somebody tried to talk their way past it.
@@ -314,7 +474,7 @@ command you can run.
 ```
   PASS  estate.yaml describes an estate    acme 2
   PASS  generated files match templates    21 checked
-  PASS  README describes what ships        21 files, 7 jobs
+  PASS  README describes what ships        21 generated, 7 jobs, 96 tracked
   PASS  the agent runs                     Hermes Agent v0.20.5
   PASS  agent is the pinned commit         fcbd1076a9 (want fcbd1076a9)
   PASS  install and agent agree on python  install: >=3.11,<3.14  agent: >=3.11,<3.14

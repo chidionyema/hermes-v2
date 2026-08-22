@@ -9,6 +9,10 @@ allowed to drift.
                        list every one of them, exactly once, and nothing else
   the cron jobs        cron/*.jobs.tmpl is the truth; the README table must
                        carry every job name with its real schedule string
+  everything tracked   `git ls-files` is the truth; the README table must give
+                       every tracked file and every directory holding one a
+                       reason to exist, exactly once, and describe nothing that
+                       is not there
 
 What a file or a job *does* is prose, and no script can check prose. This
 checks the parts that can be checked, which are exactly the parts that rot:
@@ -22,6 +26,7 @@ import importlib.util
 import json
 import os
 import re
+import subprocess
 import sys
 
 HOME = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -30,6 +35,7 @@ TEMPLATES = os.path.join(HOME, "templates")
 
 FILES_BLOCK = "files"
 CRON_BLOCK = "cron"
+TRACKED_BLOCK = "tracked"
 
 
 def block(text, name):
@@ -92,9 +98,31 @@ def scheduled_jobs():
     return jobs
 
 
+def tracked_paths():
+    """Every tracked file, plus every directory that holds one.
+
+    `git ls-files` is the definition of what a clone carries, so it is the only
+    honest answer to "what is in this repo". Directories are derived rather than
+    listed because git does not track them, and a folder nobody can justify is
+    the same problem as a file nobody can justify.
+    """
+    out = subprocess.run(
+        ["git", "-C", HOME, "ls-files"], capture_output=True, text=True, check=True
+    ).stdout
+    files = {p for p in out.split("\n") if p}
+    dirs = set()
+    for f in files:
+        d = os.path.dirname(f)
+        while d:
+            dirs.add(d + "/")
+            d = os.path.dirname(d)
+    return files | dirs
+
+
 def main():
     want_files = rendered_paths()
     want_jobs = scheduled_jobs()
+    want_tracked = tracked_paths()
 
     if "--list" in sys.argv:
         for rel in sorted(want_files):
@@ -102,6 +130,9 @@ def main():
         print()
         for name in sorted(want_jobs):
             print(f"| `{name}` | `{want_jobs[name]}` | |")
+        print()
+        for rel in sorted(want_tracked):
+            print(f"| `{rel}` | |")
         return 0
 
     with open(README) as f:
@@ -134,6 +165,21 @@ def main():
                 f"  {name} runs at '{want_jobs[name]}', and the README says '{said}'"
             )
 
+    # Every file and every folder has to say why it is here. A repo grows a file
+    # nobody can account for one file at a time, and the moment to ask is when it
+    # arrives, not a year later when nobody remembers.
+    justified = first_cells(block(text, TRACKED_BLOCK))
+    named = [p for p, _ in justified]
+    for rel in sorted(want_tracked - set(named)):
+        problems.append(f"  {rel} is in the repo, and the README never says why")
+    for rel in sorted(set(named) - want_tracked):
+        problems.append(f"  the README justifies {rel}, which is not in the repo")
+    for rel in sorted({p for p in named if named.count(p) > 1}):
+        problems.append(f"  the README justifies {rel} more than once")
+    for rel, why in justified:
+        if not why:
+            problems.append(f"  the README lists {rel} with no reason to exist")
+
     if problems:
         print("README.md no longer describes what this repo ships:")
         print("\n".join(problems))
@@ -141,8 +187,9 @@ def main():
         return 1
 
     print(
-        f"PASS README describes every generated file and every cron job "
-        f"({len(want_files)} files, {len(want_jobs)} jobs)"
+        f"PASS README describes every generated file, every cron job and every "
+        f"tracked path ({len(want_files)} generated, {len(want_jobs)} jobs, "
+        f"{len(want_tracked)} tracked)"
     )
     return 0
 
