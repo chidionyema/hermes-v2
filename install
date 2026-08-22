@@ -1,0 +1,266 @@
+#!/usr/bin/env bash
+# Set up a new agent. One command, from a clean clone to a proven install.
+#
+#   ./install                     ask the questions, then do everything
+#   ./install --estate FILE       use a prepared estate.yaml, ask nothing
+#   ./install --check             check prerequisites only, change nothing
+#   ./install --skip-deps         everything except the 900MB agent download
+#
+# Safe to run twice. Every step checks whether it is already done.
+set -euo pipefail
+
+H="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$H"
+export HERMES_HOME="$H"
+
+AGENT_REPO="https://github.com/NousResearch/hermes-agent.git"
+PYTHON_MIN="3.11"
+
+MODE=install
+ESTATE_SRC=""
+SKIP_DEPS=0
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --check) MODE=check ;;
+    --estate) ESTATE_SRC="$2"; shift ;;
+    --skip-deps) SKIP_DEPS=1 ;;
+    -h|--help) sed -n '2,10p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    *) echo "install: unknown argument '$1'. Try --help." >&2; exit 2 ;;
+  esac
+  shift
+done
+
+step=0
+say()  { printf '\n\033[1m%s\033[0m\n' "$*"; }
+ok()   { printf '  \033[32mok\033[0m    %s\n' "$*"; }
+skip() { printf '  \033[90m--\033[0m    %s\n' "$*"; }
+warn() { printf '  \033[33mwarn\033[0m  %s\n' "$*"; }
+die()  { printf '\n  \033[31mstopped\033[0m  %s\n\n' "$*" >&2; exit 1; }
+next() { step=$((step+1)); say "$step. $*"; }
+
+# ---------------------------------------------------------------- prerequisites
+
+next "Checking what this machine already has"
+
+have() { command -v "$1" >/dev/null 2>&1; }
+
+if have python3; then
+  PYV="$(python3 -c 'import sys;print("%d.%d"%sys.version_info[:2])')"
+  if [ "$(printf '%s\n%s\n' "$PYTHON_MIN" "$PYV" | sort -V | head -1)" != "$PYTHON_MIN" ]; then
+    die "python3 is $PYV, and $PYTHON_MIN or newer is needed.
+          macOS:  brew install python@3.11
+          Ubuntu: sudo apt install python3.11 python3.11-venv"
+  fi
+  ok "python3 $PYV"
+else
+  die "python3 is not installed. Install $PYTHON_MIN or newer, then run this again."
+fi
+
+have git  || die "git is not installed."
+ok "git $(git --version | awk '{print $3}')"
+
+have curl || die "curl is not installed."
+ok "curl"
+
+if have gh; then ok "gh $(gh --version | head -1 | awk '{print $3}')"
+else warn "gh (GitHub CLI) is missing. The agent can still run; it cannot open issues or read pull requests.
+        Install it later with: brew install gh   (then: gh auth login)"; fi
+
+if have flyctl; then ok "flyctl"
+elif have fly; then ok "fly"
+else warn "no fly CLI. Only matters if your services run on Fly.io."; fi
+
+if [ "$MODE" = check ]; then
+  say "Prerequisites only. Nothing was changed."
+  exit 0
+fi
+
+# ------------------------------------------------------------------- estate.yaml
+
+next "Describing your estate"
+
+if [ -n "$ESTATE_SRC" ]; then
+  [ -f "$ESTATE_SRC" ] || die "no such file: $ESTATE_SRC"
+  cp "$ESTATE_SRC" estate.yaml
+  ok "estate.yaml copied from $ESTATE_SRC"
+elif [ -f estate.yaml ]; then
+  skip "estate.yaml already exists. Delete it and re-run to start over."
+else
+  if [ ! -t 0 ]; then
+    die "estate.yaml does not exist and there is nobody to ask.
+          Pass one with:  ./install --estate my-estate.yaml
+          A template is in estate.example.yaml"
+  fi
+  echo "  Five questions. Press enter to accept the default in brackets."
+  echo
+  read -r -p "  A short name for this estate [my-estate]: " E_NAME
+  E_NAME="${E_NAME:-my-estate}"
+  read -r -p "  GitHub owner (user or org): " E_OWNER
+  [ -n "$E_OWNER" ] || die "GitHub owner cannot be empty. The agent needs somewhere to open issues."
+  read -r -p "  GitHub repo it works on: " E_REPO
+  [ -n "$E_REPO" ] || die "GitHub repo cannot be empty."
+
+  echo
+  echo "  Now the services to watch. One per line, as 'name url'."
+  echo "  Example:  api https://acme-api.fly.dev/health"
+  echo "  Blank line when done."
+  SERVICES=""
+  while true; do
+    read -r -p "  service: " LINE || break
+    [ -z "$LINE" ] && break
+    S_KEY="$(echo "$LINE" | awk '{print $1}')"
+    S_URL="$(echo "$LINE" | awk '{print $2}')"
+    if [ -z "$S_URL" ]; then echo "    need a name AND a url, e.g. 'api https://...'"; continue; fi
+    S_APP="$(echo "$S_URL" | sed -E 's#https?://##; s#/.*##; s#\..*##')"
+    SERVICES="${SERVICES}  - key: ${S_KEY}
+    app: ${S_APP}
+    url: ${S_URL}
+    expect: \"any-answer\"
+    note: \"\"
+
+"
+  done
+  [ -n "$SERVICES" ] || die "No services given, so the pulse would watch nothing."
+
+  cat > estate.yaml <<YAML
+# This machine's estate. Written by ./install on $(date -u +%Y-%m-%d).
+# Edit it, then run: bin/render && bin/verify
+
+estate:
+  name: ${E_NAME}
+
+github:
+  owner: ${E_OWNER}
+  repo: ${E_REPO}
+
+services:
+${SERVICES}
+platform:
+  kind: fly
+  cli: flyctl
+
+models:
+  watch: claude-haiku-4-5
+  work: claude-haiku-4-5
+
+limits:
+  max_cost_usd_per_task: 5
+  budget_hard_stop: true
+YAML
+  ok "estate.yaml written"
+fi
+
+# --------------------------------------------------------------------------- .env
+
+next "Collecting the one secret that is not optional"
+
+if [ -f .env ]; then
+  skip ".env already exists, leaving it alone"
+else
+  cp .env.example .env
+  chmod 600 .env
+  KEY="${ANTHROPIC_API_KEY:-}"
+  if [ -z "$KEY" ] && [ -t 0 ]; then
+    echo "  Get one at https://console.anthropic.com/settings/keys"
+    read -r -s -p "  ANTHROPIC_API_KEY (hidden, enter to skip): " KEY
+    echo
+  fi
+  if [ -n "$KEY" ]; then
+    tmp="$(mktemp)"; sed "s|^ANTHROPIC_API_KEY=.*|ANTHROPIC_API_KEY=${KEY}|" .env > "$tmp"; mv "$tmp" .env
+    chmod 600 .env
+    ok ".env written, mode 600"
+  else
+    warn ".env written with no API key. The agent cannot think until you add one:
+        edit .env and set ANTHROPIC_API_KEY"
+  fi
+fi
+
+# ------------------------------------------------------------------------- agent
+
+next "Installing the agent, pinned to $(head -1 PINNED_VERSION)"
+
+PIN_TAG="$(sed -n 1p PINNED_VERSION)"
+PIN_SHA="$(sed -n 2p PINNED_VERSION)"
+
+if [ "$SKIP_DEPS" = 1 ]; then
+  skip "--skip-deps given"
+elif [ -x .venv/bin/hermes ]; then
+  skip "already installed at .venv/bin/hermes"
+else
+  if [ ! -d hermes-agent/.git ]; then
+    echo "  cloning $AGENT_REPO (this is the slow part, roughly 900MB)"
+    git clone --quiet "$AGENT_REPO" hermes-agent
+  fi
+  git -C hermes-agent fetch --quiet --tags origin
+  git -C hermes-agent checkout --quiet "$PIN_SHA"
+  ok "hermes-agent at $PIN_TAG ($(git -C hermes-agent rev-parse --short HEAD))"
+
+  python3 -m venv .venv
+  ./.venv/bin/pip install --quiet --upgrade pip
+  echo "  installing dependencies, a minute or two"
+  ./.venv/bin/pip install --quiet -e hermes-agent
+  ./.venv/bin/pip install --quiet pyyaml
+  ok "$(./bin/hermes --version 2>/dev/null | grep -o 'Hermes Agent v[0-9.]*' | head -1)"
+fi
+
+# ------------------------------------------------------------------------ render
+
+next "Writing your estate into every skill, memory file and cron job"
+
+if [ -x .venv/bin/python ]; then RENDER=".venv/bin/python"; else RENDER="python3"; fi
+"$RENDER" bin/render | sed 's/^/  /'
+bash bin/sync-scripts.sh >/dev/null 2>&1 || true
+
+# The lesson log starts as a copy of the shipped examples. They are six real
+# incidents from building this, and they are worth reading before your own.
+if [ ! -f estate-evals/incidents.jsonl ]; then
+  cp estate-evals/incidents.example.jsonl estate-evals/incidents.jsonl
+  ok "estate-evals/incidents.jsonl seeded with $(grep -c . estate-evals/incidents.example.jsonl) example lessons"
+fi
+ok "templates rendered"
+
+# ----------------------------------------------------------------- profiles etc
+
+next "Installing profiles, skills and the schedule"
+
+if [ -x .venv/bin/hermes ]; then
+  if ./bin/hermes profile list 2>/dev/null | grep -q watch; then
+    skip "profiles already installed"
+  else
+    warn "profiles not installed yet. Run: bin/hermes profile create watch"
+  fi
+  JOBS="$(./bin/hermes cron list 2>/dev/null | grep -cE '^  [0-9a-f]{12} \[' || true)"
+  if [ "${JOBS:-0}" -gt 0 ]; then ok "$JOBS cron jobs installed"
+  else warn "no cron jobs yet. See cron/watch.jobs for what to create."; fi
+else
+  skip "agent not installed, nothing to configure"
+fi
+
+# ------------------------------------------------------------------------ verify
+
+next "Proving it works"
+
+if ./bin/verify; then
+  cat <<EOF
+
+  Setup is done and proven.
+
+  Nothing is running yet. One command starts it:
+
+      ./bin/hermes gateway install
+
+  Then watch what it costs:
+
+      ./bin/cost-report.sh
+
+EOF
+else
+  cat <<EOF
+
+  Setup finished but the proof failed. The lines marked FAIL above say what.
+  Fix those, then run ./bin/verify again. Nothing is scheduled, so nothing is
+  running badly in the meantime.
+
+EOF
+  exit 1
+fi

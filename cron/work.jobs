@@ -1,6 +1,0 @@
-# WORK - hands, frontier lane. Triggered by the agent-go label and nothing else.
-# The label is the leash: no label, no work. Spec §5, §10.
-# Loaded with: bin/hermes cron add --file cron/work.jobs
-#
-*/20 * * * *   work   List issues on chidionyema/prospector labelled agent-go and not labelled in-progress. Take the oldest one only. Post your one-line interpretation on it, move it to in-progress, then follow the pr-discipline skill. Open a pull request and stop. Never merge, never deploy.
-0 8 * * *   work   For every issue labelled merged, run verify-to-prod. Move to verified only with two angles of evidence in the comment.

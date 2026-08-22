@@ -22,7 +22,8 @@ for row in rows:
     # 106. A green that moves on its own is worse than a red.
     try:
         rc = subprocess.run(["bash", "-c", row["acceptance_cmd"]],
-                            capture_output=True, timeout=120).returncode
+                            capture_output=True, timeout=120,
+                            env={**os.environ, "HERMES_HOME": HOME}).returncode
     except subprocess.TimeoutExpired:
         rc = 124
         timed_out.append(row["id"])

@@ -26,7 +26,7 @@ REAL_OUTPUT = """## Evidence
 Claim: the health endpoint returns 200 after the fix.
 
 ```
-$ curl -s -o /dev/null -w '%{http_code}\\n' https://prospector-engine.fly.dev/health
+$ curl -s -o /dev/null -w '%{http_code}\\n' https://acme-api.fly.dev/health
 200
 ```
 """

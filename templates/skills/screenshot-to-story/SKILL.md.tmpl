@@ -1,0 +1,59 @@
+---
+name: screenshot-to-story
+description: Turn a photo or screenshot the founder sends into a well-formed GitHub issue. Use when a message arrives with an image and little or no text.
+---
+
+# screenshot-to-story
+
+The founder sends a photo from his phone with three words. The job is to turn
+that into an issue an agent can act on tomorrow without asking him anything.
+
+## 1. Read the image, do not guess at it
+
+Say what is actually visible: the screen, the URL bar, the error text, the app
+chrome. Quote text verbatim. If the text is blurred or cut off, say "unreadable"
+rather than filling it in. An invented error string sends the next agent to the
+wrong file.
+
+## 2. Locate it
+
+```bash
+rg -n --no-heading -S '<the exact visible string>' ~/Documents/code/{{ estate.name }} | head -20
+```
+
+If the string is in the codebase, name the `file:line` in the issue. If it is
+not, say so - it may come from a dependency or a service, and that is useful.
+
+## 3. Ask the one question that matters, in the issue
+
+Not in a reply to him. Put it in the issue body under "Unknown". He answers it
+when he gets to it, and the issue is still filed.
+
+## 4. File it
+
+```bash
+gh issue create -R {{ github.slug }} \
+  --title "<what is broken, in his words where possible>" \
+  --label triage \
+  --body "$(cat <<'BODY'
+## From a screenshot
+<what is visible, verbatim>
+
+## Where this likely lives
+<file:line, or "not found in the repo">
+
+## Unknown
+<the one question>
+
+## Suggested next step
+<one line - what an agent would do first>
+BODY
+)"
+```
+
+Reply to him with the issue number and nothing else.
+
+## Never
+
+Do not add `agent-go`. A screenshot is a report, not an instruction. The founder
+moves it to `agent-go` when he wants it worked on - that label is the leash.

@@ -1,0 +1,44 @@
+# Your estate, in one file. Everything else is generated from this.
+#
+# `./install` writes estate.yaml by asking you these questions. Edit it later
+# and run `bin/render` to push the change through every skill, memory file and
+# cron job at once. Nothing else in the repo should ever name your services.
+
+estate:
+  # A short name for the whole thing. Used in app names and report headers.
+  name: acme
+
+github:
+  owner: your-github-username
+  repo: your-repo
+  # WATCH opens issues here. WORK opens pull requests here.
+
+# What the 15-minute pulse probes. Add or remove freely - the pulse script,
+# the estate-map skill and the egress allowlist are all generated from this list.
+services:
+  - key: api                                  # short handle used in reports
+    app: acme-api                             # the platform's app name
+    url: https://acme-api.fly.dev/health      # what gets probed
+    expect: "2xx"                             # 2xx | 3xx | any-answer
+    note: ""                                  # anything a human should know
+
+  - key: web
+    app: acme-web
+    url: https://acme-web.fly.dev/
+    expect: "2xx"
+    note: ""
+
+# Where the services run. Used only to decide which CLI the skills reach for.
+platform:
+  kind: fly            # fly | render | railway | heroku | none
+  cli: flyctl
+
+# The cheap lane and the expensive lane. Both default to the cheapest Claude.
+# Escalate one step at a time and write down why.
+models:
+  watch: claude-haiku-4-5
+  work: claude-haiku-4-5
+
+limits:
+  max_cost_usd_per_task: 5
+  budget_hard_stop: true

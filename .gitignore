@@ -41,3 +41,29 @@ graphify-out/
 hermes-agent/
 hermes-agent-self-evolution/
 .venv/
+
+# --- generated from templates/ + estate.yaml by bin/render ---
+# Do not edit these directly. Edit the matching file in templates/.
+estate.yaml
+CUTOVER.md
+MEMORY.md
+REQUIREMENTS.jsonl
+RITUALS.md
+bin/prove-watch-readonly.sh
+bin/pulse.sh
+cron/work.jobs
+egress-allowlist.txt
+handlers/screenshot_to_issue.py
+profiles/watch/MEMORY.md
+profiles/watch/egress-allowlist.txt
+profiles/work/MEMORY.md
+scripts/pulse.sh
+skills/PLATFORM_GATING.md
+skills/estate-map/SKILL.md
+skills/incident-triage/SKILL.md
+skills/post-mortem/SKILL.md
+skills/pr-discipline/SKILL.md
+skills/screenshot-to-story/SKILL.md
+skills/verify-to-prod/SKILL.md
+cron/jobs.json
+estate-evals/incidents.jsonl

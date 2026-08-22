@@ -1,0 +1,88 @@
+---
+name: post-mortem
+description: Close an incident by naming the class of mistake and adding a guard. Use after the platform is serving again, never while it is still down.
+---
+
+# post-mortem
+
+This runs after the fire is out. While it is still burning, the only legal work
+is putting it out.
+
+A fix that stops one instance is not a fix. Ask what let it break, and keep
+asking until the answer names a class rather than one bug.
+
+## 1. The timeline, from commands
+
+```bash
+fly releases -a <app> | head -10
+gh run list -R {{ github.slug }} --limit 10 \
+  --json createdAt,conclusion,displayTitle \
+  --jq '.[] | "\(.createdAt[0:16]) \(.conclusion) \(.displayTitle)"'
+```
+
+First bad signal, first human notice, fix merged, service restored. Four
+timestamps, from output, not memory.
+
+## 2. The class
+
+Write one sentence starting "Any change that ...". If you cannot finish that
+sentence, you have a bug, not a class, and you keep asking why.
+
+## 3. Name the rung
+
+The lesson ladder is in `RITUALS.md`. Every post-mortem states a rung:
+
+| rung | what it means |
+|---|---|
+| 0 | nothing written down |
+| 1 | a line in MEMORY.md |
+| 2 | a change to a skill |
+| 3 | a test in `tests/incidents/` |
+| 4 | structural - the mistake is impossible |
+
+Climb as far as the incident allows. If you stop below rung 3, say plainly that
+the next occurrence will not be caught.
+
+A lesson reaches memory, a skill or a test **only through a PR the founder
+taps**. You propose. He promotes. Never edit MEMORY.md directly from a
+post-mortem.
+
+## 4. Close it mechanically, in this order
+
+1. Self-healing - can the system correct itself with nobody involved?
+2. A guard - can a machine refuse the mistake? A test, a CI job, a required check.
+3. A note - only when 1 and 2 are impossible.
+
+A documented trap is not a guarded trap. If you stop at 3, say plainly that the
+next occurrence will not be caught.
+
+## 5. Write it into the eval set
+
+The incident becomes a permanent test. Append one line:
+
+```bash
+cat >> $HERMES_HOME/estate-evals/incidents.jsonl <<'ROW'
+{"id":"<yyyy-mm-dd>-<slug>","app":"<app>","symptom":"<what was seen>","root_cause":"<why>","class":"Any change that ...","guard":"<path to the test or CI job, or null>","issue":<n>}
+ROW
+```
+
+Then add the failing case to `tests/incidents/` so it runs on every PR.
+
+## 6. Post it
+
+```bash
+gh issue comment <n> -R {{ github.slug }} --body-file <(cat <<'BODY'
+## Post-mortem
+
+**Timeline** <four timestamps>
+**Root cause** <one sentence>
+**Class** Any change that ...
+**Guard** <what now refuses it, with a path>
+**Not guarded** <what will still get through>
+BODY
+)
+gh issue edit <n> -R {{ github.slug }} --add-label post-mortem
+```
+
+No blame, no narrative, no "lessons learned" section. What broke, why, what now
+stops it.
