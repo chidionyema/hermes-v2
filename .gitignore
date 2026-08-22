@@ -87,3 +87,10 @@ skills/*/
 !skills/screenshot-to-story/
 !skills/verify-to-prod/
 estate-evals/incidents.jsonl
+
+# Runtime state the gateway rewrites on every tick. These were committed by
+# accident in b0d65e0 by a `git add -A`, so every tick then showed as a diff.
+channel_directory.json
+cron/ticker_heartbeat
+cron/ticker_last_success
+state/
