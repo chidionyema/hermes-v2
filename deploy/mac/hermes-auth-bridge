@@ -99,6 +99,17 @@ trap 'rm -f "$TMP"' EXIT
 printf %s "$CREDS" > "$TMP"
 unset CREDS
 
+# The digest of the access token, so the check at the end can ask the container
+# "is the token you are using this exact one?" rather than "have you got one?".
+# Sixteen hex characters of a sha256 is not the secret and cannot be turned back
+# into it; Fly prints secret digests for the same reason.
+TOKSHA=$(/usr/bin/python3 -c '
+import hashlib, json, sys
+d = json.load(open(sys.argv[1]))
+t = d.get("claudeAiOauth", {}).get("accessToken") or d.get("accessToken") or ""
+print(hashlib.sha256(t.encode()).hexdigest()[:16] if t else "none")
+' "$TMP" 2>/dev/null || echo unreadable)
+
 # /root/.claude must be a symlink onto the volume or a token the container
 # refreshes at 3am is lost on the next restart. `ln -sfn` onto a real directory
 # silently nests instead of replacing, so a real one is moved aside first.
@@ -120,15 +131,52 @@ if ! printf 'put %s %s\n' "$TMP" "$REMOTE" | "$FLY" ssh sftp shell -a "$APP" >/d
 fi
 rm -f "$TMP"; trap - EXIT
 
-# Two angles (LAW 15): the upload said it worked, and the container's own
-# resolver says it can now produce a token. The second is the one that matters,
-# and it prints a length, never a value.
-OUT=$("$FLY" ssh console -a "$APP" -C "/opt/hermes-v2/.venv/bin/python -c 'import sys; sys.path.insert(0,\"/opt/hermes-v2/hermes-agent\"); from agent.anthropic_adapter import resolve_anthropic_token as r; t=r(); print(\"RESOLVED\", len(t) if t else 0)'" 2>&1 | tr -d '\r' | grep -o 'RESOLVED [0-9]*' | head -1)
-if [ -z "$OUT" ]; then
-    log "ERROR wrote $REMOTE but the container still resolves no token"
-    notify "Credential written but $APP cannot use it"
+# sftp puts it down world-readable. entrypoint.sh fixes this on every boot;
+# this closes the gap between boots.
+"$FLY" ssh console -a "$APP" -C "/bin/sh -c 'chmod 600 '"$REMOTE"''" >/dev/null 2>&1 || true
+
+# Two angles (LAW 15), and the first version of this had only one. It asked the
+# container "does a token resolve?", which answers yes from any of five sources,
+# so it reported OK on a run whose upload it had not actually confirmed. The
+# question has to name the file.
+#
+#   FILE     the digest of the token now sitting in $REMOTE
+#   RESOLVED the digest of the token resolve_anthropic_token() hands the gateway
+#
+# FILE proves the bytes arrived. RESOLVED proves they are the ones that get used.
+PROBE=$("$FLY" ssh console -a "$APP" -C "/opt/hermes-v2/.venv/bin/python -c '
+import hashlib, json, sys
+sys.path.insert(0, \"/opt/hermes-v2/hermes-agent\")
+def d(t): return hashlib.sha256(t.encode()).hexdigest()[:16] if t else \"none\"
+try:
+    j = json.load(open(\"'"$REMOTE"'\"))
+    f = j.get(\"claudeAiOauth\", {}).get(\"accessToken\") or j.get(\"accessToken\") or \"\"
+except Exception:
+    f = \"\"
+from agent.anthropic_adapter import resolve_anthropic_token as r
+t = r() or \"\"
+print(\"FILE\", d(f), \"RESOLVED\", d(t), \"LEN\", len(t))
+'" 2>&1 | tr -d '\r' | grep -o 'FILE [0-9a-f]* RESOLVED [0-9a-f]* LEN [0-9]*' | head -1)
+
+FILE_SHA=$(printf %s "$PROBE" | awk '{print $2}')
+RES_SHA=$(printf %s "$PROBE" | awk '{print $4}')
+
+if [ -z "$PROBE" ]; then
+    log "ERROR wrote $REMOTE but the container would not answer; nothing is proven"
+    notify "Credential written to $APP but it could not be checked"
     exit 1
+fi
+if [ "$FILE_SHA" != "$TOKSHA" ]; then
+    log "ERROR $REMOTE holds a different token: file=$FILE_SHA sent=$TOKSHA"
+    notify "Credential upload to $APP did not land"
+    exit 1
+fi
+if [ "$RES_SHA" != "$TOKSHA" ]; then
+    # Not fatal — the container has a working token, it is simply not this one.
+    # Worth saying out loud: the other source is one nothing here maintains.
+    log "WARN the file landed but the container prefers another source: resolved=$RES_SHA sent=$TOKSHA"
+    notify "$APP is using a credential the bridge does not manage"
 fi
 
 printf %s "$HASH" > "$HASH_FILE"
-log "OK synced hash=$HASH expires=$EXPIRES container=$OUT"
+log "OK synced hash=$HASH expires=$EXPIRES token=$TOKSHA in-use=$RES_SHA"
