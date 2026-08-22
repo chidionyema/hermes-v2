@@ -225,6 +225,7 @@ learns is never overwritten by a template.
 | `profiles/work/MEMORY.md` | The WORK lane's own memory, seeded the same way. |
 | `scripts/pulse.sh` | The identical pulse script where the scheduler looks for it. `cron create --script pulse.sh` resolves in `scripts/`; `bin/` is where a human types it. |
 | `skills/PLATFORM_GATING.md` | What each skill needs before it may run. A skill whose platform is missing must fail at the top, not half-run. |
+| `skills/consult/SKILL.md` | Ask a different model when you are stuck, and treat the answer as the weakest evidence you hold. Never acts on it unchecked. |
 | `skills/estate-map/SKILL.md` | Print the current shape of the estate — apps, health, repos, open board. Run before guessing where anything lives. |
 | `skills/incident-triage/SKILL.md` | Turn a red platform into one GitHub issue with real evidence in it. Never fixes anything. |
 | `skills/post-mortem/SKILL.md` | Close an incident by naming the class of mistake and adding a guard. Runs after the platform is serving again, never during. |
@@ -264,6 +265,7 @@ are tracked, so what you see below is the source they come from.
 | `bin/check-models-priced.py` | Refuses any model that is not in the shipped price table. A model nobody can price spends money invisibly. |
 | `bin/check-readme.py` | Fails when this README no longer lists every generated file, every cron job and every tracked path. It checks the half a machine can know. |
 | `bin/check-requirements.py` | Runs the `acceptance_cmd` of all 133 requirement rows and writes the result to `logs/requirements-status.json`. A row closes on exit 0, never on anyone asserting it. |
+| `bin/consult` | Asks a second model a question from inside a lane. Exit 3 when there is none, which is the normal state of a sleeping laptop and never an error. |
 | `bin/cost-report.sh` | What the agent has actually spent, read out of the usage ledger rather than estimated. |
 | `bin/curator-report.sh` | Weekly. Asks the skill curator what it makes of the skills and writes it to `logs/curator/REPORT.md`. It changes nothing; the report is an input to the Sunday review. |
 | `bin/features` | The on/off switch. Reads and writes the `features:` block in `estate.yaml`, and `--check` gives the scheduler an exit code so an off lane gets no jobs. |
@@ -328,6 +330,8 @@ are tracked, so what you see below is the source they come from.
 | `templates/scripts/pulse.sh.tmpl` | The pulse script where `cron create --script` looks for it. `bin/sync-scripts.sh` keeps it identical to the one in `bin/`. |
 | `templates/skills/` | One directory per skill. A skill is a prompt with shell commands in it, so each is reviewed as code. |
 | `templates/skills/PLATFORM_GATING.md.tmpl` | What each skill needs before it may run. A skill whose platform is missing must fail at the top rather than half-run. |
+| `templates/skills/consult/` | The consult skill. |
+| `templates/skills/consult/SKILL.md.tmpl` | When a lane may ask a different model, what it must never send, and why exit 3 is a normal answer rather than a fault. |
 | `templates/skills/estate-map/` | The estate-map skill. |
 | `templates/skills/estate-map/SKILL.md.tmpl` | Print the current shape of the estate — apps, health, repos, open board — which is what you run instead of guessing where something lives. |
 | `templates/skills/incident-triage/` | The incident-triage skill. |

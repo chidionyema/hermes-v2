@@ -1,0 +1,117 @@
+#!/usr/bin/env python3
+"""Ask a different model a question, from inside a lane, without waking anyone.
+
+An agent that is stuck has two bad options: guess, or stop and wait for the
+founder. This is the third. It sends the question to a consult service running
+outside this repo, gets an answer back, and the lane carries on.
+
+  bin/consult "why does flyctl status say suspended after a deploy?"
+  bin/consult --health
+  bin/consult --json "..."        the whole response object, for a script
+
+  exit 0   answered; the answer is on stdout
+  exit 3   no consult available -- this is normal, take the fallback path
+  exit 1   the question was malformed
+
+EXIT 3 IS NOT AN ERROR. The service runs on the founder's laptop and the laptop
+sleeps. A lane that treats an unavailable consult as a failure will page a
+person over a convenience. When you get 3, do what §16 says: write the question
+into the issue as a comment and carry on with what you can still do.
+
+CONFIGURATION. Three environment variables, none required:
+
+  CONSULT_URL         default http://127.0.0.1:8765
+  CONSULT_TOKEN       the bearer token; overrides the file below
+  CONSULT_TOKEN_FILE  default ~/.claude/consult-token, mode 600
+
+Nothing in this repo depends on the consult service existing. Unset the URL and
+every call here returns 3, which is the same path a sleeping laptop takes.
+"""
+import json
+import os
+import sys
+import urllib.error
+import urllib.request
+from pathlib import Path
+
+URL = os.environ.get("CONSULT_URL", "http://127.0.0.1:8765").rstrip("/")
+TIMEOUT = int(os.environ.get("CONSULT_TIMEOUT", "180"))
+UNAVAILABLE = 3
+
+
+def token():
+    t = os.environ.get("CONSULT_TOKEN")
+    if t:
+        return t.strip()
+    p = Path(os.environ.get("CONSULT_TOKEN_FILE",
+                            Path.home() / ".claude" / "consult-token"))
+    try:
+        return p.read_text().strip()
+    except OSError:
+        return ""
+
+
+def call(path, payload=None, timeout=TIMEOUT):
+    """Return (ok, object). Never raises, never blocks past the timeout."""
+    tok = token()
+    if not tok:
+        return False, {"error": "no consult token; set CONSULT_TOKEN or "
+                                "CONSULT_TOKEN_FILE"}
+    data = json.dumps(payload).encode() if payload is not None else None
+    req = urllib.request.Request(
+        f"{URL}{path}", data=data,
+        headers={"Authorization": f"Bearer {tok}",
+                 "Content-Type": "application/json"},
+        method="POST" if data else "GET")
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            return True, json.loads(r.read() or b"{}")
+    except urllib.error.HTTPError as e:
+        try:
+            return False, json.loads(e.read() or b"{}")
+        except Exception:
+            return False, {"error": f"HTTP {e.code}"}
+    except Exception as e:
+        return False, {"error": f"{type(e).__name__}: {e}"}
+
+
+def main(argv):
+    want_json = "--json" in argv
+    argv = [a for a in argv if a != "--json"]
+
+    if "--health" in argv:
+        ok, body = call("/health", timeout=15)
+        print(json.dumps(body, indent=2))
+        return 0 if ok and body.get("status") == "ok" else UNAVAILABLE
+
+    ctx = ""
+    if "--context" in argv:
+        i = argv.index("--context")
+        ctx = argv[i + 1] if i + 1 < len(argv) else ""
+        del argv[i:i + 2]
+    agent = os.environ.get("HERMES_PROFILE") or "hermes"
+    if "--agent" in argv:
+        i = argv.index("--agent")
+        agent = argv[i + 1] if i + 1 < len(argv) else agent
+        del argv[i:i + 2]
+
+    question = " ".join(a for a in argv if not a.startswith("--")).strip()
+    if not question:
+        print(__doc__, file=sys.stderr)
+        return 1
+
+    ok, body = call("/consult", {"question": question, "context": ctx,
+                                 "agent": agent, "timeout": TIMEOUT})
+    if want_json:
+        print(json.dumps(body, indent=2))
+    if ok and body.get("status") == "success":
+        if not want_json:
+            print(body.get("answer", "").strip())
+        return 0
+    if not want_json:
+        print(f"consult unavailable: {body.get('error') or body}", file=sys.stderr)
+    return UNAVAILABLE
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))
