@@ -1,0 +1,151 @@
+#!/usr/bin/env python3
+"""Fail if README.md no longer describes what this repo actually ships.
+
+A README goes stale the same way a health check goes blind: nobody notices,
+because nothing fails. Two things here are machine-knowable, so neither is
+allowed to drift.
+
+  the generated files  templates/**.tmpl is the truth; the README table must
+                       list every one of them, exactly once, and nothing else
+  the cron jobs        cron/*.jobs.tmpl is the truth; the README table must
+                       carry every job name with its real schedule string
+
+What a file or a job *does* is prose, and no script can check prose. This
+checks the parts that can be checked, which are exactly the parts that rot:
+a file added and never documented, a schedule changed in one place only.
+
+  bin/check-readme.py           exit 1 and say what drifted
+  bin/check-readme.py --list    print what the README ought to contain
+"""
+import importlib.machinery
+import importlib.util
+import json
+import os
+import re
+import sys
+
+HOME = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+README = os.path.join(HOME, "README.md")
+TEMPLATES = os.path.join(HOME, "templates")
+
+FILES_BLOCK = "files"
+CRON_BLOCK = "cron"
+
+
+def block(text, name):
+    """The rows between <!-- name --> and <!-- /name -->."""
+    m = re.search(
+        r"<!--\s*" + re.escape(name) + r"\b.*?-->(.*?)<!--\s*/" + re.escape(name) + r"\s*-->",
+        text,
+        re.S,
+    )
+    if not m:
+        sys.exit(
+            f"check-readme: README.md has no <!-- {name} --> ... <!-- /{name} --> block.\n"
+            f"              That block is what makes this checkable. Put it back."
+        )
+    return m.group(1)
+
+
+def first_cells(rows):
+    """Every `code span` in column 1 of a markdown table, plus column 2."""
+    out = []
+    for line in rows.split("\n"):
+        if not line.strip().startswith("|"):
+            continue
+        cells = [c.strip() for c in line.strip().strip("|").split("|")]
+        if len(cells) < 2 or set(cells[0]) <= set("- :"):
+            continue
+        got = re.findall(r"`([^`]+)`", cells[0])
+        if got:
+            out.append((got[0], cells[1]))
+    return out
+
+
+def rendered_paths():
+    """Ask bin/render, so there is one definition of what gets generated."""
+    # bin/render has no .py suffix, so it needs an explicit source loader.
+    path = os.path.join(HOME, "bin", "render")
+    spec = importlib.util.spec_from_loader("render", importlib.machinery.SourceFileLoader("render", path))
+    render = importlib.util.module_from_spec(spec)
+    try:
+        spec.loader.exec_module(render)
+    except SystemExit as e:
+        sys.exit(f"check-readme: bin/render would not load: {e}")
+    return {rel for _src, _dest, rel, _seed in render.targets()}
+
+
+def scheduled_jobs():
+    """name -> schedule, from the job templates, which install actually reads."""
+    jobs = {}
+    src = os.path.join(TEMPLATES, "cron")
+    for name in sorted(os.listdir(src)):
+        if not name.endswith(".jobs.tmpl"):
+            continue
+        with open(os.path.join(src, name)) as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith("#"):
+                    continue
+                job = json.loads(line)
+                jobs[job["name"]] = job["schedule"]
+    return jobs
+
+
+def main():
+    want_files = rendered_paths()
+    want_jobs = scheduled_jobs()
+
+    if "--list" in sys.argv:
+        for rel in sorted(want_files):
+            print(f"| `{rel}` | |")
+        print()
+        for name in sorted(want_jobs):
+            print(f"| `{name}` | `{want_jobs[name]}` | |")
+        return 0
+
+    with open(README) as f:
+        text = f.read()
+
+    problems = []
+
+    documented = first_cells(block(text, FILES_BLOCK))
+    listed = [p for p, _ in documented]
+    for rel in sorted(want_files - set(listed)):
+        problems.append(f"  templates/ generates {rel}, and the README never mentions it")
+    for rel in sorted(set(listed) - want_files):
+        problems.append(f"  the README describes {rel}, which nothing generates any more")
+    for rel in sorted({p for p in listed if listed.count(p) > 1}):
+        problems.append(f"  the README lists {rel} more than once")
+    for rel, what in documented:
+        if not what:
+            problems.append(f"  the README lists {rel} with no description")
+
+    jobs = dict(first_cells(block(text, CRON_BLOCK)))
+    for name in sorted(set(want_jobs) - set(jobs)):
+        problems.append(f"  the schedule has a job named {name}, and the README never mentions it")
+    for name in sorted(set(jobs) - set(want_jobs)):
+        problems.append(f"  the README describes a job named {name}, which is not on the schedule")
+    for name in sorted(set(jobs) & set(want_jobs)):
+        said = re.findall(r"`([^`]+)`", jobs[name])
+        said = said[0] if said else jobs[name]
+        if said != want_jobs[name]:
+            problems.append(
+                f"  {name} runs at '{want_jobs[name]}', and the README says '{said}'"
+            )
+
+    if problems:
+        print("README.md no longer describes what this repo ships:")
+        print("\n".join(problems))
+        print("\nFix README.md. `bin/check-readme.py --list` prints the rows it wants.")
+        return 1
+
+    print(
+        f"PASS README describes every generated file and every cron job "
+        f"({len(want_files)} files, {len(want_jobs)} jobs)"
+    )
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

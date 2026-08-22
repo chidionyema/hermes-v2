@@ -34,13 +34,14 @@ HOME = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 TEMPLATES = os.path.join(HOME, "templates")
 ESTATE = os.path.join(HOME, "estate.yaml")
 
-try:
-    import yaml
-except ImportError:
-    sys.exit("render: PyYAML is missing. Run ./install, or: pip install pyyaml")
-
-
 def load_estate():
+    # Imported here, not at the top, so that other scripts can import this file
+    # for targets() alone without needing PyYAML installed first.
+    try:
+        import yaml
+    except ImportError:
+        sys.exit("render: PyYAML is missing. Run ./install, or: pip install pyyaml")
+
     if not os.path.exists(ESTATE):
         sys.exit(
             "render: estate.yaml does not exist.\n"

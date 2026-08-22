@@ -35,6 +35,15 @@ if [ $RC = 0 ]; then OUT="$(echo "$RAW" | grep -o '[0-9]* checked')"
 else OUT="$(echo "$RAW" | sed -n '2,4p' | tr -s ' \n' ' ')"; fi
 row "generated files match templates" "$RC" "$OUT"
 
+# 2b. and the README still describes what the repo ships. A README rots without
+# anything failing, which is the same failure mode as a health check that
+# watches nothing. This checks the two parts a machine can know: the list of
+# generated files, and every cron job's name and schedule.
+RAW="$("$PY" bin/check-readme.py 2>&1)"; RC=$?
+OUT="$(printf '%s' "$RAW" | head -2 | tail -1 | sed 's/^ *//')"
+[ "$RC" = 0 ] && OUT="$(printf '%s' "$RAW" | sed -n 's/^PASS README describes.*(\(.*\))$/\1/p')"
+row "README describes what ships" "$RC" "$OUT"
+
 # 3. the agent runs, and it is the pinned build
 V="$(./bin/hermes --version 2>/dev/null | grep -o 'Hermes Agent v[0-9.]*' | head -1)"
 [ -n "$V" ]; row "the agent runs" "$?" "$V"
