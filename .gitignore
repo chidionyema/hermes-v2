@@ -125,3 +125,11 @@ cron/output/
 cron/.fire-*.lock
 cron/.jobs.lock
 cron/.tick.lock
+
+# The age private key opens deploy/secrets/claude-credentials.json.age, which is
+# committed. Both in one repo is the same as committing the plaintext. The key
+# lives in ~/.config/hermes/age-key.txt and on the platform as a secret.
+age-key.txt
+hermes-age-key.txt
+*.age.key
+*age-key*.txt

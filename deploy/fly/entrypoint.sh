@@ -35,52 +35,95 @@ done
 
 echo "[entrypoint] state linked to $D"
 
-# Identity comes from the platform that runs this container, not from a daemon
-# on somebody's laptop. Fly injects secrets into init and its children, and this
-# script is init's child — that is how HERMES_GATEWAY_AUTOSTART reaches the
-# block below. A `fly ssh console` session is outside that tree and sees none of
-# them, which is what made a Fly secret look unreadable from inside the machine.
+# ---------------------------------------------------------------- identity
+# Identity comes from the platform that runs this container, never from a
+# daemon on somebody's laptop. Sources are tried in order and the first one
+# that yields a usable credential wins.
 #
-# Two shapes are accepted, and they are NOT interchangeable:
+#   1. the volume          a previous boot seeded it, or the container refreshed it
+#   2. Doppler             DOPPLER_TOKEN set and the doppler binary present
+#   3. an age-encrypted    AGE_PRIVATE_KEY set; the ciphertext is committed to
+#      file in the repo    the repo, so the credential travels in the git bundle
+#   4. CLAUDE_CREDENTIALS_JSON   the whole document, straight from a platform secret
+#   5. CLAUDE_CODE_OAUTH_TOKEN / ANTHROPIC_API_KEY   read from the environment
+#                                                    by the resolver itself
 #
-#   CLAUDE_CODE_OAUTH_TOKEN   a setup-token string, from `claude setup-token`.
-#                             resolve_anthropic_token() returns it directly at
-#                             priority 2. Nothing is written to the volume and
-#                             there is nothing to refresh.
-#   CLAUDE_CREDENTIALS_JSON   the whole Claude Code credentials document. Seeded
-#                             onto the volume once, then owned by the container,
-#                             which refreshes it and writes it back.
-#
-# Never put the JSON in CLAUDE_CODE_OAUTH_TOKEN. Priority 2 hands back whatever
-# that variable holds, verbatim, as the bearer token, and it is checked before
-# the file at priority 4 — so the file would be perfect, resolution would
-# "succeed", and every API call would send a JSON document as its credential.
-# anthropic_adapter.py:1459-1465, and _prefer_refreshable_claude_code_token at
-# :1374 does not rescue it: a JSON blob fails _is_oauth_token and returns None.
+# Switching source: the volume wins over all of them, because the file there is
+# the *refreshed* token and any seed is older. Set HERMES_AUTH_RESEED=1 to
+# force a re-seed from 2-4 on the next boot.
 mkdir -p "$D/dot-claude"
 chmod 700 "$D/dot-claude"
 
-if [ ! -f "$D/dot-claude/.credentials.json" ] && [ -n "${CLAUDE_CREDENTIALS_JSON:-}" ]; then
-    echo "[entrypoint] identity: seeding the volume from CLAUDE_CREDENTIALS_JSON"
-    printf '%s' "$CLAUDE_CREDENTIALS_JSON" > "$D/dot-claude/.credentials.json"
-fi
-
-# The link is remade on every boot because the root filesystem is rebuilt from
-# the image on every boot. One made by hand from an ssh session lasts until the
-# next restart and no longer.
+# The root filesystem is rebuilt from the image on every boot, so this is made
+# every boot. One made by hand from an ssh session lasts until the next restart.
 if [ -d /root/.claude ] && [ ! -L /root/.claude ]; then
     cp -a /root/.claude/. "$D/dot-claude/" 2>/dev/null || true
 fi
 rm -rf /root/.claude
 ln -sfn "$D/dot-claude" /root/.claude
-[ -f "$D/dot-claude/.credentials.json" ] && chmod 600 "$D/dot-claude/.credentials.json" || true
 
-if [ -n "${CLAUDE_CODE_OAUTH_TOKEN:-}" ]; then
-    echo "[entrypoint] identity: CLAUDE_CODE_OAUTH_TOKEN is set (env, no refresh)"
-elif [ -f "$D/dot-claude/.credentials.json" ]; then
-    echo "[entrypoint] identity: /root/.claude -> $D/dot-claude (credential file present)"
-else
-    echo "[entrypoint] identity: no credential from any source" >&2
+CRED="$D/dot-claude/.credentials.json"
+
+# A file that is not a credentials document is worse than no file: source 1
+# would win with it on every future boot, so a bad seed poisons the volume
+# permanently and no amount of fixing the secret would take effect.
+cred_is_valid() {
+    [ -f "$1" ] || return 1
+    "$H/.venv/bin/python" - "$1" <<'PYEOF' 2>/dev/null
+import json, sys
+try:
+    d = json.load(open(sys.argv[1]))
+except Exception:
+    sys.exit(1)
+o = d.get("claudeAiOauth", d) if isinstance(d, dict) else {}
+sys.exit(0 if isinstance(o, dict) and o.get("accessToken") else 1)
+PYEOF
+}
+
+if [ -f "$CRED" ] && ! cred_is_valid "$CRED"; then
+    echo "[entrypoint] identity: $CRED is not a credentials document; setting it aside" >&2
+    mv -f "$CRED" "$CRED.rejected"
+fi
+
+if [ -n "${HERMES_AUTH_RESEED:-}" ] && [ -f "$CRED" ]; then
+    echo "[entrypoint] identity: HERMES_AUTH_RESEED set; re-seeding from the platform"
+    rm -f "$CRED"
+fi
+
+if [ -f "$CRED" ]; then
+    echo "[entrypoint] identity: using the credential already on the volume"
+
+elif [ -n "${DOPPLER_TOKEN:-}" ] && command -v doppler >/dev/null 2>&1; then
+    echo "[entrypoint] identity: seeding from Doppler"
+    doppler secrets get CLAUDE_CREDENTIALS_JSON --plain > "$CRED" || rm -f "$CRED"
+
+elif [ -n "${AGE_PRIVATE_KEY:-}" ] && [ -f "$H/deploy/secrets/claude-credentials.json.age" ] \
+     && command -v age >/dev/null 2>&1; then
+    echo "[entrypoint] identity: decrypting the age-encrypted credential"
+    # The key reaches age on a file descriptor, never a command line: an argv is
+    # readable by every process on the box via /proc.
+    AGE_KEY_FILE=$(mktemp)
+    chmod 600 "$AGE_KEY_FILE"
+    printf '%s\n' "$AGE_PRIVATE_KEY" > "$AGE_KEY_FILE"
+    age -d -i "$AGE_KEY_FILE" "$H/deploy/secrets/claude-credentials.json.age" > "$CRED" || rm -f "$CRED"
+    rm -f "$AGE_KEY_FILE"
+
+elif [ -n "${CLAUDE_CREDENTIALS_JSON:-}" ]; then
+    echo "[entrypoint] identity: seeding from CLAUDE_CREDENTIALS_JSON"
+    printf '%s' "$CLAUDE_CREDENTIALS_JSON" > "$CRED"
+fi
+
+# CLAUDE_CODE_OAUTH_TOKEN and ANTHROPIC_API_KEY are deliberately NOT written to
+# the file. resolve_anthropic_token() reads both from the environment directly,
+# at priorities 2 and 3, ahead of the file at priority 4
+# (anthropic_adapter.py:1452-1471). Writing either one into .credentials.json
+# produces a file that is not JSON, which then wins source 1 forever, while the
+# env var the resolver actually uses keeps working — so the breakage only shows
+# up much later, on the machine where the env var is gone.
+
+if [ -f "$CRED" ]; then
+    chmod 600 "$CRED"
+    cred_is_valid "$CRED" || echo "[entrypoint] identity: WARNING the seeded credential does not parse" >&2
 fi
 
 "$H/.venv/bin/hermes" --version || true
@@ -108,8 +151,11 @@ from agent.anthropic_adapter import resolve_anthropic_token
 sys.exit(0 if resolve_anthropic_token() else 1)
 " 2>/dev/null; then
         echo "[entrypoint] ERROR no Anthropic credential resolves; refusing to start." >&2
-        echo "[entrypoint] Set one on the platform, then restart:" >&2
-        echo "[entrypoint]   fly secrets set CLAUDE_CODE_OAUTH_TOKEN=... -a <app>" >&2
+        echo "[entrypoint] Tried: the volume, Doppler, the age file, and the environment." >&2
+        echo "[entrypoint] Set one on the platform, then restart. Pick one:" >&2
+        echo "[entrypoint]   age:     fly secrets set AGE_PRIVATE_KEY='<key>' -a <app>" >&2
+        echo "[entrypoint]   doppler: fly secrets set DOPPLER_TOKEN='<token>' -a <app>" >&2
+        echo "[entrypoint]   direct:  fly secrets set CLAUDE_CODE_OAUTH_TOKEN='<setup-token>' -a <app>" >&2
         echo "[entrypoint] See docs/claude-auth.md." >&2
         exit 1
     fi

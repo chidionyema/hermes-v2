@@ -17,8 +17,14 @@ ENV PYTHONUNBUFFERED=1 \
 
 # git: hermes opens pull requests, so it shells out to git and gh.
 # ripgrep: the agent's own search path.
+# age: decrypts deploy/secrets/claude-credentials.json.age at boot. Debian ships
+#   it, so this costs one package and no external download. The doppler CLI is
+#   deliberately NOT here — that branch of entrypoint.sh is guarded by
+#   `command -v doppler` and stays inert until someone adds it, which is a
+#   one-line change on the day it is wanted rather than a vendor apt repo in the
+#   image today.
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        bash git curl ca-certificates tini jq ripgrep procps \
+        bash git curl ca-certificates tini jq ripgrep procps age \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /opt/hermes-v2
