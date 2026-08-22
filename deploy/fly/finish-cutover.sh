@@ -55,24 +55,25 @@ print("RESOLVED" if t else "NONE", len(t) if t else 0)
 
 say "1/6  Claude credential"
 if [ "$COPY_API_KEY" = 1 ]; then
-    # Move ANTHROPIC_API_KEY from the old app to the new one. It never appears on
-    # a terminal, in argv, or in a file — it goes from one `fly` process's stdout
-    # into another's stdin. What is printed is a length and a sha256 prefix,
-    # which is enough to check both apps agree and not enough to be the key.
+    # This mode existed and could never have worked. Kept as a refusal so the
+    # next person to reach for it gets the reason instead of the dead end.
     #
-    # This is the key the old gateway already bills against today, so the cutover
-    # costs nothing new. The subscription route (--keychain) is cheaper still;
-    # see docs/claude-auth.md.
-    echo "copying ANTHROPIC_API_KEY from $OLD"
-    TOKEN=$(fly ssh console -a "$OLD" -C "printenv ANTHROPIC_API_KEY" 2>/dev/null \
-            | tr -d '\r' | grep -E '^sk-' | head -1)
-    [ -n "$TOKEN" ] || fail "no ANTHROPIC_API_KEY came back from $OLD"
-    printf 'key: %s chars, sha256 %s\n' \
-        "${#TOKEN}" "$(printf %s "$TOKEN" | shasum -a 256 | cut -c1-12)"
-    printf 'ANTHROPIC_API_KEY=%s\n' "$TOKEN" | fly secrets import -a "$NEW" >/dev/null
-    unset TOKEN
-    SKIP_TOKEN=1
-    echo "set on $NEW"
+    # Measured 2026-08-22 on prospector-hermes: a `fly ssh console` shell has
+    # ANTHROPIC_API_KEY absent from its environment, and running the gateway's
+    # own resolve_anthropic_token() in that shell returns NONE. Fly injects a
+    # secret into the machine's init and its supervisord children, not into an
+    # ssh session. Fly also has no API that reads a secret's value back — the
+    # `secrets list` output is names and digests.
+    #
+    # So the only copy of that key on the estate is inside the address space of
+    # a running process. Reading it back out is not a thing this script should
+    # be doing, and it is not necessary: --keychain gets a credential from a
+    # place where the value is legitimately available.
+    fail "--copy-api-key cannot work, and never could.
+  ANTHROPIC_API_KEY is absent from an ssh shell on $OLD (checked: resolve_anthropic_token -> NONE),
+  and Fly has no API that reads a secret value back. The key exists only inside the
+  running gateway process.
+  Use instead:  $0 --keychain        (see docs/claude-auth.md)"
 elif [ "$KEYCHAIN" = 1 ]; then
     # Put this Mac's Claude Code credential in the container so it bills against
     # the subscription. It carries a refreshToken, so hermes refreshes it in
@@ -88,7 +89,20 @@ elif [ "$KEYCHAIN" = 1 ]; then
         "${#CREDS}" "$(printf %s "$CREDS" | shasum -a 256 | cut -c1-12)"
     TMP=$(mktemp -t cc-creds); trap 'rm -f "$TMP"' EXIT
     printf '%s' "$CREDS" > "$TMP"; unset CREDS
-    fly ssh console -a "$NEW" -C "/bin/sh -c 'mkdir -p /data/dot-claude && ln -sfn /data/dot-claude /root/.claude && rm -f /data/dot-claude/.credentials.json'" >/dev/null 2>&1
+    # /root/.claude has to be a symlink onto the volume or the refreshed token is
+    # lost on the next restart. `ln -sfn` onto an existing real DIRECTORY quietly
+    # makes /root/.claude/dot-claude instead, so remove a real directory first —
+    # and only a real one, never a symlink that is already correct.
+    fly ssh console -a "$NEW" -C "/bin/sh -c '
+        mkdir -p /data/dot-claude
+        if [ -d /root/.claude ] && [ ! -L /root/.claude ]; then
+            cp -a /root/.claude/. /data/dot-claude/ 2>/dev/null || true
+            rm -rf /root/.claude
+        fi
+        ln -sfn /data/dot-claude /root/.claude
+        rm -f /data/dot-claude/.credentials.json
+        printf "link: "; ls -ld /root/.claude
+    '" 2>&1 | tail -1
     printf 'put %s /data/dot-claude/.credentials.json\n' "$TMP" | fly ssh sftp shell -a "$NEW" 2>&1 | tail -1
     rm -f "$TMP"; trap - EXIT
     SKIP_TOKEN=1
@@ -169,15 +183,34 @@ fly ssh console -a "$OLD" -C "supervisorctl stop gateway" 2>&1 | tail -2
 fly ssh console -a "$OLD" -C "supervisorctl status gateway" 2>&1 | tail -1
 
 say "5/6  start the new gateway"
+# Delete the state file BEFORE the flip, and treat its absence as the starting
+# point. The volume was restored from a backup of the founder's laptop, so
+# /data/gateway_state.json arrived already populated — argv pointing at
+# /Users/chidionyema/code/hermes-v2, hermes_home at ~/Documents/code/hermes-v2,
+# written 2026-08-22T08:59Z by a process that has never run in this container.
+# Polling that file for "connected" reads a laptop's history as if it were this
+# machine's present. It happened to say "disconnected" so it would have timed
+# out rather than lying, which is luck, not a design.
+fly ssh console -a "$NEW" -C "/bin/sh -c 'rm -f /data/gateway_state.json'" >/dev/null 2>&1
+echo "cleared the stale state file; the next one to appear is written by this boot"
+
 # Setting a secret restarts the machine, and entrypoint.sh reads the flag on boot.
 fly secrets set HERMES_GATEWAY_AUTOSTART=1 -a "$NEW" >/dev/null
 echo "waiting for it to come up"
 CONNECTED=0
 for i in $(seq 1 20); do
     sleep 15
-    STATE=$(fly ssh console -a "$NEW" \
+    RAW=$(fly ssh console -a "$NEW" \
         -C "/bin/sh -c 'cat /data/gateway_state.json 2>/dev/null || true'" 2>/dev/null \
-        | tr -d '\r' | grep -o '"state"[[:space:]]*:[[:space:]]*"[a-z]*"' | head -2 | tr '\n' ' ')
+        | tr -d '\r')
+    # A state file naming a path that only exists on a Mac is not this container
+    # reporting on itself. Refuse it rather than reading it.
+    case "$RAW" in
+        *'/Users/chidionyema'*)
+            fail "the state file names a laptop path. Something restored it again; this is not a live reading." ;;
+    esac
+    STATE=$(printf %s "$RAW" \
+        | grep -o '"state"[[:space:]]*:[[:space:]]*"[a-z]*"' | head -2 | tr '\n' ' ')
     printf '  %3ds  %s\n' "$((i*15))" "${STATE:-no state file yet}"
     case "$STATE" in *'"connected"'*) CONNECTED=1; break ;; esac
 done

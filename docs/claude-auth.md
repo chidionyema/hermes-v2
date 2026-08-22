@@ -126,23 +126,28 @@ prints the value.
 
 `deploy/fly/finish-cutover.sh` has two credential modes.
 
-### `--copy-api-key` — the one to run
+### `--copy-api-key` — withdrawn; it could never have worked
+
+The idea was to copy `ANTHROPIC_API_KEY` from the old app to the new one. It is
+impossible, and the flag now refuses with the reason rather than failing
+obscurely. Measured 2026-08-22 on `prospector-hermes`:
 
 ```
-./deploy/fly/finish-cutover.sh --copy-api-key
+$ fly ssh console -a prospector-hermes -C "... resolve_anthropic_token() ..."
+env ANTHROPIC_TOKEN absent
+env CLAUDE_CODE_OAUTH_TOKEN absent
+env ANTHROPIC_API_KEY absent
+resolve_anthropic_token -> NONE
 ```
 
-Copies `ANTHROPIC_API_KEY` from `prospector-hermes` to `prospector-hermes-v2`,
-then flips the gateway across and rolls back on its own if it does not connect.
-The value goes from one `fly` process's stdout into another's stdin. It is never
-echoed, never written to a file, never in argv, never in shell history. What is
-printed is a character count and 12 hex of its sha256, which compares two copies
-and is not one.
+Fly injects a secret into the machine's init process and its supervisord
+children, not into an `fly ssh console` session. Fly also has no API that reads
+a secret's value back — `fly secrets list` prints names and digests. So the only
+copy of that key on the estate is inside the address space of the running
+gateway. Extracting it from `/proc/<pid>/environ` is the one route left, and it
+is both something an agent should not do and unnecessary.
 
-This is the key the old gateway already bills against, so the cutover changes
-nothing about what is spent. Nothing to paste, no browser, no prompt.
-
-### `--keychain` — cheaper, with a caveat that is his call
+### `--keychain` — the route that works
 
 ```
 ./deploy/fly/finish-cutover.sh --keychain
@@ -154,9 +159,18 @@ it up and the container bills against the subscription instead of per token. It
 carries a `refreshToken`, so unlike a bare `accessToken` it does not die in a few
 hours.
 
-The caveat: a refresh may rotate the token. If it does, this Mac's own Claude
-Code login can go stale and need signing in again. Nothing is lost — it is a
-re-login — but it is a surprise if nobody said it first.
+The caveat, and it is not optional any more because this is the only route: a
+refresh may rotate the token. `refresh_anthropic_oauth_pure` takes
+`result.get("refresh_token", refresh_token)`, so whether it rotates is
+Anthropic's choice, not ours. If it does, this Mac's own Claude Code login goes
+stale and needs signing in again. Nothing is lost — it is a re-login — but it is
+a surprise if nobody says it first.
+
+The refresh writes back to `~/.claude/.credentials.json`
+(`_write_claude_code_credentials`), which is why the file has to sit on the
+volume. `/root/.claude` is made a symlink to `/data/dot-claude`, so a token
+refreshed at 3am survives the next restart. Verified on the new container:
+`HOME=/root`, `os.path.expanduser("~") -> /root`, uid 0.
 
 ### Why `claude setup-token` printed nothing
 
