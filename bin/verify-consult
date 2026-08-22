@@ -57,15 +57,37 @@ rc=$?; el=$((SECONDS-S))
 row "no service -> exit 3, no hang" "$?" "exit=$rc in ${el}s"
 
 # A credential must not be readable into a question even by accident.
-! grep -nqE 'ANTHROPIC_API_KEY|GITHUB_TOKEN|TELEGRAM_BOT_TOKEN|OPENAI_API_KEY|GEMINI_API_KEY' bin/consult
-row "client cannot read a credential" "$?" "no env secret is referenced"
+# Written the long way on purpose. `! grep -q ...` reads as "no match", but it
+# is really "grep did not exit 0", and grep exits 2 when it cannot run at all.
+# Under a stripped PATH this row printed PASS because grep was missing, which
+# is a security check reporting safety it never measured. grep exits 1 for a
+# clean file and only 1 counts. A check that cannot run FAILs (LAW 21); it
+# never skips, because a skipped credential row looks the same as a safe one.
+if ! command -v grep >/dev/null 2>&1; then
+  row "client cannot read a credential" 1 "grep is missing, the check could not run"
+else
+  grep -nE 'ANTHROPIC_API_KEY|GITHUB_TOKEN|TELEGRAM_BOT_TOKEN|OPENAI_API_KEY|GEMINI_API_KEY' \
+    bin/consult >/dev/null 2>&1
+  grc=$?
+  # The matching line is never printed. It would name a variable, and the rule
+  # is that naming is fine, but a harness that prints file contents next to the
+  # word "credential" is one bad regex away from printing a value.
+  [ "$grc" = 1 ]
+  row "client cannot read a credential" "$?" \
+    "$([ "$grc" = 1 ] && echo 'no env secret is referenced' || echo "grep exit $grc")"
+fi
 
 # ---------------------------------------------------------------- the daemon
 # Laptop-only. Everything here SKIPs where there is no LaunchAgent.
 
+# DAEMON_UP is what the security rows below use to tell an absent consult from
+# an insecure one. Absence is not a vulnerability; a machine that never had the
+# service cannot leak its credential.
+DAEMON_UP=0
 if ! command -v launchctl >/dev/null 2>&1; then
   skip "daemon under launchd" "no launchctl on this machine"
 elif launchctl print "gui/$(id -u)/$LABEL" 2>/dev/null | grep -q 'state = running'; then
+  DAEMON_UP=1
   row "daemon under launchd" 0 "$LABEL running"
 else
   row "daemon under launchd" 1 "$LABEL is not running"
@@ -75,10 +97,15 @@ if ! command -v lsof >/dev/null 2>&1; then
   skip "port bound to loopback only" "no lsof"
 else
   BOUND="$(lsof -nP -iTCP:8765 -sTCP:LISTEN 2>/dev/null | awk 'NR>1{print $9}' | sort -u | tr '\n' ' ')"
-  # A bind on *:8765 would put the founder's second opinion on the coffee-shop
-  # wifi. Loopback is the whole security model, so this is a FAIL not a SKIP.
-  [ -n "$BOUND" ] && ! printf '%s' "$BOUND" | grep -q '\*:'
-  row "port bound to loopback only" "$?" "${BOUND:-nothing listening}"
+  if [ -z "$BOUND" ]; then
+    skip "port bound to loopback only" "nothing listening on 8765"
+  else
+    # A bind on *:8765 would put the founder's second opinion on the
+    # coffee-shop wifi. Loopback is the whole security model, so a wide bind
+    # is a FAIL and never a SKIP, on any machine that has the service.
+    ! printf '%s' "$BOUND" | grep -q '\*:'
+    row "port bound to loopback only" "$?" "$BOUND"
+  fi
 fi
 
 # ------------------------------------------------------------------ security
@@ -88,8 +115,12 @@ if [ -f "$TOKEN_FILE" ]; then
   MODE="$(stat -f '%Lp' "$TOKEN_FILE" 2>/dev/null || stat -c '%a' "$TOKEN_FILE" 2>/dev/null)"
   [ "$MODE" = 600 ]
   row "token file is 0600" "$?" "mode $MODE"
+elif [ "$DAEMON_UP" = 1 ]; then
+  # The daemon is up and its credential is gone: it cannot be authenticating
+  # anyone, so this is a real fault and not absence.
+  row "token file is 0600" 1 "$TOKEN_FILE is missing while $LABEL runs"
 else
-  row "token file is 0600" 1 "$TOKEN_FILE is missing"
+  skip "token file is 0600" "no consult on this machine"
 fi
 
 # The token value itself, not the word "token". Greping for the word finds

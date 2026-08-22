@@ -281,6 +281,9 @@ are tracked, so what you see below is the source they come from.
 | `ci/` | The gates that run on a pull request. Each one refuses a mistake rather than reporting it. |
 | `ci/EVIDENCE_GATE_PROOF.md` | The evidence gate refusing ten dishonest pull request bodies and passing three honest ones, with the output. A gate nobody has watched refuse anything is a claim. |
 | `ci/evidence-gate.js` | Reads the pull request body and rejects a claim with no command output behind it. Placeholder blocks, and blocks that only repeat the claim, are rejected too. |
+| `.github/` | The CI this repo runs on itself. Not to be confused with `ci/`, which holds the workflows this repo installs into another one. |
+| `.github/workflows/` | One workflow. Everything a runner can honestly answer runs here on every pull request. |
+| `.github/workflows/gates.yml` | The three gates that mean the same thing away from the founder's laptop: every template renders from `estate.example.yaml`, `check-readme.py`, and `verify-consult`. `bin/verify` is left out on purpose — it asks about the gateway, the venv and a credential, and a runner has none of them, so it would be red for being in the wrong place. This repo is public, so the minutes are free. |
 | `ci/evidence-gate.yml` | The workflow that runs the gate: first the body check, then the check that a screenshot of the run is committed under `docs/evidence/pr-<n>/`. |
 | `ci/static-gates.yml` | ruff, pyright strict, pip-audit and deptry as required checks on main. A red job here is not advisory. |
 | `ci/tests/` | Tests of the gates themselves, because a gate that passes everything looks exactly like a gate that works. |
@@ -291,8 +294,7 @@ are tracked, so what you see below is the source they come from.
 | `docs/` | Written for a person to read, not for the machine to parse. |
 | `docs/THE-ARCHITECT.md` | The spec. Every requirement row deep-links to the section it came from, so nothing is in this repo without a paragraph that asked for it. |
 | `docs/evidence/` | A screenshot of the passing run for each pull request, committed to the branch rather than uploaded to GitHub. Evidence stored in the vendor leaves with the vendor; an image in the branch travels out with the git bundle. |
-| `docs/evidence/pr-1/` | PR #1, the consult client: every gate and one live consult in a single frame. |
-| `docs/evidence/pr-1/gates-green.png` | Every gate and one live consult in a single frame: `render --check`, `check-readme`, `check-requirements §16`, `verify`, `verify-consult`, and `bin/consult` returning an answer with exit 0. One image per pull request, overwritten rather than accumulated, so there is never a question about which frame is current. |
+| `docs/evidence/pr-1/` | PR #1, the consult client. One frame holding every gate and one live consult: `render --check`, `check-readme`, `check-requirements §16`, `verify`, `verify-consult`, and `bin/consult` returning an answer with exit 0. The images inside are named after the moment they were captured, so they are not listed here one by one. |
 | `estate-evals/` | The incident record, and what each incident bought. |
 | `estate-evals/incidents.example.jsonl` | Worked examples of the incident format: symptom, root cause, the class of mistake, and the rung and artifact that now prevent it. Your own `incidents.jsonl` is not tracked. |
 | `estate.example.yaml` | The one file you edit, filled in and commented. Copy it, change it, and `./install --estate` sets a machine up without asking a single question. |
