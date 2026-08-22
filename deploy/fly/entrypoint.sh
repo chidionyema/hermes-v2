@@ -126,6 +126,50 @@ if [ -f "$CRED" ]; then
     cred_is_valid "$CRED" || echo "[entrypoint] identity: WARNING the seeded credential does not parse" >&2
 fi
 
+# Drill the age fallback on every boot, without touching the live credential.
+# A fallback nobody has exercised is not a fallback, it is a hope, and the day
+# it is needed is the worst day to find out the key is wrong or the ciphertext
+# is stale. This decrypts to a scratch file, compares the access token against
+# the one actually in use, logs one line, and deletes it. It never fails the
+# boot: the age path is the spare wheel, not the wheel.
+tok_digest() {
+    "$H/.venv/bin/python" - "$1" <<'PYEOF' 2>/dev/null
+import json, sys, hashlib
+try:
+    d = json.load(open(sys.argv[1]))
+except Exception:
+    sys.exit(1)
+o = d.get("claudeAiOauth", d) if isinstance(d, dict) else {}
+t = o.get("accessToken") or ""
+if not t:
+    sys.exit(1)
+print(hashlib.sha256(t.encode()).hexdigest()[:16])
+PYEOF
+}
+
+AGE_FILE="$H/deploy/secrets/claude-credentials.json.age"
+if [ -n "${AGE_PRIVATE_KEY:-}" ] && [ -f "$AGE_FILE" ] && command -v age >/dev/null 2>&1; then
+    DRILL_KEY=$(mktemp); chmod 600 "$DRILL_KEY"
+    printf '%s\n' "$AGE_PRIVATE_KEY" > "$DRILL_KEY"
+    DRILL_OUT=$(mktemp); chmod 600 "$DRILL_OUT"
+    if age -d -i "$DRILL_KEY" "$AGE_FILE" > "$DRILL_OUT" 2>/dev/null; then
+        DRILL_SHA=$(tok_digest "$DRILL_OUT" || true)
+        LIVE_SHA=$(tok_digest "$CRED" || true)
+        if [ -z "$DRILL_SHA" ]; then
+            echo "[entrypoint] age drill: FAIL the ciphertext opened but does not parse" >&2
+        elif [ -n "$LIVE_SHA" ] && [ "$DRILL_SHA" != "$LIVE_SHA" ]; then
+            echo "[entrypoint] age drill: ok, but it holds a different token than the one in use (age=$DRILL_SHA live=$LIVE_SHA)"
+        else
+            echo "[entrypoint] age drill: ok, opens to the token in use ($DRILL_SHA)"
+        fi
+    else
+        echo "[entrypoint] age drill: FAIL AGE_PRIVATE_KEY does not open $AGE_FILE" >&2
+    fi
+    rm -f "$DRILL_KEY" "$DRILL_OUT"
+elif [ -f "$AGE_FILE" ]; then
+    echo "[entrypoint] age drill: skipped (no AGE_PRIVATE_KEY on this platform)"
+fi
+
 "$H/.venv/bin/hermes" --version || true
 
 # HERMES_GATEWAY_AUTOSTART is the cutover switch, and it only means something

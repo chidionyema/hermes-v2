@@ -133,3 +133,4 @@ age-key.txt
 hermes-age-key.txt
 *.age.key
 *age-key*.txt
+.clean_shutdown
