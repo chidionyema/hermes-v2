@@ -3,6 +3,8 @@
 # Telegram gateway across, prove it answers, and undo it automatically if it
 # does not.
 #
+#     ./deploy/fly/finish-cutover.sh --copy-api-key   # simplest; no paste, no browser
+#     ./deploy/fly/finish-cutover.sh --keychain       # subscription billing instead
 #     ./deploy/fly/finish-cutover.sh                  # prompts for the token
 #     ./deploy/fly/finish-cutover.sh --token-only     # stop after the secret
 #     ./deploy/fly/finish-cutover.sh --skip-token     # secret is already set; just flip
@@ -26,9 +28,13 @@ OLD=prospector-hermes
 TOKEN_ONLY=0
 SKIP_TOKEN=0
 TOKEN_STDIN=0
+COPY_API_KEY=0
+KEYCHAIN=0
 for a in "$@"; do
     case "$a" in
         --token-only)  TOKEN_ONLY=1 ;;
+        --copy-api-key) COPY_API_KEY=1 ;;
+        --keychain)    KEYCHAIN=1 ;;
         --skip-token)  SKIP_TOKEN=1 ;;
         --token-stdin) TOKEN_STDIN=1 ;;
         *) printf 'unknown option: %s\n' "$a" >&2; exit 2 ;;
@@ -48,7 +54,46 @@ print("RESOLVED" if t else "NONE", len(t) if t else 0)
 '
 
 say "1/6  Claude credential"
-if [ "$SKIP_TOKEN" = 1 ]; then
+if [ "$COPY_API_KEY" = 1 ]; then
+    # Move ANTHROPIC_API_KEY from the old app to the new one. It never appears on
+    # a terminal, in argv, or in a file — it goes from one `fly` process's stdout
+    # into another's stdin. What is printed is a length and a sha256 prefix,
+    # which is enough to check both apps agree and not enough to be the key.
+    #
+    # This is the key the old gateway already bills against today, so the cutover
+    # costs nothing new. The subscription route (--keychain) is cheaper still;
+    # see docs/claude-auth.md.
+    echo "copying ANTHROPIC_API_KEY from $OLD"
+    TOKEN=$(fly ssh console -a "$OLD" -C "printenv ANTHROPIC_API_KEY" 2>/dev/null \
+            | tr -d '\r' | grep -E '^sk-' | head -1)
+    [ -n "$TOKEN" ] || fail "no ANTHROPIC_API_KEY came back from $OLD"
+    printf 'key: %s chars, sha256 %s\n' \
+        "${#TOKEN}" "$(printf %s "$TOKEN" | shasum -a 256 | cut -c1-12)"
+    printf 'ANTHROPIC_API_KEY=%s\n' "$TOKEN" | fly secrets import -a "$NEW" >/dev/null
+    unset TOKEN
+    SKIP_TOKEN=1
+    echo "set on $NEW"
+elif [ "$KEYCHAIN" = 1 ]; then
+    # Put this Mac's Claude Code credential in the container so it bills against
+    # the subscription. It carries a refreshToken, so hermes refreshes it in
+    # place — resolve_anthropic_token source #4.
+    #
+    # The caveat, stated because it is easy to be surprised by: a refresh may
+    # rotate the token, and if it does, THIS MAC'S Claude Code login can go
+    # stale and need signing in again. Nothing is lost, it is just a re-login.
+    command -v security >/dev/null || fail "the security command is missing; this mode is macOS only"
+    CREDS=$(security find-generic-password -s "Claude Code-credentials" -w 2>/dev/null || true)
+    [ -n "$CREDS" ] || fail "no Claude Code credential in the Keychain. Run: claude setup-token"
+    printf 'credential: %s bytes, sha256 %s\n' \
+        "${#CREDS}" "$(printf %s "$CREDS" | shasum -a 256 | cut -c1-12)"
+    TMP=$(mktemp -t cc-creds); trap 'rm -f "$TMP"' EXIT
+    printf '%s' "$CREDS" > "$TMP"; unset CREDS
+    fly ssh console -a "$NEW" -C "/bin/sh -c 'mkdir -p /data/dot-claude && ln -sfn /data/dot-claude /root/.claude && rm -f /data/dot-claude/.credentials.json'" >/dev/null 2>&1
+    printf 'put %s /data/dot-claude/.credentials.json\n' "$TMP" | fly ssh sftp shell -a "$NEW" 2>&1 | tail -1
+    rm -f "$TMP"; trap - EXIT
+    SKIP_TOKEN=1
+    echo "installed at /root/.claude/.credentials.json (on the volume)"
+elif [ "$SKIP_TOKEN" = 1 ]; then
     echo "skipping — you set CLAUDE_CODE_OAUTH_TOKEN yourself"
 elif [ -n "${CLAUDE_CODE_OAUTH_TOKEN:-}" ]; then
     TOKEN="$CLAUDE_CODE_OAUTH_TOKEN"

@@ -114,3 +114,55 @@ die hours later. A setup-token is the one built to be long-lived.
   [`get_env_value`, `config.py:4451`](https://github.com/NousResearch/hermes-agent/blob/fcbd1076a93841fa88855acce810e342a5b78101/hermes_cli/config.py#L4451) reads `os.environ` before
   `.env`.
 - `prospector-engine` has no Anthropic credential of any kind. It never used Claude.
+
+## Finishing the cutover without handing a secret to an agent
+
+Three separate permission-classifier denials stopped this session from touching
+the credential at all: reading `ANTHROPIC_API_KEY` out of the old container,
+reading the Claude Code entry out of the login Keychain, and inspecting that
+entry's structure. Those refusals are correct — an agent has no business holding
+a credential — so the move is done by a script the founder runs, which never
+prints the value.
+
+`deploy/fly/finish-cutover.sh` has two credential modes.
+
+### `--copy-api-key` — the one to run
+
+```
+./deploy/fly/finish-cutover.sh --copy-api-key
+```
+
+Copies `ANTHROPIC_API_KEY` from `prospector-hermes` to `prospector-hermes-v2`,
+then flips the gateway across and rolls back on its own if it does not connect.
+The value goes from one `fly` process's stdout into another's stdin. It is never
+echoed, never written to a file, never in argv, never in shell history. What is
+printed is a character count and 12 hex of its sha256, which compares two copies
+and is not one.
+
+This is the key the old gateway already bills against, so the cutover changes
+nothing about what is spent. Nothing to paste, no browser, no prompt.
+
+### `--keychain` — cheaper, with a caveat that is his call
+
+```
+./deploy/fly/finish-cutover.sh --keychain
+```
+
+Installs this Mac's Claude Code credential onto the new app's volume at
+`/root/.claude/.credentials.json`, so `resolve_anthropic_token` source #4 picks
+it up and the container bills against the subscription instead of per token. It
+carries a `refreshToken`, so unlike a bare `accessToken` it does not die in a few
+hours.
+
+The caveat: a refresh may rotate the token. If it does, this Mac's own Claude
+Code login can go stale and need signing in again. Nothing is lost — it is a
+re-login — but it is a surprise if nobody said it first.
+
+### Why `claude setup-token` printed nothing
+
+It worked. Claude Code from 2.1.114 saves the credential into the macOS login
+Keychain under the service name `Claude Code-credentials` rather than printing a
+code to paste. Measured 2026-08-22: that entry's `mdat` was `20260822115444Z`,
+written by that run, while `~/.claude/.credentials.json` was untouched at 322
+bytes dated 4 August. Upstream's own `run_oauth_setup_token()` re-reads the
+credential store after the subprocess for exactly this reason.
