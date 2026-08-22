@@ -113,3 +113,15 @@ bin/tirith
 # The skill curator's own bookmark: when it last ran, how long it took. Written
 # by the agent on every pass, so tracking it makes every run a diff.
 skills/.curator_state
+
+# The scheduler's own bookkeeping, swept in by the same `git add -A` as the rest.
+# Nothing in the repo reads either of them. Only .jobs files belong under cron/,
+# and two of the three are rendered by bin/render so they are ignored above.
+cron/usage_audit.jsonl
+cron/catch_up_occurrences
+cron/jobs.json
+cron/executions.db
+cron/output/
+cron/.fire-*.lock
+cron/.jobs.lock
+cron/.tick.lock

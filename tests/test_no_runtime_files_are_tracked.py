@@ -30,6 +30,12 @@ RUNTIME = [
     re.compile(r"(^|/)logs/"),
     re.compile(r"(^|/)cache/"),
     re.compile(r"ticker_"),
+    # Found 2026-08-22, by the same `git add -A`: the scheduler's own bookkeeping.
+    re.compile(r"(^|/)usage_audit\.jsonl$"),
+    re.compile(r"(^|/)catch_up_occurrences$"),
+    re.compile(r"(^|/)jobs\.json$"),
+    re.compile(r"(^|/)output/"),
+    re.compile(r"(^|/)\.curator_state$"),
 ]
 
 
@@ -58,8 +64,29 @@ def test_gitignore_covers_what_the_gateway_writes():
         "cron/ticker_heartbeat",
         "cron/ticker_last_success",
         "state/",
+        "cron/usage_audit.jsonl",
+        "cron/catch_up_occurrences",
     ):
         assert name in ignored, f".gitignore does not cover {name}"
+
+
+def test_only_job_files_are_tracked_under_cron():
+    """The naming rule, so the next runtime file has nowhere to hide.
+
+    cron/ is the scheduler's working directory: locks, sqlite, heartbeats, the
+    usage ledger, per-fire output. The only things in it that belong to the repo
+    are the .jobs files that describe what to schedule, and two of those three
+    are rendered by bin/render and therefore ignored.
+
+    Listing names one at a time loses a race against a program that writes new
+    ones. This states the shape instead.
+    """
+    stray = [p for p in tracked() if p.startswith("cron/") and not p.endswith(".jobs")]
+    assert not stray, (
+        "only .jobs files belong under cron/. These are the scheduler's:\n  "
+        + "\n  ".join(stray)
+        + "\nUntrack with: git rm --cached <path>, then add it to .gitignore."
+    )
 
 
 def test_no_compiled_binary_is_tracked():
