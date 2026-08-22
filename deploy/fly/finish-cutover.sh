@@ -3,8 +3,15 @@
 # Telegram gateway across, prove it answers, and undo it automatically if it
 # does not.
 #
-#     ./deploy/fly/finish-cutover.sh
+#     ./deploy/fly/finish-cutover.sh                  # prompts for the token
 #     ./deploy/fly/finish-cutover.sh --token-only     # stop after the secret
+#     ./deploy/fly/finish-cutover.sh --skip-token     # secret is already set; just flip
+#     claude setup-token | ./deploy/fly/finish-cutover.sh --token-stdin
+#
+# It needs a real terminal to prompt in. Run through a wrapper that gives it no
+# TTY — Claude Code's `!` runner, a CI step, `nohup` — and it now says so and
+# exits instead of blocking forever on a prompt nobody can see. Measured
+# 2026-08-22: the first run hung exactly there.
 #
 # The token is read from a silent prompt. It is never echoed, never written to a
 # file, never passed on a command line where `ps` could read it, and never put
@@ -17,7 +24,16 @@ set -euo pipefail
 NEW=prospector-hermes-v2
 OLD=prospector-hermes
 TOKEN_ONLY=0
-[ "${1:-}" = "--token-only" ] && TOKEN_ONLY=1
+SKIP_TOKEN=0
+TOKEN_STDIN=0
+for a in "$@"; do
+    case "$a" in
+        --token-only)  TOKEN_ONLY=1 ;;
+        --skip-token)  SKIP_TOKEN=1 ;;
+        --token-stdin) TOKEN_STDIN=1 ;;
+        *) printf 'unknown option: %s\n' "$a" >&2; exit 2 ;;
+    esac
+done
 
 say()  { printf '\n\033[1m== %s\033[0m\n' "$*"; }
 fail() { printf '\033[31mFAILED: %s\033[0m\n' "$*" >&2; exit 1; }
@@ -32,10 +48,15 @@ print("RESOLVED" if t else "NONE", len(t) if t else 0)
 '
 
 say "1/6  Claude credential"
-if [ -n "${CLAUDE_CODE_OAUTH_TOKEN:-}" ]; then
+if [ "$SKIP_TOKEN" = 1 ]; then
+    echo "skipping — you set CLAUDE_CODE_OAUTH_TOKEN yourself"
+elif [ -n "${CLAUDE_CODE_OAUTH_TOKEN:-}" ]; then
     TOKEN="$CLAUDE_CODE_OAUTH_TOKEN"
     echo "using CLAUDE_CODE_OAUTH_TOKEN from this shell"
-else
+elif [ "$TOKEN_STDIN" = 1 ]; then
+    IFS= read -r TOKEN || true
+    TOKEN=$(printf %s "$TOKEN" | tr -d '[:space:]')
+elif { exec 3</dev/tty; } 2>/dev/null; then
     cat <<'HOWTO'
 Run this in another terminal, then paste the token it prints:
 
@@ -46,21 +67,47 @@ it over ANTHROPIC_API_KEY (resolve_anthropic_token, source #2 beats #3), so the
 container bills against the subscription and not per token.
 HOWTO
     printf 'token (input hidden): '
-    read -rs TOKEN
+    IFS= read -rs TOKEN <&3
+    exec 3<&-
     printf '\n'
+else
+    cat >&2 <<'NOTTY'
+This has no terminal to prompt in, so it will not ask — it would hang where you
+could not see it.
+
+Pick one:
+
+  1. Run it in a real terminal window:
+         cd ~/dev/code/hermes-v2 && ./deploy/fly/finish-cutover.sh
+
+  2. Set the secret yourself, then let this do the rest:
+         claude setup-token
+         fly secrets set CLAUDE_CODE_OAUTH_TOKEN=<paste> -a prospector-hermes-v2
+         ./deploy/fly/finish-cutover.sh --skip-token
+
+  3. Pipe it in:
+         ./deploy/fly/finish-cutover.sh --token-stdin   # then paste, then ctrl-D
+NOTTY
+    exit 2
 fi
-[ -n "$TOKEN" ] || fail "no token given"
-case "$TOKEN" in
-    sk-ant-*) ;;
-    *) printf 'that does not start with sk-ant-. continue anyway? [y/N] '
-       read -r yn; [ "$yn" = "y" ] || fail "stopped by you" ;;
-esac
-printf 'token: %s chars, sha256 %s\n' \
-    "${#TOKEN}" "$(printf %s "$TOKEN" | shasum -a 256 | cut -c1-12)"
+
+if [ "$SKIP_TOKEN" = 0 ]; then
+    [ -n "${TOKEN:-}" ] || fail "no token given"
+    case "$TOKEN" in
+        sk-ant-*) ;;
+        *) fail "that does not start with sk-ant-. Nothing sent. Re-run with the setup-token." ;;
+    esac
+    printf 'token: %s chars, sha256 %s\n' \
+        "${#TOKEN}" "$(printf %s "$TOKEN" | shasum -a 256 | cut -c1-12)"
+fi
 
 say "2/6  put it on $NEW"
-printf 'CLAUDE_CODE_OAUTH_TOKEN=%s\n' "$TOKEN" | fly secrets import -a "$NEW" >/dev/null
-unset TOKEN
+if [ "$SKIP_TOKEN" = 1 ]; then
+    echo "skipping — already on the app"
+else
+    printf 'CLAUDE_CODE_OAUTH_TOKEN=%s\n' "$TOKEN" | fly secrets import -a "$NEW" >/dev/null
+    unset TOKEN
+fi
 fly secrets list -a "$NEW" | awk '$1=="CLAUDE_CODE_OAUTH_TOKEN"{print "  on the app:",$1}'
 
 say "3/6  does the container resolve it?"
