@@ -74,6 +74,26 @@ git fetch origin main && git merge origin/main --no-edit
 Merge, never rebase, never force push. A stale branch fails as somebody else's
 bug and you then debug a fiction.
 
+## 4b. If you wrote a test, say which rung
+
+Founder ruling, 2026-08-22, binding in every repo. Before writing a test, ask in
+order, and stop at the first yes:
+
+1. **A type.** Can this be unrepresentable instead? Then write no test at all.
+2. **A property.** One property beats ten examples, and it survives a refactor.
+3. **A differential case** against the old path. Delete it when the old path goes.
+4. **An incident test**, named for the bug: `test_incident_0042_pool_saturation`.
+
+If none of the four apply, write nothing and say so in the PR.
+
+Delete on sight: example-based unit tests of orchestration, a test named for a
+function rather than a rule, a mock of our own internals, and anything that
+rewrites its own expected output. A test that regenerates what it asserts always
+agrees, which is the same as having no oracle.
+
+State the rung in the PR body. A PR that adds tests without naming the rung gets
+sent back.
+
 ## 5. The PR
 
 ```bash
@@ -89,6 +109,10 @@ Closes #<n>
 ```
 <the failing case, then the same command passing>
 ```
+
+## Tests
+
+Rung <1 type | 2 property | 3 differential | 4 incident | none, because ...>
 
 ## What I did not do
 <scope you deliberately left>

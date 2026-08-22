@@ -30,8 +30,10 @@ print(d['estate']['name'], len(d['services']))
 row "estate.yaml describes an estate" "$?" "$D"
 
 # 2. no generated file has drifted from its template
-OUT="$("$PY" bin/render --check 2>&1 | tail -1)"
-row "generated files match templates" "$?" "$OUT"
+RAW="$("$PY" bin/render --check 2>&1)"; RC=$?
+if [ $RC = 0 ]; then OUT="$(echo "$RAW" | grep -o '[0-9]* checked')"
+else OUT="$(echo "$RAW" | sed -n '2,4p' | tr -s ' \n' ' ')"; fi
+row "generated files match templates" "$RC" "$OUT"
 
 # 3. the agent runs, and it is the pinned build
 V="$(./bin/hermes --version 2>/dev/null | grep -o 'Hermes Agent v[0-9.]*' | head -1)"
@@ -42,13 +44,30 @@ SHA_HAVE="$(git -C hermes-agent rev-parse HEAD 2>/dev/null)"
 [ "$SHA_WANT" = "$SHA_HAVE" ]
 row "agent is the pinned commit" "$?" "${SHA_HAVE:0:10} (want ${SHA_WANT:0:10})"
 
+# 3b. the python bound install enforces still matches what the agent demands.
+#     These drift silently: the agent bumps its ceiling, install keeps picking
+#     an interpreter pip then refuses. It cost one clean install to find.
+WANT="$(grep -m1 '^requires-python' hermes-agent/pyproject.toml 2>/dev/null | tr -d ' "')"
+HAVE_MIN="$(grep -m1 '^PYTHON_MIN=' install | cut -d'"' -f2)"
+HAVE_MAX="$(grep -m1 '^PYTHON_MAX_EXCL=' install | cut -d'"' -f2)"
+case "$WANT" in
+  *">=$HAVE_MIN,<$HAVE_MAX"*) RC=0 ;;
+  "")                         RC=0; WANT="agent not installed, nothing to compare" ;;
+  *)                          RC=1 ;;
+esac
+row "install and agent agree on python" "$RC" "install: >=$HAVE_MIN,<$HAVE_MAX  agent: ${WANT#requires-python=}"
+
+VENV_V="$(.venv/bin/python -c 'import sys;print("%d.%d"%sys.version_info[:2])' 2>/dev/null)"
+[ -n "$VENV_V" ]
+row "the venv python is in range" "$?" "${VENV_V:-no venv}"
+
 # 4. it points at this home, not some other estate
 HOME_SEEN="$(./bin/hermes --version 2>/dev/null | sed -n 's/^Install directory: //p')"
 case "$HOME_SEEN" in "$H"*) true ;; *) false ;; esac
 row "agent home is this directory" "$?" "${HOME_SEEN:-unknown}"
 
 # 5. every model configured is one we can price
-OUT="$("$PY" bin/check-models-priced.py 2>&1 | tail -1)"
+OUT="$("$PY" bin/check-models-priced.py 2>&1 | tail -1 | cut -c1-40)"
 row "every model has a price" "$?" "$OUT"
 
 # 6. a usable Anthropic credential exists, from either of the two places it
