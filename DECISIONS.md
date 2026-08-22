@@ -53,3 +53,27 @@ worse than no backend, because a fallback chain is only as useful as its
 slowest refusal. Anything added to the cascade carries a time cap and is
 removed if it cannot honour it. Do not add Gemini back without a measurement
 showing it answers.
+
+---
+
+## 2026-08-22 — All repos live at ~/dev/code/. One root, no others.
+
+**The ruling, in the founder's words:** all repos at `~/dev/code/`. No more
+`~/Documents/` or `~/code/` roots.
+
+Three checkouts of hermes-v2 existed at once today: `~/Documents/code/hermes-v2`,
+`~/dev/code/hermes-v2`, and briefly `~/code/hermes-v2`. One session archived the
+Documents copy to `hermes-v2.ARCHIVED.20260822` while another was still working
+in it. Nothing was lost, because the work was already pushed, but that was luck
+and not design: the recovery depended on `git rev-list --count` returning 0.
+
+Sessions cannot see each other. Two copies of one repo is two answers to "what
+is the current state", and the second copy is discovered by tripping over it.
+
+**What this means in practice.** Clone into `~/dev/code/<repo>`. Before starting
+work, confirm you are in it. A checkout found anywhere else is stale by
+definition: push anything unique, then retire it. Never create a new root
+because the one you wanted was missing.
+
+`~/Documents/code/hermes-v2.ARCHIVED.20260822` holds no unique commits and is
+retired.
