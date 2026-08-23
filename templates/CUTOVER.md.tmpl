@@ -84,3 +84,13 @@ pgrep -fl 'hermes.*gateway' || echo "nothing polling - safe to start"
 
 At any step: stop the new gateway, start the old one, done. The old estate is
 untouched at `~/.hermes` on `main` and nothing in this build writes to it.
+
+## Claude credentials — read this before flipping the gateway
+
+The gateway does not run without an Anthropic token, and the one it used on the laptop cannot
+travel to a server. It was borrowed from the macOS Keychain, and `auth.json` carries a fingerprint
+of it rather than the token itself. The fix is a `claude setup-token` in `CLAUDE_CODE_OAUTH_TOKEN`.
+
+Full chain, with links pinned to the exact upstream commit: [docs/claude-auth.md](docs/claude-auth.md)
+
+One command to finish the cutover: `./deploy/fly/finish-cutover.sh`

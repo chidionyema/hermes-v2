@@ -1,0 +1,33 @@
+# hermes-v2 on Fly. Addresses and sizes only; every behaviour is in the image.
+#
+# A SECOND app, not a replacement of {{ hermes.previous_app }}. The old estate runs eight
+# supervised services -- lease, coordinator, cockpit, otto-server, gateway, progress,
+# rsi, submodule-backup -- and hermes-v2 provides an equivalent for exactly one of
+# them. Deploying over it would take the other seven down with no replacement, so the
+# two run side by side until each service has somewhere to land.
+app = "{{ hermes.app }}"
+primary_region = "lhr"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  HERMES_HOME = "/opt/hermes-v2"
+  # ONE Telegram long-poller estate-wide. {{ hermes.previous_app }} holds the token today and
+  # this stays 0 until the flip. Two pollers fight over getUpdates and messages go
+  # missing -- measured 2026-08-22, 208 conflicts in 2h41m (crew #15).
+  HERMES_GATEWAY_AUTOSTART = "0"
+
+[mounts]
+  source = "hermes_v2_state"
+  destination = "/data"
+
+# ONE machine, and that is not a preference. The gateway is a long poller against one
+# bot token and the kanban dispatcher holds a work queue on the volume. Two machines
+# means two pollers and two dispatchers taking the same job.
+[[vm]]
+  size = "shared-cpu-2x"
+  memory = "2gb"
+
+[deploy]
+  strategy = "immediate"

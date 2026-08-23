@@ -33,6 +33,15 @@ services:
 egress_extra: []
 
 # Where the services run. Used only to decide which CLI the skills reach for.
+# The Hermes deployment itself. These are the only place the new app, the app it
+# replaced, and the checkout that owns the offsite backups are named. Every script
+# that has to say one of them lives in templates/ and reads it from here, because a
+# repo that names one estate cannot be handed to another.
+hermes:
+  app: YOURESTATE-hermes-v2
+  previous_app: YOURESTATE-hermes
+  offsite_checkout: YOURESTATE-live
+
 platform:
   kind: fly            # fly | render | railway | heroku | none
   cli: flyctl

@@ -125,3 +125,20 @@ cron/output/
 cron/.fire-*.lock
 cron/.jobs.lock
 cron/.tick.lock
+
+# The age private key opens deploy/secrets/claude-credentials.json.age, which is
+# committed. Both in one repo is the same as committing the plaintext. The key
+# lives in ~/.config/hermes/age-key.txt and on the platform as a secret.
+age-key.txt
+hermes-age-key.txt
+*.age.key
+*age-key*.txt
+.clean_shutdown
+
+# Generated 2026-08-23, when they were moved into templates/ so this repo stops
+# naming one particular estate (REQ-125). Each reads its app names from estate.yaml.
+bin/backup-state.sh
+deploy/fly/finish-cutover.sh
+deploy/fly/fly.toml
+scripts/bootstrap-age-auth.sh
+scripts/check-age-drill.sh
