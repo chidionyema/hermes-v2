@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Move the Telegram gateway from prospector-hermes to prospector-hermes-v2,
+# Move the Telegram gateway from {{ hermes.previous_app }} to {{ hermes.app }},
 # prove it answers, and undo it automatically if it does not.
 #
 #     ./deploy/fly/finish-cutover.sh
@@ -29,8 +29,8 @@
 # the real fix (crew #18).
 set -euo pipefail
 
-NEW=prospector-hermes-v2
-OLD=prospector-hermes
+NEW={{ hermes.app }}
+OLD={{ hermes.previous_app }}
 
 LOG=${CUTOVER_LOG:-/tmp/finish-cutover.log}
 if [ -z "${CUTOVER_TEEING:-}" ]; then

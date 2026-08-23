@@ -144,6 +144,51 @@ case "$CRON_STATUS" in
     printf '  \033[33mIDLE\033[0m  %-34s %s\n' "the gateway is not running" "start it: ./bin/hermes gateway install" ;;
 esac
 
+# 11. can the agent actually reach the founder?
+# The rows above prove the gateway runs. None of them proves a word of it ever
+# reaches his phone. Every job shipped with deliver=local, which writes a file
+# in cron/output/ and tells nobody -- a scheduler talking to itself. This row
+# fails if any job goes back to local.
+LOCAL="$("$PY" - <<'PYEOF'
+import json
+d = json.load(open('cron/jobs.json'))
+jobs = d if isinstance(d, list) else d.get('jobs', d)
+if isinstance(jobs, dict): jobs = list(jobs.values())
+bad = [j.get('name') for j in jobs if j.get('deliver') in (None, '', 'local')]
+print(','.join(bad) if bad else '')
+PYEOF
+)"
+if [ -z "$LOCAL" ]; then
+  row "every job reaches the founder" 0 "all jobs deliver off-machine"
+else
+  row "every job reaches the founder" 1 "delivers to nobody: $LOCAL"
+fi
+
+# 12. is launchd running the plist that is on disk?
+# launchctl runs the definition it loaded at bootstrap, not the file. Edit the
+# plist without a bootout/bootstrap and the job keeps running the old one,
+# reports last-exit 0, and does nothing you asked for. A peer found eleven jobs
+# in that state today. This compares the loaded ProgramArguments against the
+# file and fails when they have drifted apart.
+LABEL="ai.architect.gateway"
+PLIST="$HOME/Library/LaunchAgents/$LABEL.plist"
+if [ ! -f "$PLIST" ]; then
+  row "launchd runs the plist on disk" 1 "no plist at $PLIST"
+elif ! launchctl print "gui/$(id -u)/$LABEL" >/dev/null 2>&1; then
+  row "launchd runs the plist on disk" 1 "$LABEL is not loaded"
+else
+  ON_DISK="$("$PY" -c 'import plistlib,sys
+print(chr(10).join(plistlib.load(open(sys.argv[1],"rb"))["ProgramArguments"]))' "$PLIST" 2>/dev/null)"
+  LOADED="$(launchctl print "gui/$(id -u)/$LABEL" 2>/dev/null \
+    | awk '/arguments = \{/{f=1;next} f&&/^[[:space:]]*\}/{exit} f' \
+    | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
+  if [ "$ON_DISK" = "$LOADED" ]; then
+    row "launchd runs the plist on disk" 0 "loaded definition matches the file"
+  else
+    row "launchd runs the plist on disk" 1 "loaded definition has drifted from $PLIST"
+  fi
+fi
+
 # --full: the whole requirement ledger, which is slower
 if [ "${1:-}" = "--full" ]; then
   printf '\n'

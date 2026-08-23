@@ -224,6 +224,11 @@ learns is never overwritten by a template.
 | `profiles/watch/egress-allowlist.txt` | WATCH's narrower allowlist. Logs are attacker-influenceable text, so this is a control, not a matter of the agent's judgement. |
 | `profiles/work/MEMORY.md` | The WORK lane's own memory, seeded the same way. |
 | `scripts/pulse.sh` | The identical pulse script where the scheduler looks for it. `cron create --script pulse.sh` resolves in `scripts/`; `bin/` is where a human types it. |
+| `bin/backup-state.sh` | Nightly `sqlite3 .backup` of `state.db`. It does not use `cp`, because copying a live database gives a torn file. The off-box copy is taken by the estate's own backup engine, which already holds the credentials and verifies every copy. |
+| `deploy/fly/finish-cutover.sh` | Moves the Telegram gateway to the new app, proves it answers, and undoes itself if it does not. It handles no secrets, cannot read one, and has no flag that takes one. |
+| `deploy/fly/fly.toml` | The app's own configuration: region, volume, and the process the machine runs. |
+| `scripts/bootstrap-age-auth.sh` | Encrypts the Claude credential to a file the repo can carry. Run once, by a person, on a machine that already holds the credential. |
+| `scripts/check-age-drill.sh` | Reads the drill's verdict off the volume from outside the app, and is the half that goes red. A log line in `fly logs` that nobody greps is not an alert. |
 | `skills/PLATFORM_GATING.md` | What each skill needs before it may run. A skill whose platform is missing must fail at the top, not half-run. |
 | `skills/consult/SKILL.md` | Ask a different model when you are stuck, and treat the answer as the weakest evidence you hold. Never acts on it unchecked. |
 | `skills/estate-map/SKILL.md` | Print the current shape of the estate — apps, health, repos, open board. Run before guessing where anything lives. |
@@ -253,6 +258,7 @@ are tracked, so what you see below is the source they come from.
 
 | path | why it exists |
 |---|---|
+| `.dockerignore` | Keeps the Docker build context to source. Without it the context is 1.2 GB, almost none of which the image needs, and every deploy pays for it. |
 | `.env.example` | Every credential the agent can use, each with an empty value and a line saying what it unlocks. `./install` copies it to `.env`, which is mode 600 and never tracked. |
 | `.gitignore` | What must never be committed: the generated files, the agent's runtime state, and `.env`. Most of its lines were added after a `git add -A` swept live state into a commit. |
 | `PINNED_VERSION` | The Hermes tag and commit this estate is known to work on. `bin/verify` fails when the running agent is a different commit, so an upgrade cannot happen by accident. |
@@ -262,7 +268,6 @@ are tracked, so what you see below is the source they come from.
 | `USER.md` | Who the agent works for and how to talk to them: tone, when to escalate, and the rule that nothing is done without the command output. Each lane overrides it. |
 | `bin/` | Everything a human types. One command per file, each with a single job, none of them generated. |
 | `bin/audit-append.sh` | Appends one line per tool call to a log kept outside this directory, so the record survives the estate being deleted. |
-| `bin/backup-state.sh` | Nightly `sqlite3 .backup` of `state.db`, gzipped and copied off-box. It does not use `cp`, because copying a live database gives a torn file. |
 | `bin/check-models-priced.py` | Refuses any model that is not in the shipped price table. A model nobody can price spends money invisibly. |
 | `bin/check-readme.py` | Fails when this README no longer lists every generated file, every cron job and every tracked path. It checks the half a machine can know. |
 | `bin/check-requirements.py` | Runs the `acceptance_cmd` of all 133 requirement rows and writes the result to `logs/requirements-status.json`. A row closes on exit 0, never on anyone asserting it. |
@@ -291,10 +296,22 @@ are tracked, so what you see below is the source they come from.
 | `config.yaml` | The agent's own settings: provider, default model, and `max_turns: 90` against an upstream default of 500, because a task needing more than 90 turns has gone wrong and should stop. |
 | `cron/` | The scheduler's working directory. Only `.jobs` files belong to the repo; everything else in here is written while it runs and is ignored. |
 | `cron/evolution.jobs` | The nightly skill-evolution schedule. Written by hand rather than rendered, because nothing in it varies from one estate to the next. |
+| `deploy/` | Everything needed to run this estate somewhere other than the founder's laptop. Nothing in here runs locally. |
+| `deploy/fly/` | The Fly target: image, entrypoint, config, and the two scripts that keep the fallback credential honest. |
+| `deploy/fly/Dockerfile` | The image. It carries the code and no state; everything that survives a deploy is on the volume the entrypoint links in. |
+| `deploy/fly/age-drill.sh` | Asks whether the age-encrypted fallback still opens and still holds the token in use. One implementation, two callers: once at boot and again whenever the live credential changes. |
+| `deploy/fly/age-drill-watch.sh` | Re-runs that drill while the container is up. It is spawned by the entrypoint and nowhere else, because `AGE_PRIVATE_KEY` is a platform secret that reaches the entrypoint and is invisible to anything attached later with `fly ssh console`. |
+| `deploy/fly/entrypoint.sh` | Links the writable names into the volume before starting the gateway. `HERMES_HOME` is the repo root, so a volume mounted over that root would hide the code; it mounts at `/data` instead. |
+| `deploy/secrets/` | Ciphertext only. A cleartext credential has never been in this directory and the encryption is what makes it safe to track. |
+| `deploy/secrets/claude-credentials.json.age` | The Claude credential encrypted to a key the platform holds, so a fresh container can decrypt it at boot without an agent ever carrying it. `scripts/bootstrap-age-auth.sh` writes it. |
 | `docs/` | Written for a person to read, not for the machine to parse. |
 | `docs/THE-ARCHITECT.md` | The spec. Every requirement row deep-links to the section it came from, so nothing is in this repo without a paragraph that asked for it. |
+| `docs/claude-auth.md` | The whole credential chain, with links pinned to the exact upstream commit: where identity comes from, why the laptop's token cannot travel, and what to do when the fallback goes stale. |
 | `docs/evidence/` | A screenshot of the passing run for each pull request, committed to the branch rather than uploaded to GitHub. Evidence stored in the vendor leaves with the vendor; an image in the branch travels out with the git bundle. |
 | `docs/evidence/pr-1/` | PR #1, the consult client. One frame holding every gate and one live consult: `render --check`, `check-readme`, `check-requirements §16`, `verify`, `verify-consult`, and `bin/consult` returning an answer with exit 0. The images inside are named after the moment they were captured, so they are not listed here one by one. |
+| `docs/evidence/pr-2/` | PR #2, the age-encrypted credential and its boot drill. Same rule as `pr-1/`: the images are named after the moment they were captured, so they are not listed one by one. |
+| `docs/incidents/` | What went wrong, what it cost, and the class of mistake it belonged to. Written after the platform is serving again, never during. |
+| `docs/incidents/2026-08-22-agent-as-secret-courier.md` | The incident that produced the rule that an agent never carries a secret between two systems, and the four refusals that named the class. |
 | `estate-evals/` | The incident record, and what each incident bought. |
 | `estate-evals/incidents.example.jsonl` | Worked examples of the incident format: symptom, root cause, the class of mistake, and the rung and artifact that now prevent it. Your own `incidents.jsonl` is not tracked. |
 | `estate.example.yaml` | The one file you edit, filled in and commented. Copy it, change it, and `./install --estate` sets a machine up without asking a single question. |
@@ -335,6 +352,13 @@ are tracked, so what you see below is the source they come from.
 | `templates/profiles/work/MEMORY.md.seed.tmpl` | WORK's own first memory, seeded the same way. |
 | `templates/scripts/` | The copy of a script at the path the scheduler resolves, which is not the path a human types. |
 | `templates/scripts/pulse.sh.tmpl` | The pulse script where `cron create --script` looks for it. `bin/sync-scripts.sh` keeps it identical to the one in `bin/`. |
+| `templates/bin/backup-state.sh.tmpl` | The nightly `state.db` backup, with the checkout that owns the offsite engine read from `estate.yaml` instead of written into the script. |
+| `templates/deploy/` | The deployment files that name an app, on the same rule as `templates/bin/`. |
+| `templates/deploy/fly/` | The Fly target's generated files. |
+| `templates/deploy/fly/finish-cutover.sh.tmpl` | The cutover, with the app it moves to and the app it moves from both read from `estate.yaml`. |
+| `templates/deploy/fly/fly.toml.tmpl` | The app configuration. The app name is the one value in it that cannot be shared between estates. |
+| `templates/scripts/bootstrap-age-auth.sh.tmpl` | Encrypting the Claude credential, with the target app read from `estate.yaml`. |
+| `templates/scripts/check-age-drill.sh.tmpl` | Reading the age drill's verdict, with the app to ask read from `estate.yaml`. |
 | `templates/skills/` | One directory per skill. A skill is a prompt with shell commands in it, so each is reviewed as code. |
 | `templates/skills/PLATFORM_GATING.md.tmpl` | What each skill needs before it may run. A skill whose platform is missing must fail at the top rather than half-run. |
 | `templates/skills/consult/` | The consult skill. |

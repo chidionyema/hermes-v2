@@ -25,7 +25,7 @@ SECRETS_DIR="$REPO_ROOT/deploy/secrets"
 OUT="$SECRETS_DIR/claude-credentials.json.age"
 KEY_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/hermes"
 KEY_FILE="$KEY_DIR/age-key.txt"
-APP="${HERMES_AUTH_APP:-prospector-hermes-v2}"
+APP="${HERMES_AUTH_APP:-{{ hermes.app }}}"
 
 die() { printf '\033[31mERROR: %s\033[0m\n' "$*" >&2; exit 1; }
 

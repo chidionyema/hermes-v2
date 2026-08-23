@@ -15,7 +15,7 @@
 #   4  SKIPPED   no key or no ciphertext on that app
 set -uo pipefail
 
-APP=${1:-${FLY_APP:-prospector-hermes-v2}}
+APP=${1:-${FLY_APP:-{{ hermes.app }}}}
 MAX_AGE=${MAX_AGE_SECONDS:-43200}   # 12h: the drill runs at least every 6h
 STATUS_PATH=${STATUS_PATH:-/data/age-drill.status}
 
