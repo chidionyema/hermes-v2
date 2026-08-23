@@ -1,0 +1,27 @@
+{
+  "_": "Every host and credential in this repository is either covered by a drill on the estate register or dismissed with a reason. drills/audit.py --ci enforces it on every pull request.",
+  "scan": {"exclude": []},
+  "hosts": {
+    "github.com":                  {"covered_by": "github-gone"},
+    "api.github.com":              {"covered_by": "github-gone"},
+    "api.telegram.org":            {"covered_by": "telegram-delivery"},
+    "console.anthropic.com":       {"covered_by": "no-anthropic"},
+    "platform.claude.com":         {"covered_by": "no-anthropic"},
+    "openrouter.ai":               {"dismissed": "a link in bin/cost-report.sh telling a person where to read a figure, and one example incident record; nothing calls it"},
+    "hermes-agent.nousresearch.com": {"dismissed": "the install URL printed in docs/THE-ARCHITECT.md for a component this repository does not install or call at runtime"},
+    "acme-api.fly.dev":            {"dismissed": "the example estate in README.md and estate.example.yaml; no such host exists"},
+    "acme-web.fly.dev":            {"dismissed": "the example estate in README.md and estate.example.yaml; no such host exists"}
+  },
+  "credentials": {
+    "ANTHROPIC_API_KEY":  {"covered_by": "no-anthropic"},
+    "ANTHROPIC_TOKEN":    {"covered_by": "no-anthropic"},
+    "GH_TOKEN":           {"covered_by": "github-gone"},
+    "GITHUB_TOKEN":       {"covered_by": "github-gone"},
+    "OPENAI_API_KEY":     {"dismissed": "named in .env.example as an alternative rail; unset, so losing it changes nothing that runs today"},
+    "GEMINI_API_KEY":     {"dismissed": "named in .env.example as an alternative rail; unset, so losing it changes nothing that runs today"},
+    "OPENROUTER_API_KEY": {"dismissed": "named in .env.example as an alternative rail; unset, so losing it changes nothing that runs today"},
+    "DOPPLER_TOKEN":      {"covered_by": "secret-rotation"},
+    "CONSULT_TOKEN":      {"covered_by": "secret-rotation"},
+    "S_KEY":              {"dismissed": "a local variable in install:133 holding a field split out of a line, not a credential name"}
+  }
+}
