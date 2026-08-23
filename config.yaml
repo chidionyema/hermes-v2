@@ -1,9 +1,9 @@
 model:
   provider: anthropic
-  default: claude-haiku-4-5
+  default: claude-sonnet-5
 fallback_providers:
   - provider: anthropic
-    model: claude-haiku-4-5
+    model: claude-sonnet-5
 agent:
   max_turns: 90
   context_window: 200000
@@ -38,7 +38,7 @@ command_allowlist:
   - execute_code
 _config_version: 38
 aux:
-  model: claude-haiku-4-5
+  model: claude-sonnet-5
   provider: anthropic
 limits:
   max_cost_usd_per_task: 5
