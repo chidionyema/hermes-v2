@@ -384,24 +384,6 @@ are tracked, so what you see below is the source they come from.
 | `tests/test_no_runtime_files_are_tracked.py` | Refuses a tracked file that the running agent writes. The repo and the agent's home are the same directory, so this is a live risk on every tick. |
 | `tests/test_spec_links_resolve.py` | Refuses a requirement whose `spec` link does not resolve to a real anchor in the spec, which is what keeps the traceability honest rather than decorative. |
 
-| `.dockerignore` | Keeps the build context at source only. Without it the context is 1.2 GB of caches, models and `.git`, and almost none of it is code the image needs. |
-| `deploy/` | Everything that puts this estate somewhere other than a laptop. Nothing in here runs during normal operation. |
-| `deploy/fly/` | The Fly deployment: image, config, entrypoint and the drills that prove the credential still opens. |
-| `deploy/fly/Dockerfile` | The image. Modelled on the old estate's proven build rather than upstream, which builds s6-overlay, Node, Playwright and a web UI that this deployment never runs. |
-| `deploy/fly/age-drill.sh` | Asks whether the encrypted credential still opens and still holds the token in use. One implementation, called at boot and again by the watcher. |
-| `deploy/fly/age-drill-watch.sh` | Re-runs the drill while the container is up. Spawned by the entrypoint because `AGE_PRIVATE_KEY` reaches only what the entrypoint started, never `fly ssh console`. |
-| `deploy/fly/entrypoint.sh` | Starts the container. Code and state share one directory, so the volume mounts at `/data` and the writable names are symlinked into it, which keeps the image immutable. |
-| `deploy/fly/finish-cutover.sh` | Moves the Telegram gateway to `prospector-hermes-v2`, proves it answers, and rolls itself back when it does not. It handles no secret and has no flag that takes one. |
-| `deploy/fly/fly.toml` | Addresses and sizes only. A second app beside `prospector-hermes`, never over it, because the old app still runs seven services this one does not replace. |
-| `deploy/secrets/` | Ciphertext the repo is allowed to carry. Nothing readable is ever committed here. |
-| `deploy/secrets/claude-credentials.json.age` | The Claude credential, encrypted to a key only the platform holds. The repo carries the ciphertext so the container can open it at boot without an agent ever handling the value. |
-| `docs/claude-auth.md` | How Hermes reaches Claude and why that broke on Fly. Every reference is pinned to the upstream commit this tree is checked out at, so the line numbers stay true. |
-| `docs/evidence/pr-2/` | Screenshots of the runs this pull request claims. Evidence committed to the branch leaves with the code, which an attachment store does not. |
-| `docs/incidents/` | One file per incident, written after the platform is serving again. Each names the class of mistake, not just the bug. |
-| `docs/incidents/2026-08-22-agent-as-secret-courier.md` | Four hours and six founder messages to move one file onto one volume, because the agent kept trying to be the thing that carried it. |
-| `scripts/` | Where the scheduler looks for a script. `bin/` is where a person types one; the two are deliberately separate. |
-| `scripts/bootstrap-age-auth.sh` | Encrypts the Claude credential to a file the repo can carry, so the container decrypts it at boot with a key the platform holds and no agent reads it. |
-| `scripts/check-age-drill.sh` | Reads the drill's verdict from outside the app and goes red on it. The drill runs inside the container; a log line nobody greps is not an alert. |
 <!-- /tracked -->
 
 ---
