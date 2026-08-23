@@ -21,7 +21,11 @@ STATE="$H/logs/pulse.state"
 mkdir -p "$H/logs"
 
 probe() {  # url -> prints "code" or "000"
-  curl -s -o /dev/null -w '%{http_code}' --max-time 10 "$1" 2>/dev/null || echo "000"
+  # curl already prints 000 through -w when nothing answered, and it also exits
+  # non-zero, so an `|| echo 000` fallback appends a second one and the caller
+  # sees 000000. Take what -w printed and substitute only if it printed nothing.
+  code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "$1" 2>/dev/null)"
+  printf '%s' "${code:-000}"
 }
 
 healthy() {  # code expect -> 0 if the server is answering for itself
