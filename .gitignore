@@ -142,3 +142,4 @@ deploy/fly/finish-cutover.sh
 deploy/fly/fly.toml
 scripts/bootstrap-age-auth.sh
 scripts/check-age-drill.sh
+lsp/node_modules/
