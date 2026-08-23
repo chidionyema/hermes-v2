@@ -23,6 +23,20 @@ agent:
   # starts guessing at what is running.
   context_window: 200000
 
+# How much of a context file the agent may read before it starts throwing the
+# middle away. Left unset, hermes derives it from the window: 200000 x 4 chars
+# per token x 0.06 = 48000, and ~/AGENTS.md is 74037. Measured on the founder's
+# message at 21:37 on 2026-08-23:
+#   "Context file AGENTS.md TRUNCATED: 73802 chars exceeds limit of 48000"
+# The truncator keeps the first 80% and the last 20%, so what it drops is the
+# middle: the bodies of LAW 12 through LAW 30. The agent kept the index of every
+# law and lost the text of half of them, which is the worst of both, because
+# nothing in the prompt said the rules were incomplete.
+# 96000 fits the file whole with room to grow. It costs about 6,500 extra input
+# tokens a turn, which on claude-haiku-4-5 at $1/MTok is under two dollars a
+# month at the current rate of 400 turns a day.
+context_file_max_chars: 96000
+
 approvals:
   # Smart approvals: the agent asks before anything it cannot undo, and does not
   # ask about anything it can. Spec §2.
