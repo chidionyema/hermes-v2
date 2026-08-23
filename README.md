@@ -309,11 +309,15 @@ are tracked, so what you see below is the source they come from.
 | `docs/` | Written for a person to read, not for the machine to parse. |
 | `docs/THE-ARCHITECT.md` | The spec. Every requirement row deep-links to the section it came from, so nothing is in this repo without a paragraph that asked for it. |
 | `docs/claude-auth.md` | The whole credential chain, with links pinned to the exact upstream commit: where identity comes from, why the laptop's token cannot travel, and what to do when the fallback goes stale. |
+| `docs/demo/` | One page per feature showing it running, with real pasted output under the command that produced it. Written for the founder, who did not build the thing and should not have to run it to find out whether it works. |
+| `docs/demo/the-architect.md` | The gateway doing all three of its jobs, from a real run: `bin/verify` at 17 passed 0 failed, the two live sockets to the address `api.telegram.org` resolves to, a model call, and a message delivered off this machine. |
 | `docs/evidence/` | A screenshot of the passing run for each pull request, committed to the branch rather than uploaded to GitHub. Evidence stored in the vendor leaves with the vendor; an image in the branch travels out with the git bundle. |
 | `docs/evidence/pr-1/` | PR #1, the consult client. One frame holding every gate and one live consult: `render --check`, `check-readme`, `check-requirements §16`, `verify`, `verify-consult`, and `bin/consult` returning an answer with exit 0. The images inside are named after the moment they were captured, so they are not listed here one by one. |
 | `docs/evidence/pr-2/` | PR #2, the age-encrypted credential and its boot drill. Same rule as `pr-1/`: the images are named after the moment they were captured, so they are not listed one by one. |
 | `docs/incidents/` | What went wrong, what it cost, and the class of mistake it belonged to. Written after the platform is serving again, never during. |
 | `docs/incidents/2026-08-22-agent-as-secret-courier.md` | The incident that produced the rule that an agent never carries a secret between two systems, and the four refusals that named the class. |
+| `docs/onboarding/` | One page per feature answering what it is for, what it costs, what it touches, where it lives and how to stop it. The off switch is one command, because that is the only reason anyone trusts a thing to run unattended. |
+| `docs/onboarding/the-architect.md` | The gateway: why it is the component whose failure is different from every other, what a turn costs, the launchd label that stops it, and the three failures that have actually happened, including going deaf when a second process takes the Telegram token. |
 | `estate-evals/` | The incident record, and what each incident bought. |
 | `estate-evals/incidents.example.jsonl` | Worked examples of the incident format: symptom, root cause, the class of mistake, and the rung and artifact that now prevent it. Your own `incidents.jsonl` is not tracked. |
 | `estate.example.yaml` | The one file you edit, filled in and commented. Copy it, change it, and `./install --estate` sets a machine up without asking a single question. |
