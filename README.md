@@ -260,6 +260,8 @@ are tracked, so what you see below is the source they come from.
 |---|---|
 | `.dockerignore` | Keeps the Docker build context to source. Without it the context is 1.2 GB, almost none of which the image needs, and every deploy pays for it. |
 | `.env.example` | Every credential the agent can use, each with an empty value and a line saying what it unlocks. `./install` copies it to `.env`, which is mode 600 and never tracked. |
+| `.estate/` | Standing decisions about this repository that a machine has to be able to find. One file per decision, and deleting the file withdraws the decision. |
+| `.estate/public-ciphertext-ok` | Records that committing age ciphertext to a public remote is deliberate, names what is committed and what opens it, and states the cost accepted: a public git object is permanent, so the credential inside is treated as rotatable. |
 | `.gitignore` | What must never be committed: the generated files, the agent's runtime state, and `.env`. Most of its lines were added after a `git add -A` swept live state into a commit. |
 | `PINNED_VERSION` | The Hermes tag and commit this estate is known to work on. `bin/verify` fails when the running agent is a different commit, so an upgrade cannot happen by accident. |
 | `DECISIONS.md` | Rulings that outlive the pull request that caused them. A decision here is binding until a later entry overrides it, so nobody relitigates one in a review. |

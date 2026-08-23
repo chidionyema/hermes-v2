@@ -116,13 +116,22 @@ for s in d['services']:
     code = subprocess.run(
         ['curl','-s','-o','/dev/null','-w','%{http_code}','--max-time','12', s['url']],
         capture_output=True, text=True).stdout.strip()
-    alive = code[:1] in ('2','3') or code in ('401','403','404')
-    print(f"        {s['key']:<12} {code:<5} {'answering' if alive else 'NOT ANSWERING'}  {s['url']}")
-    if not alive:
+    answering = code[:1] in ('2','3') or code in ('401','403','404')
+    # expect: stopped means the founder turned it off. Silence is the pass and
+    # an answer is the fault, because a machine that woke up is spending money
+    # nobody authorised.
+    if s.get('expect') == 'stopped':
+        ok = not answering
+        said = 'stopped, as ordered' if ok else 'AWAKE, AND SHOULD NOT BE'
+    else:
+        ok = answering
+        said = 'answering' if ok else 'NOT ANSWERING'
+    print(f"        {s['key']:<12} {code:<5} {said}  {s['url']}")
+    if not ok:
         bad.append(s['key'])
 sys.exit(1 if bad else 0)
 PY
-row "every service answers" "$?" ""
+row "every service is as ordered" "$?" ""
 
 # 9. the schedule exists
 JOBS="$(./bin/hermes cron list 2>/dev/null | grep -cE '^  [0-9a-f]{12} \[')"

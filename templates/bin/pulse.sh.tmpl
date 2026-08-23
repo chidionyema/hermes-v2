@@ -28,6 +28,10 @@ healthy() {  # code expect -> 0 if the server is answering for itself
   case "$2" in
     2xx) case "$1" in 2*) return 0 ;; *) return 1 ;; esac ;;
     3xx) case "$1" in 3*) return 0 ;; *) return 1 ;; esac ;;
+    # A service deliberately turned off. Silence is correct here and an answer
+    # is the fault, because a machine that woke up is spending money nobody
+    # authorised. Inverted on purpose.
+    stopped) case "$1" in 000|5*) return 0 ;; *) return 1 ;; esac ;;
     *)   case "$1" in
            2*|3*|401|403|404) return 0 ;;   # answering, even if gated or missing
            *) return 1 ;;                    # 5xx, 000: not answering
