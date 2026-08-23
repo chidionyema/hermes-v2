@@ -17,7 +17,7 @@ ln -sf "state.db.$STAMP.gz" "$H/backups/state.db.latest"
 # disk is not a second copy.
 #
 # This does not upload anything itself. The estate already runs one backup engine
-# (prospector-live ops/automations/offsite_backup.py, launchd com.prospector.offsite-backup,
+# ({{ hermes.offsite_checkout }} ops/automations/offsite_backup.py, launchd com.{{ estate.name }}.offsite-backup,
 # nightly at 03:50) which holds the R2 credentials, verifies every copy with PRAGMA
 # integrity_check before it counts, prunes to a retention set in git, and grades the
 # freshness of the result from a second always-on host. state.db is declared there as the
@@ -27,7 +27,7 @@ ln -sf "state.db.$STAMP.gz" "$H/backups/state.db.latest"
 # The gist branch that used to be here is gone. A gist is a text-sharing surface with no
 # integrity check, no retention and a default that is one flag away from public; the
 # estate's memory does not go there.
-OFFSITE="$HOME/Documents/code/prospector-live"
+OFFSITE="$HOME/Documents/code/{{ hermes.offsite_checkout }}"
 if [ -x "$OFFSITE/.venv/bin/python" ]; then
   ( cd "$OFFSITE" && ./.venv/bin/python -m ops.automations.offsite_backup --fix ) \
     || echo "off-box copy failed - see docs/RUNBOOKS.md#offsite-backup"
