@@ -1,0 +1,214 @@
+From 75f0b7d4aedfafeb147f70e177b298b688f289c0 Mon Sep 17 00:00:00 2001
+From: chidionyema <377396+chidionyema@users.noreply.github.com>
+Date: Mon, 24 Aug 2026 00:48:14 +0100
+Subject: [PATCH 3/3] feat(claim_gate): restamp an unproven DONE: as
+ UNVERIFIED: on the reply path
+
+A completion claim must join to the session's verification ledger or carry
+an honest label. New session-wide ledger query (session_verification_gaps),
+stamp-only gate module (gateway/claim_gate.py), wired at the reply-path
+sanitize choke point. Fails open; doc-only edits, WORKING:/BLOCKED:, and
+unknown sessions are never stamped. Escape hatch: HERMES_CLAIM_GATE_DISABLED=1.
+
+Crew #63 lane A2.
+---
+ agent/verification_evidence.py |  56 ++++++++++++++++++
+ gateway/claim_gate.py          | 103 +++++++++++++++++++++++++++++++++
+ gateway/run.py                 |  10 ++++
+ 3 files changed, 169 insertions(+)
+ create mode 100644 gateway/claim_gate.py
+
+diff --git a/agent/verification_evidence.py b/agent/verification_evidence.py
+index de08a6e87d..a6f8c50b5a 100644
+--- a/agent/verification_evidence.py
++++ b/agent/verification_evidence.py
+@@ -798,3 +798,59 @@ def verification_status(
+         "session_id": sid,
+         "changed_paths": changed_paths,
+     }
++
++
++def session_verification_gaps(session_id: str | None) -> list[dict[str, Any]]:
++    """Return every workspace this session edited without a fresh green run.
++
++    ``verification_status`` answers for one (session, cwd) pair, but the
++    gateway's reply path has no cwd — only the session. State rows are only
++    ever written where project facts existed (``mark_workspace_edited``
++    returns early otherwise), so querying by session alone needs no facts
++    lookup: the ledger itself is the applicability filter.
++
++    A root is a gap when it has recorded changed paths and its latest event
++    is missing, failed, or older than the last edit — the same staleness rule
++    ``verification_status`` applies. Roots with no changed paths never count.
++    """
++
++    sid = str(session_id or "default")
++    with _DB_LOCK:
++        with _transaction() as conn:
++            states = conn.execute(
++                """
++                SELECT root, last_event_id, last_edit_at, changed_paths_json
++                FROM verification_state
++                WHERE session_id = ?
++                """,
++                (sid,),
++            ).fetchall()
++            gaps: list[dict[str, Any]] = []
++            for state in states:
++                try:
++                    changed_paths = json.loads(state["changed_paths_json"] or "[]")
++                except (TypeError, ValueError):
++                    changed_paths = []
++                if not changed_paths:
++                    continue
++                event = None
++                if state["last_event_id"] is not None:
++                    event = conn.execute(
++                        "SELECT * FROM verification_events WHERE id = ?",
++                        (state["last_event_id"],),
++                    ).fetchone()
++                if event is None:
++                    status = "unverified"
++                elif state["last_edit_at"] and state["last_edit_at"] > event["created_at"]:
++                    status = "stale"
++                else:
++                    status = event["status"]
++                if status in ("unverified", "stale", "failed"):
++                    gaps.append(
++                        {
++                            "root": state["root"],
++                            "status": status,
++                            "changed_paths": changed_paths,
++                        }
++                    )
++    return gaps
+diff --git a/gateway/claim_gate.py b/gateway/claim_gate.py
+new file mode 100644
+index 0000000000..14bd9e8250
+--- /dev/null
++++ b/gateway/claim_gate.py
+@@ -0,0 +1,103 @@
++"""Stamp a completion claim the verification ledger cannot back.
++
++A reply whose status line opens ``DONE:`` is a claim that work is finished.
++When the session's verification ledger shows edited files with no green
++verification run after the last edit, the claim is unproven — so the status
++word is rewritten to ``UNVERIFIED:`` and one footer line says why. The reply
++is never blocked, shortened, or bounced back to the agent: the reader gets
++the agent's own words plus an honest label (detection ranks below honesty,
++but a false "DONE" outranks both).
++
++Design constraints, in force:
++
++* **Stamp, never block.** A gate that refuses correct work is an outage. The
++  only mutation is the status word and one appended line.
++* **Fail open.** Any error in here returns the text unchanged. A broken gate
++  must degrade to no gate, not to a broken reply path.
++* **Structured prefix only.** The trigger is the literal ``DONE:`` status
++  line the agent's identity mandates — never prose word-matching, which
++  measured 35% detection against 91% for a ledger join.
++* **Doc-only work passes.** Sessions whose only edits are prose have nothing
++  a test run could prove; they are never stamped.
++
++Escape hatch (counted, per LAW 38): set ``HERMES_CLAIM_GATE_DISABLED=1`` to
++turn the gate off; every stamp is logged so bypass and fire rates are
++greppable from the gateway log.
++"""
++
++from __future__ import annotations
++
++import logging
++import os
++import re
++
++logger = logging.getLogger(__name__)
++
++# `[Architect]` / `[Architect][cron:foo]` labels precede the status word by
++# mandate; the gate reads through any run of leading bracketed labels.
++_LABEL_RUN = re.compile(r"^(?:\s*\[[^\]\n]{1,80}\])*\s*")
++
++_FOOTER = (
++    "⚠️ UNVERIFIED: files were edited this session and no "
++    "verification run has passed since the last edit ({detail})."
++)
++
++
++def _split_label_prefix(text: str) -> tuple[str, str]:
++    """Split leading bracketed labels (plus whitespace) from the rest."""
++    m = _LABEL_RUN.match(text)
++    if not m:
++        return "", text
++    return text[: m.end()], text[m.end() :]
++
++
++def _verifiable(paths: list[str]) -> list[str]:
++    try:
++        from agent.verification_stop import _filter_verifiable_paths
++
++        return _filter_verifiable_paths(paths)
++    except Exception:
++        return list(paths)
++
++
++def stamp_unproven_done(text: str, *, session_id: str | None) -> str:
++    """Rewrite ``DONE:`` to ``UNVERIFIED:`` when the ledger cannot back it.
++
++    Returns ``text`` unchanged unless ALL of: the first line's status word
++    (after any ``[label]`` run) is ``DONE:``; the session's ledger holds at
++    least one root with verifiable changed paths whose latest verification
++    event is missing, failed, or older than the last edit. ``WORKING:`` and
++    ``BLOCKED:`` claim nothing finished and are never touched.
++    """
++
++    try:
++        if not text or os.environ.get("HERMES_CLAIM_GATE_DISABLED"):
++            return text
++        labels, rest = _split_label_prefix(text)
++        if not rest.startswith("DONE:"):
++            return text
++
++        from agent.verification_evidence import session_verification_gaps
++
++        gaps = []
++        for gap in session_verification_gaps(session_id):
++            if _verifiable(gap.get("changed_paths") or []):
++                gaps.append(gap)
++        if not gaps:
++            return text
++
++        detail = "; ".join(
++            "{}: {}".format(os.path.basename(g["root"].rstrip("/")) or g["root"], g["status"])
++            for g in gaps[:3]
++        )
++        stamped = labels + "UNVERIFIED:" + rest[len("DONE:") :]
++        stamped = stamped.rstrip() + "\n\n" + _FOOTER.format(detail=detail)
++        logger.info(
++            "claim_gate stamped DONE -> UNVERIFIED for session %s (%s)",
++            session_id,
++            detail,
++        )
++        return stamped
++    except Exception:
++        logger.debug("claim_gate failed open", exc_info=True)
++        return text
+diff --git a/gateway/run.py b/gateway/run.py
+index daab8a71f9..08b3f51957 100644
+--- a/gateway/run.py
++++ b/gateway/run.py
+@@ -20286,6 +20286,16 @@ class GatewayRunner(GatewayAuthorizationMixin, GatewayKanbanWatchersMixin, Gatew
+                     agent_result, response, history_len=len(history),
+                 )
+                 response = _sanitize_gateway_final_response(source.platform, response)
++                # Claim gate: a DONE: status line must be backed by the
++                # session's verification ledger or it is restamped
++                # UNVERIFIED:. Stamp-only — never blocks or empties a reply.
++                from gateway.claim_gate import stamp_unproven_done
++
++                response = stamp_unproven_done(
++                    response,
++                    session_id=agent_result.get("session_id")
++                    or session_entry.session_id,
++                )
+ 
+             # Ordering contract: the agent thread already updated the contextvar
+             # in conversation_compression.py; propagate to SessionEntry + _save().
