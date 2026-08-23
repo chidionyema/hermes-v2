@@ -9,8 +9,8 @@ __pycache__/
 audio_cache/
 backups/
 cache/
-hermes-agent-self-evolution/
-hermes-agent/
+/hermes-agent-self-evolution/
+/hermes-agent/
 logs/
 skills/.hub/
 state.db
@@ -41,8 +41,8 @@ skills/.usage.json.lock
 # graphify writes here from a commit hook. Another tool's output, not ours.
 graphify-out/
 # the pinned upstream install and its venv: 1.1GB, reinstallable from PINNED_VERSION
-hermes-agent/
-hermes-agent-self-evolution/
+/hermes-agent/
+/hermes-agent-self-evolution/
 .venv/
 
 # --- generated from templates/ + estate.yaml by bin/render ---

@@ -1,0 +1,213 @@
+From 8f67ab8cb8ba798bdaa0ead7ab67664ed51beb62 Mon Sep 17 00:00:00 2001
+From: chidionyema <377396+chidionyema@users.noreply.github.com>
+Date: Sun, 23 Aug 2026 23:48:08 +0100
+Subject: [PATCH 2/2] fix(shutdown_forensics): snapshot the machine this
+ gateway is actually on
+
+The shutdown diagnostic ran ps auxf, pstree, /proc/loadavg and dmesg. None of
+those exist on macOS, and every one was written 2>/dev/null || true, so on this
+Mac each section failed in silence and the log recorded a complete-looking report
+with nothing under any heading. Four SIGTERM events on 2026-08-23 (20:53:32,
+21:05:47, 21:19:25, 22:14:43) produced four empty reports, 3510 bytes in total.
+An empty report reads as a clean one.
+
+_diag_script picks a darwin or linux branch and prints which one it took, so a
+reader can tell an empty section from a section that was never going to run here.
+_timeout_argv drops the outer timeout wall when the box has no GNU timeout
+binary, which on macOS was raising FileNotFoundError and losing the diagnostic
+with no log line at all.
+
+The test that covered this asserted that the string 'shutdown diagnostic'
+appeared in the file. That is the header, and it passed for all four empty
+reports. The incident test asserts every --- section --- has a body.
+
+Measured after: 13804 bytes, every section populated, 13 passed.
+---
+ gateway/shutdown_forensics.py            | 81 ++++++++++++++++++++----
+ tests/gateway/test_shutdown_forensics.py | 63 ++++++++++++++++++
+ 2 files changed, 130 insertions(+), 14 deletions(-)
+
+diff --git a/gateway/shutdown_forensics.py b/gateway/shutdown_forensics.py
+index 34836cc6fb..6813a51b8d 100644
+--- a/gateway/shutdown_forensics.py
++++ b/gateway/shutdown_forensics.py
+@@ -19,6 +19,7 @@ from __future__ import annotations
+ 
+ import json
+ import os
++import shutil
+ import signal
+ import subprocess
+ import sys
+@@ -194,6 +195,70 @@ def snapshot_shutdown_context(received_signal: Any = None) -> Dict[str, Any]:
+     return ctx
+ 
+ 
++def _diag_script(signal_name: str, pid: int) -> str:
++    """The snapshot commands for the platform this gateway is actually on.
++
++    This used to be one Linux script. Every command in it (``ps auxf``,
++    ``pstree``, ``/proc/loadavg``, ``dmesg``) is absent on macOS, and every one
++    was written ``2>/dev/null || true``, so on a Mac each section failed in
++    silence and the log recorded a complete-looking report with nothing under
++    any heading. Measured 2026-08-23 on this laptop: four SIGTERM events at
++    20:53:32, 21:05:47, 21:19:25 and 22:14:43 produced four empty reports, and
++    an empty report reads as a clean one.
++
++    The header line names the platform and the branch taken, so a reader can
++    tell an empty section from a section that was never going to run here.
++    """
++    head = (
++        f"echo '=== shutdown diagnostic @ {signal_name} ==='; "
++        "echo '--- date ---'; date -u +%Y-%m-%dT%H:%M:%SZ; "
++        "echo '--- platform ---'; uname -sr; "
++    )
++    if sys.platform == "darwin":
++        return head + (
++            "echo '--- branch --- darwin'; "
++            "echo '--- ps, top 60 by cpu ---'; "
++            "ps -Ao user,pid,ppid,pcpu,pmem,rss,etime,command -r | head -60; "
++            "echo '--- ancestry of self ---'; "
++            f"P={pid}; for _ in 1 2 3 4 5 6 7 8; do "
++            "  [ \"$P\" = 0 ] || [ -z \"$P\" ] && break; "
++            "  ps -o pid=,ppid=,command= -p \"$P\" | head -1; "
++            "  P=$(ps -o ppid= -p \"$P\" | tr -d ' '); "
++            "done; "
++            "echo '--- load ---'; sysctl -n vm.loadavg; "
++            "echo '--- memory pressure ---'; "
++            "memory_pressure -Q 2>/dev/null | head -5 || vm_stat | head -6; "
++            "echo '=== end ==='"
++        )
++    return head + (
++        "echo '--- branch --- linux'; "
++        "echo '--- ps auxf (top 60 by cpu) ---'; "
++        "ps auxf --sort=-pcpu 2>/dev/null | head -60; "
++        "echo '--- pstree of self ---'; "
++        f"pstree -plau {pid} 2>/dev/null | head -40 || true; "
++        "echo '--- /proc/loadavg ---'; "
++        "cat /proc/loadavg 2>/dev/null || true; "
++        "echo '--- recent dmesg (oom/killed) ---'; "
++        "dmesg -T 2>/dev/null | tail -20 || journalctl --user -n 20 --no-pager 2>/dev/null | tail -20 || true; "
++        "echo '=== end ==='"
++    )
++
++
++def _timeout_argv(timeout_seconds: float) -> List[str]:
++    """``timeout`` if the box has one, otherwise nothing.
++
++    ``timeout`` is GNU coreutils. It is not part of a stock macOS, so
++    ``Popen(["timeout", ...])`` raises FileNotFoundError there and the whole
++    diagnostic disappears with no log line at all. Running unbounded is worse
++    than not running, so the script itself is bounded by ``head`` on every
++    command; this only removes the outer wall when there is no binary for it.
++    """
++    for name in ("timeout", "gtimeout"):
++        if shutil.which(name):
++            return [name, f"{timeout_seconds:.0f}"]
++    return []
++
++
+ def spawn_async_diagnostic(
+     log_path: Path,
+     signal_name: str,
+@@ -226,19 +291,7 @@ def spawn_async_diagnostic(
+     if sys.platform == "win32":
+         return None
+ 
+-    script = (
+-        f"echo '=== shutdown diagnostic @ {signal_name} ==='; "
+-        "echo '--- date ---'; date -u +%Y-%m-%dT%H:%M:%SZ; "
+-        "echo '--- ps auxf (top 60 by cpu) ---'; "
+-        "ps auxf --sort=-pcpu 2>/dev/null | head -60; "
+-        "echo '--- pstree of self ---'; "
+-        f"pstree -plau {os.getpid()} 2>/dev/null | head -40 || true; "
+-        "echo '--- /proc/loadavg ---'; "
+-        "cat /proc/loadavg 2>/dev/null || true; "
+-        "echo '--- recent dmesg (oom/killed) ---'; "
+-        "dmesg -T 2>/dev/null | tail -20 || journalctl --user -n 20 --no-pager 2>/dev/null | tail -20 || true; "
+-        "echo '=== end ==='"
+-    )
++    script = _diag_script(signal_name, os.getpid())
+ 
+     try:
+         # Open the log file in append mode and let the subprocess inherit.
+@@ -255,7 +308,7 @@ def spawn_async_diagnostic(
+         # start_new_session, a SIGKILL on our cgroup takes the diag down
+         # before it can flush.
+         proc = subprocess.Popen(
+-            ["timeout", f"{timeout_seconds:.0f}", "bash", "-c", script],
++            _timeout_argv(timeout_seconds) + ["bash", "-c", script],
+             stdout=fd,
+             stderr=subprocess.STDOUT,
+             stdin=subprocess.DEVNULL,
+diff --git a/tests/gateway/test_shutdown_forensics.py b/tests/gateway/test_shutdown_forensics.py
+index 2681b9d84d..81d9cc7702 100644
+--- a/tests/gateway/test_shutdown_forensics.py
++++ b/tests/gateway/test_shutdown_forensics.py
+@@ -142,3 +142,66 @@ class TestCheckSystemdTimingAlignment:
+         # for whatever unit pytest IS in.  Both are valid; we just ensure
+         # the function doesn't raise.
+         assert result is None or isinstance(result, dict)
++
++
++# ---------------------------------------------------------------------------
++# incident 2026-08-23: an empty report read as a clean one
++# ---------------------------------------------------------------------------
++
++class TestIncident20260823EmptyDiagnostic:
++    """The diagnostic ran Linux-only commands and wrote nothing on macOS.
++
++    Four SIGTERM events on 2026-08-23 (20:53:32, 21:05:47, 21:19:25, 22:14:43)
++    each produced a report with every heading present and every section empty,
++    because ``ps auxf``, ``pstree``, ``/proc/loadavg`` and ``dmesg`` do not
++    exist on a Mac and each was written ``2>/dev/null || true``.
++
++    The test that already covered this function asserted only that the string
++    "shutdown diagnostic" appeared in the file, which is the header. It passed
++    for all four empty reports. The rule is that a section must have a body.
++    """
++
++    @pytest.mark.skipif(sys.platform == "win32", reason="POSIX-only diagnostic")
++    def test_every_section_has_a_body_on_this_platform(self, tmp_path):
++        import re
++
++        log_path = tmp_path / "diag.log"
++        pid = sf.spawn_async_diagnostic(log_path, "SIGTERM", timeout_seconds=5.0)
++        assert pid is not None
++
++        deadline = time.monotonic() + 12.0
++        while time.monotonic() < deadline:
++            if log_path.exists() and "=== end ===" in log_path.read_text(
++                encoding="utf-8", errors="replace"
++            ):
++                break
++            time.sleep(0.1)
++        try:
++            os.waitpid(pid, 0)
++        except (ChildProcessError, OSError):
++            pass
++
++        text = log_path.read_text(encoding="utf-8", errors="replace")
++        assert "=== end ===" in text, "diagnostic never finished"
++
++        parts = re.split(r"^--- (.+?) ---$", text, flags=re.M)
++        sections = {
++            parts[i]: parts[i + 1].replace("=== end ===", "").strip()
++            for i in range(1, len(parts), 2)
++        }
++        assert sections, "no sections at all"
++        empty = [name for name, body in sections.items() if not body.strip()]
++        assert not empty, f"sections present but empty on {sys.platform}: {empty}"
++
++    def test_script_matches_the_platform_it_will_run_on(self):
++        script = sf._diag_script("SIGTERM", 1234)
++        if sys.platform == "darwin":
++            assert "pstree" not in script
++            assert "/proc/loadavg" not in script
++            assert "vm.loadavg" in script
++        else:
++            assert "/proc/loadavg" in script
++
++    def test_missing_timeout_binary_does_not_kill_the_diagnostic(self, monkeypatch):
++        monkeypatch.setattr(sf.shutil, "which", lambda _name: None)
++        assert sf._timeout_argv(5.0) == []
