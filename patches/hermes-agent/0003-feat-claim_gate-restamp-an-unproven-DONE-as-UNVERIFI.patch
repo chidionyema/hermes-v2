@@ -1,4 +1,4 @@
-From 75f0b7d4aedfafeb147f70e177b298b688f289c0 Mon Sep 17 00:00:00 2001
+From b3ec1c9bc3daedcb997175e8bcd34bc7be00a790 Mon Sep 17 00:00:00 2001
 From: chidionyema <377396+chidionyema@users.noreply.github.com>
 Date: Mon, 24 Aug 2026 00:48:14 +0100
 Subject: [PATCH 3/3] feat(claim_gate): restamp an unproven DONE: as
@@ -14,8 +14,8 @@ Crew #63 lane A2.
 ---
  agent/verification_evidence.py |  56 ++++++++++++++++++
  gateway/claim_gate.py          | 103 +++++++++++++++++++++++++++++++++
- gateway/run.py                 |  10 ++++
- 3 files changed, 169 insertions(+)
+ gateway/run.py                 |  15 +++++
+ 3 files changed, 174 insertions(+)
  create mode 100644 gateway/claim_gate.py
 
 diff --git a/agent/verification_evidence.py b/agent/verification_evidence.py
@@ -192,23 +192,28 @@ index 0000000000..14bd9e8250
 +        logger.debug("claim_gate failed open", exc_info=True)
 +        return text
 diff --git a/gateway/run.py b/gateway/run.py
-index daab8a71f9..08b3f51957 100644
+index daab8a71f9..eab83b7a0a 100644
 --- a/gateway/run.py
 +++ b/gateway/run.py
-@@ -20286,6 +20286,16 @@ class GatewayRunner(GatewayAuthorizationMixin, GatewayKanbanWatchersMixin, Gatew
+@@ -20286,6 +20286,21 @@ class GatewayRunner(GatewayAuthorizationMixin, GatewayKanbanWatchersMixin, Gatew
                      agent_result, response, history_len=len(history),
                  )
                  response = _sanitize_gateway_final_response(source.platform, response)
 +                # Claim gate: a DONE: status line must be backed by the
 +                # session's verification ledger or it is restamped
-+                # UNVERIFIED:. Stamp-only — never blocks or empties a reply.
-+                from gateway.claim_gate import stamp_unproven_done
++                # UNVERIFIED:. Stamp-only — never blocks or empties a reply,
++                # and a gate that cannot even import degrades to no gate
++                # rather than taking the reply path down with it.
++                try:
++                    from gateway.claim_gate import stamp_unproven_done
 +
-+                response = stamp_unproven_done(
-+                    response,
-+                    session_id=agent_result.get("session_id")
-+                    or session_entry.session_id,
-+                )
++                    response = stamp_unproven_done(
++                        response,
++                        session_id=agent_result.get("session_id")
++                        or session_entry.session_id,
++                    )
++                except Exception:
++                    logger.debug("claim gate unavailable", exc_info=True)
  
              # Ordering contract: the agent thread already updated the contextvar
              # in conversation_compression.py; propagate to SessionEntry + _save().
