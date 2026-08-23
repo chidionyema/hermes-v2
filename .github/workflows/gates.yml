@@ -1,0 +1,48 @@
+# The gates that can run away from the founder's laptop, on every pull request.
+#
+# This repo is public, so Actions minutes are free here. The private repos on
+# this account cannot start a job at all until the billing on the account is
+# settled, which is why this file lives in hermes-v2 and not somewhere else.
+#
+# What is deliberately NOT here: bin/verify. It asks whether the gateway is
+# running, whether a venv is in range and whether an Anthropic credential
+# exists, and the honest answer on a runner is no. A gate that is red for being
+# in the wrong place gets ignored within a week. The rows below are the ones
+# that mean the same thing on any machine.
+name: gates
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  gates:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # NOT `render --check`. That compares the generated files against the
+      # founder's own estate.yaml, which is untracked on purpose and will never
+      # exist on a runner: the step would be red for a missing config rather
+      # than a broken template. Rendering the example config proves every
+      # template still parses and every placeholder still resolves, which is
+      # the part a stranger's pull request can actually break.
+      - name: every template still renders
+        run: |
+          cp estate.example.yaml estate.yaml
+          ./bin/render
+
+      - name: README describes what ships
+        run: ./bin/check-readme.py
+
+      # DECISIONS.md, 2026-08-22: every service gets its own verify harness and
+      # it runs on every pull request. Here it has no daemon to talk to, so the
+      # laptop-only rows SKIP and the rows about the client still run. SKIP is a
+      # result. A FAIL from this step is a real fault, on a runner as much as on
+      # the laptop.
+      - name: consult harness
+        run: ./bin/verify-consult

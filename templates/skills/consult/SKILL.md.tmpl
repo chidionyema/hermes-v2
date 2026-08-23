@@ -1,0 +1,94 @@
+---
+name: consult
+description: Ask a different model when you are stuck, instead of guessing or waking the founder. Use when two attempts have failed, when a decision is close, or before a change you cannot undo. Never acts on the answer without checking it.
+---
+
+# consult
+
+A consult is a second opinion, not an instruction. What comes back is one more
+piece of evidence, and it is the least trustworthy piece you have, because the
+model answering it cannot see this machine.
+
+## When to use it
+
+Three cases, and only these three.
+
+1. **Two attempts have failed.** Not one. One failure is information you have
+   not finished reading yet. Two is a sign you are holding the wrong model of
+   the problem, which is exactly what a different mind is for.
+2. **A decision is close.** Two designs, both defensible, and you are about to
+   pick on taste. Say what both are and ask which breaks first.
+3. **Before something you cannot undo.** A migration, a deletion, a schema
+   change. Ask what you have not considered. This is the highest-value case and
+   the cheapest, because you are still holding a plan.
+
+Never for something a command would answer. `flyctl status` costs one second
+and tells you the truth about this estate; a model tells you what is usually
+true about estates in general. Reach for the command every time it exists.
+
+## How
+
+```bash
+bin/consult --health          # is there one available at all
+bin/consult "the question" --context "$(the evidence you already have)"
+```
+
+Put the real evidence in `--context` — the command you ran and what it printed.
+A question with no evidence gets an answer with no evidence, and you will have
+spent a round trip to be told what you already suspected.
+
+Ask for the failure, not the blessing. "Which of these two breaks first, and on
+what input" gets you something checkable. "Is this a good approach" gets you
+agreement, which is worth nothing.
+
+## Exit 3 means carry on
+
+The consult service runs outside this estate, on a machine that sleeps. Exit 3
+is the normal state of a laptop at night, not a fault, and nothing here may
+block on it.
+
+```bash
+if answer=$(bin/consult "$Q" --context "$EVIDENCE"); then
+  echo "$answer"
+else
+  gh issue comment "$ISSUE" --body "Consult unavailable. Open question: $Q"
+fi
+```
+
+The fallback is a comment on the issue, because the board is where every other
+piece of cross-agent state lives and it is the one place the founder already
+looks. Do not send it to chat. A question in chat is gone by morning.
+
+## What you must never do
+
+**Never act on an answer you have not checked.** The model cannot see this
+estate. It will name a flag that does not exist in this version, a file that is
+in some other project's layout, and a service this platform does not run. Every
+answer is a hypothesis, and it earns its place the same way yours does: a
+command, and its output.
+
+**Never assume you got the good model.** The service tries several in order and
+answers from the first one that is available, which on a bad day is a small
+model running on the laptop. The reply names the backend. Weigh the answer by
+what it says and whether a command confirms it, never by the fact that
+something answered.
+
+**Never put a secret in the question.** The text usually leaves this machine,
+and you cannot tell from here which backend will take it, so assume it does. A token,
+a connection string, a private key or the contents of `.env` may not appear in
+a question or in the context, for any reason, including debugging. Name the
+variable instead of pasting it.
+
+**Never let a consult make the decision.** If the answer disagrees with what a
+command on this machine says, the command is right and the answer is wrong.
+Write down which one you followed and why.
+
+**Never chain them.** One consult per problem. A second consult to ask about
+the first answer is how an hour disappears with nothing to show.
+
+## What to record
+
+If the consult changed what you did, the pull request or issue says so in one
+line: the question, and the one sentence of the answer you acted on. If it
+changed nothing, it goes unmentioned. A transcript of everything asked is noise
+and nobody reads it.

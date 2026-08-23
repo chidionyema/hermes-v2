@@ -110,12 +110,24 @@ def tracked_paths():
         ["git", "-C", HOME, "ls-files"], capture_output=True, text=True, check=True
     ).stdout
     files = {p for p in out.split("\n") if p}
+    # Evidence images are the exception, and only the images. `pr-evidence.py`
+    # names each capture after the moment it was taken, so a re-render lands a
+    # new filename and the inventory goes red for a file whose purpose has not
+    # changed. That happened twice on PR #1 and both times the fix was to
+    # paste the old sentence under a new name, which teaches nobody anything.
+    # The directory row still has to exist and still has to say why the folder
+    # is here; it is the per-image rows that carry no information.
     dirs = set()
+    # Derived from every tracked file, including the evidence images filtered
+    # out below. The folders still have to be justified; only the images inside
+    # them are exempt, so this loop runs before the filter and not after.
     for f in files:
         d = os.path.dirname(f)
         while d:
             dirs.add(d + "/")
             d = os.path.dirname(d)
+    files = {f for f in files
+             if not re.fullmatch(r"docs/evidence/pr-\d+/[^/]+", f)}
     return files | dirs
 
 

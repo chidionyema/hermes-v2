@@ -586,3 +586,59 @@ no-code version of this is making the claim to distrust.
 *Not built here: the agent, the harness, the memory system, the orchestrator. Those
 genuinely ship, and that is where the saving is real. What we build is the connective
 tissue between them — and connective tissue is where integration projects bleed time.*
+
+---
+
+<a id="s16"></a>
+
+## 16. Consult — a second mind on tap (founder request, 2026-08-22)
+
+A lane that is stuck does one of two things today: it guesses, or it stops and
+waits for the founder. The first spends money on a wrong answer, the second
+spends a day. There is a third, and it costs nothing.
+
+**The service is outside this repo, on purpose.** It runs on the founder's
+laptop and holds the credential for whatever second model is available. This
+estate never holds that credential, never manages that session, and never
+starts that process. It knows one URL and one bearer token, and both are
+optional. That is the whole coupling, and it is what lets the estate move to a
+VPS without moving the consult with it.
+
+**Exit 3 is the normal state, not a fault.** The laptop sleeps. Nothing in
+either lane may block on a consult, retry it, or escalate when it is missing.
+When there is no consult, the open question becomes a comment on the issue, in
+line with principle 2 — all inter-agent state flows through the board — and the
+lane carries on with the work it can still do.
+
+**An answer is evidence, and the weakest kind.** The model answering cannot see
+this machine. It will name flags, files and services that are not here, which
+is not a defect of the model but of the question. Principle 3 does not bend for
+it: a claim exists with a command and its output, and a consult produces
+neither. When a consult and a command disagree, the command is right.
+
+**Which model answers is not fixed, and the lane must not care.** The service
+tries several in order and the first one that is ready and not benched takes
+the question. On 2026-08-22 that meant a subscription model, then a 7B model
+running on the laptop with no network at all. A backend that fails three times
+in a row sits out for ten minutes, so a spent quota degrades the answer instead
+of stopping the call. The reply names the backend that produced it. A lane that
+would only accept an answer from one particular model is asking for a provider,
+not a consult, and that is the out-of-scope case below.
+
+A backend that cannot fail fast is worse than no backend, and one was removed
+on 2026-08-22 for exactly that: its CLI retried a rate-limit internally instead
+of returning it, so it spent its whole time cap on every consult and then
+failed anyway. Anything added to the cascade carries a time cap.
+
+**Three uses, no others.** Two failed attempts, a close design decision, or
+anything about to be done that cannot be undone. Never for a question a command
+would answer. Never twice on one problem.
+
+**No secret leaves in a question.** The text goes to a third party. Tokens,
+connection strings and the contents of `.env` are named, never pasted. This is
+the one rule here that is not a matter of judgement.
+
+Costs nothing per call in the shipped configuration, so §11's caps do not move.
+Out of scope: making consult a provider in the model slot. Hermes already ships
+provider fallback (§13), and a second opinion is not a fallback — it is a
+different question asked on purpose.
