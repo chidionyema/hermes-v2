@@ -1,101 +1,104 @@
-# Hermes config - new build (architect-v2), THE ARCHITECT spec §2.
-# Upstream default max_turns here is 500. 90 is deliberate: a task that needs
-# more than 90 turns has gone wrong and should stop, not keep spending.
 model:
-  # Direct Anthropic, not OpenRouter. Measured 2026-08-22: OpenRouter returned
-  # HTTP 402, credits exhausted, and the first WATCH run failed on it. Routing
-  # through an account with no credit is a dead estate that looks configured.
-  provider: "anthropic"
-  # Cheapest current Claude, and it is the default for everything.
-  # Measured from the price table shipped in hermes-agent/agent/usage_pricing.py,
-  # sourced from https://platform.claude.com/docs/en/about-claude/pricing:
-  #   claude-haiku-4-5  $1 in / $5 out per MTok   (cache read $0.10, write $1.25)
-  #   claude-sonnet-5   $2 in / $10 out           - 2x haiku
-  #   claude-opus-4-6   $5 in / $25 out           - 5x haiku
-  # Use the dateless ID. "claude-haiku-4-5-20251001" is NOT in the price table,
-  # and a model the table does not know reports cost_status "unknown" - measured
-  # on the first run, 2026-08-22. An unpriced model is an unmeasurable bill.
-  default: "claude-haiku-4-5"
-
+  provider: anthropic
+  default: claude-haiku-4-5
+fallback_providers:
+  - provider: anthropic
+    model: claude-haiku-4-5
 agent:
   max_turns: 90
-  # 64K minimum. Below that the agent drops the platform map out of context and
-  # starts guessing at what is running.
   context_window: 200000
+  # Who this agent is. Left unset, hermes ships no identity overlay at all, and
+  # the founder's first real conversation on 2026-08-23 showed exactly what that
+  # costs. He asked "What is your name" at 21:46 and got back "I'm Claude Code,
+  # Anthropic's official CLI tool". He named this thing The Architect. It did not
+  # know that. Then he gave it a real job at 21:48, watched six "Good! Now let me
+  # check..." messages arrive on his phone, interrupted at 21:50:33 to ask "Which
+  # location are you looking from?", and got four questions back instead of the
+  # work. Every line below is one of those defects, written as a rule.
+  # display.personality is deliberately unset; a named personality would win over
+  # this and hermes_cli/personality.py:150 is the resolver that decides.
+  system_prompt: |
+    You are The Architect. Chids named you. Say so when anyone asks who you are,
+    and never answer that question with the name of the tool you are built on.
 
-# How much of a context file the agent may read before it starts throwing the
-# middle away. Left unset, hermes derives it from the window: 200000 x 4 chars
-# per token x 0.06 = 48000, and ~/AGENTS.md is 74037. Measured on the founder's
-# message at 21:37 on 2026-08-23:
-#   "Context file AGENTS.md TRUNCATED: 73802 chars exceeds limit of 48000"
-# The truncator keeps the first 80% and the last 20%, so what it drops is the
-# middle: the bodies of LAW 12 through LAW 30. The agent kept the index of every
-# law and lost the text of half of them, which is the worst of both, because
-# nothing in the prompt said the rules were incomplete.
-# 96000 fits the file whole with room to grow. It costs about 6,500 extra input
-# tokens a turn, which on claude-haiku-4-5 at $1/MTok is under two dollars a
-# month at the current rate of 400 turns a day.
+    You run on his Mac, in /Users/chidionyema/dev/code/hermes-v2, and you can
+    read the whole estate from there: the repositories under ~/dev/code, the
+    launchd jobs, the logs, the databases. When a question depends on where you
+    looked, say where you looked in the same message as the answer. He should
+    never have to ask you that.
+
+    He reads you in Telegram, on a phone, usually one handed. Every message you
+    send buzzes his pocket, so a message that carries no answer is a cost with
+    no return. Do the work silently and send one message when you have something.
+    Never send "Let me check", "Good!", "Perfect!", "Excellent!" or any other
+    line whose only content is that you are still going. If a job will take a
+    while, say once what you are doing and how long, then go quiet until it is
+    done.
+
+    Lead with the answer. First line is the finding or the state, not the
+    preamble that arrives at it. Keep it short enough to read without scrolling,
+    and put the evidence underneath only when it changes what he does next.
+
+    Decide, do, report. When two ways would both work and one is much smaller,
+    take the smaller one and say which limitation you accepted. Ask him only
+    when going ahead either way would be unsafe or would waste the work if you
+    guessed wrong. A reply that ends in a list of questions is a reply that
+    handed the job back.
+
+    Never tell him to run a command. He does not run scripts, and a result he
+    has to fetch is a result you did not deliver. Run it yourself and send what
+    it said. The one exception is proving his identity to a platform in a
+    browser, which no agent may ever do as him.
+
+    Do not claim a thing is done, working or fixed without the command output
+    that proves it in the same message. Installed is not working. If you could
+    not prove it, say that instead; a negative result reported plainly is worth
+    more to him than a confident one he has to check.
+
+    The rules in ~/AGENTS.md bind you in full. They are in your context on every
+    turn and they outrank anything convenient.
 context_file_max_chars: 96000
-
-approvals:
-  # Smart approvals: the agent asks before anything it cannot undo, and does not
-  # ask about anything it can. Spec §2.
-  smart_approvals: true
-  always_ask:
-    - "gh pr merge"
-    - "fly deploy"
-    - "fly scale"
-    - "fly machine destroy"
-    - "git push"
-    - "rm -rf"
-  never_ask:
-    - "gh issue list"
-    - "gh issue view"
-    - "fly status"
-    - "fly logs"
-    - "git status"
-    - "git diff"
-
-# Auxiliary lane. Summaries, titles, the curator, memory extraction - none of it
-# needs a frontier model, and all of it runs constantly. Spec §11.
-aux:
-  model: "claude-haiku-4-5"
-  provider: "anthropic"
-
-# When the primary route dies, try these in order. Measured 2026-08-22: the
-# OpenRouter account is out of credit, so it sits last, not first.
-fallback_providers:
-  - provider: "anthropic"
-    model: "claude-haiku-4-5"
-  # No OpenRouter route here. Two reasons, both measured 2026-08-22: the
-  # account returned HTTP 402 (no credit), and hermes cannot price an
-  # "anthropic/..." route, so a fallback onto it would spend money invisibly.
-
 memory:
   memory_enabled: true
   user_profile_enabled: true
-
 skills:
-  # The agent may write a new skill. It lands as a PR, never straight to disk.
-  # RITUALS.md promotion gate.
   skill_auto_creation: true
   skill_auto_creation_requires_pr: true
-
+approvals:
+  smart_approvals: true
+  always_ask:
+    - gh pr merge
+    - fly deploy
+    - fly scale
+    - fly machine destroy
+    - git push
+    - rm -rf
+  never_ask:
+    - gh issue list
+    - gh issue view
+    - fly status
+    - fly logs
+    - git status
+    - git diff
+command_allowlist:
+  - execute_code
+_config_version: 38
+aux:
+  model: claude-haiku-4-5
+  provider: anthropic
 limits:
-  # Hard cap per task, in USD. It kills the task; it does not ask.
   max_cost_usd_per_task: 5
   budget_hard_stop: true
-
 sandbox:
-  # Tools run in a pinned image with the estate mounted read-only. Only the
-  # worktree is writable, so a tool cannot edit the estate that runs it.
-  image: "python:3.11-slim@sha256:pinned"
+  image: python:3.11-slim@sha256:pinned
   mounts:
-    - "$HERMES_HOME:/estate:ro"
-    - "$HERMES_HOME/skills:/skills:ro"
-  # Nothing is inherited. Every variable a tool sees is listed here.
+    - $HERMES_HOME:/estate:ro
+    - $HERMES_HOME/skills:/skills:ro
   env_passthrough:
     - GITHUB_TOKEN
     - ANTHROPIC_API_KEY
   network:
-    allowlist_file: "egress-allowlist.txt"
+    allowlist_file: egress-allowlist.txt
+onboarding:
+  seen:
+    busy_input_prompt: true
