@@ -12,24 +12,40 @@ Every factual claim is graded in §14: **[V]** verified against primary source,
 ## 0. Principles (each one earned, not aesthetic)
 
 1. **The orchestrator is not an agent.** GitHub Projects is the queue, labels
-   are the state machine, PRs are the output, your tap is the promotion gate.
-   An LLM polling a queue is Opus tokens spent on `ORDER BY`. [D]
-2. **Two minds, one board, no shared memory.** Cross-agent memory writes fail
-   silently in Hermes cron contexts, and two writers on one memory compound
-   into state nobody authored. All inter-agent state flows through GitHub
-   issues/comments. [V]
+   are the state machine, PRs are the output, and **green CI is the promotion
+   gate**. An LLM polling a queue is Opus tokens spent on `ORDER BY`. [D]
+2. **Two minds, one board, no shared memory.** Cron sessions pass
+   `skip_memory=True` and memory providers intentionally do not run there
+   (`hermes-agent/AGENTS.md:1047`), so a cron lane writes nothing to memory at
+   all — and two writers on one memory compound into state nobody authored.
+   All inter-agent state flows through GitHub issues/comments. [V]
 3. **Verification by execution, never by introspection.** A claim exists only
    with a command and its output attached. Self-checking techniques are the
    weak form; CI is the strong form. [D, grounded in AIDE² results]
 4. **Selection beats instruction.** Honesty, efficiency, and non-recurrence
-   are properties you get from what survives your gates, not from prompt
-   adjectives. The agent optimises whatever you actually merge. [V — Weco]
+   are properties you get from what survives the gates, not from prompt
+   adjectives. The agent optimises whatever the gates admit, so the gates —
+   not the prose — are the specification. [V — Weco]
 5. **Lessons compile downward.** A lesson in prose is probabilistic; a lesson
    as a test is deterministic. Every incident pushes its lesson as far down
    the ladder as it admits (§8). [D, grounded in experience-following research]
 6. **Less context per role, more attempts.** The winning evolved agent cut
    context 16× per operator and reinvested tokens as search steps. Seed
    memory tersely; give each profile only what its role needs. [V — Weco]
+7. **The scorer is not the scored.** With the founder tap gone, CI is the
+   whole objective function — so no lane may edit what grades it. Gate
+   definitions, branch protection and the eval corpus are outside every
+   agent's write scope, and the production oracle (§7c) is a signal the
+   agent never sees before merge. An agent that can rewrite its own test
+   always passes it, which removes the oracle rather than satisfying it. [D]
+8. **Heal first, speak on exception.** A monitor that reports a condition it
+   could have fixed has chosen narration over work. Known signature → remedy →
+   verify → stay silent. Unknown, or the remedy failed twice → escalate, once,
+   with the evidence. Everything else is a weekly line nobody has to read. [D]
+9. **A lesson is admitted by measurement, not by opinion.** Skills accumulate
+   automatically, and the thing that admits or deletes an entry is a replay
+   over the incident corpus, not a review. A lesson that does not improve
+   the batch is deleted on the run that proves it. [V — MNL]
 
 ---
 
@@ -49,12 +65,20 @@ Every factual claim is graded in §14: **[V]** verified against primary source,
 
   platform (Fly.io — prospector-* apps, lhr)
         ◄── read-only telemetry ── WATCH
-        ◄── merged PRs only ────── you (one tap)
+        ◄── merged PRs only ────── CI  (all required checks green = merge)
+        ──► post-merge verdict ──► production oracle (§7c) — rollback on red
 ```
 
-States on the board: `triage → agent-go → in-progress → pr-open → merged →
-deployed → verified → closed`, plus `proposal` and `post-mortem`. Labels are
-applied by WATCH (opening), you (`agent-go`, one tap), and WORK (the rest).
+States on the board: `triage → ready → in-progress → pr-open → merged →
+deployed → verified → closed`, plus `proposal`, `post-mortem` and `held`.
+Labels are applied by WATCH (opening, and `ready` when the issue carries a
+falsifiable acceptance command), WORK (the rest), and CI (`merged` onward).
+No label is yours to apply for the loop to run.
+
+Two labels stop it, and they are the founder's: `held` freezes an issue where
+it stands, and `no-auto` on a path in `CODEOWNERS` forces review on anything
+touching it. The tap moved from *every* change to *the changes you name in
+advance* — which is the same authority exercised once instead of hourly.
 
 ---
 
@@ -237,20 +261,51 @@ skilldock.io, hermeshub — same ritual every time.
 ## 5. WATCH — perception (day 1)
 
 Read-only credentials; verify by attempting a write and confirming failure.
-Cheap model lane. Its entire output is *issues with evidence*; it never fixes.
+Cheap model lane. It perceives and it selects a remedy; it never invents one.
 
 Concrete wiring for your platform (adjust app names):
 
 | cadence | job | mechanics |
 |---|---|---|
 | 15 min | pulse | `fly status -a prospector-engine`, `fly machine list`, health endpoints, error-rate window from `fly logs --no-tail` |
-| on threshold | investigate | correlate log window ± recent deploys (`gh run list`, `git log`) ± past incidents (session_search + closed issues) → open issue labelled `triage`, evidence inline |
-| 07:00 | digest | what changed, what's degraded, open threads → Telegram |
+| on threshold | **heal** | match the signature against the remedy catalogue → run that remedy → re-pulse → **say nothing on success** |
+| no match, or healed twice and back | investigate | correlate log window ± recent deploys (`gh run list`, `git log`) ± past incidents (session_search + closed issues) → open issue labelled `triage`, evidence inline |
+| 07:00 | digest | **suppressed unless an exception is open.** A quiet estate sends nothing |
+| Sun | review | read the heal ledger; anything healed 3+ times becomes a `triage` issue — a recurring heal is a defect, not a fix |
 | Sun | proposals | 3 unasked-for improvements as `proposal` issues, each with the measurement that would prove it worked |
 
+**The remedy catalogue** is the whole of what auto-healing may do. Each entry
+is a signature, a script, a verify command and a stated blast radius — checked
+into git, so adding a remedy is a PR under §7 and not a runtime decision:
+
+```yaml
+- signature: "engine 5xx > 2% for 2 consecutive pulses"
+  remedy:  scripts/heal/restart-machine.sh --app prospector-engine
+  verify:  bin/pulse.sh --app prospector-engine --require 2-consecutive-green
+  radius:  one machine, one app, ~15s of 502s
+  cap:     2 per 24h per app
+```
+
+The lane holds write credentials for **nothing but the catalogue's scripts**.
+An LLM with production write access and a free hand is a larger blast radius
+than the alert flood it replaces; selecting from a fixed list is not.
+
+Three rules keep silence honest, and all three are the difference between
+auto-healing and hiding:
+
+- **Cap and flap.** Past `cap`, healing stops and the condition escalates. A
+  remedy that keeps working on the same signature is masking a defect, and the
+  cap is what converts it back into a visible one.
+- **Every heal is written down even though nobody is told.** `logs/heal.jsonl`
+  — signature, remedy, verify output, duration. Silence is the absence of a
+  *message*, never the absence of a *record*.
+- **The ledger is read on a schedule** (Sunday, above) and its recurring
+  entries are promoted up the §8 ladder. A heal ledger nobody reads is how a
+  system converts a fixable defect into a permanent operating cost.
+
 Issue template (enforced by the skill): claim → query run → raw output →
-time window → similar past incidents. No evidence, no issue. Thresholds
-live in `estate-map` so tuning them is a skill edit, not code.
+time window → similar past incidents. No evidence, no issue. Thresholds and
+the catalogue live in `estate-map`, so tuning them is a skill edit, not code.
 
 Untrusted-input note: logs are attacker-influenceable text. WATCH's egress
 allowlist (§10) is the control — constrain what it can reach, don't try to
@@ -262,20 +317,25 @@ make it un-foolable.
 
 ## 6. WORK — hands (week 3, after the leash)
 
-Trigger: `agent-go` label (your tap — the entire v1 safety model).
-Frontier lane. Repo write via worktree only; no push to main, no deploy
-rights, no prod DB, no prod secrets in context.
+Trigger: the `ready` label, applied by WATCH when an issue carries a
+falsifiable acceptance command — no human in the path. Frontier lane. Repo
+write via worktree only; no push to main, no deploy rights, no prod DB, no
+prod secrets in context, and **no write access to anything that grades it**
+(§7b).
 
 Loop: read issue + all comments (its briefing — no memory handoff) →
-one-line interpretation posted; low confidence = wait → worktree →
-**reproduce first** (cannot reproduce = comment and stop; never fix an
-unseen bug) → fix → verify by execution → PR with Evidence block →
-plain-English comment + Telegram ping → stop. Never merges.
+one-line interpretation posted; low confidence = label `held` and stop →
+worktree → **reproduce first** (cannot reproduce = comment and stop; never
+fix an unseen bug) → fix → verify by execution → PR with Evidence block →
+stop. It still never merges — **CI does**, when every required check is
+green and the branch touches no `no-auto` path.
 
-Follow-through (`verify-to-prod`): after your merge and deploy, WORK
+Follow-through (`verify-to-prod`): after the merge and deploy, WORK
 re-checks health + the incident's regression test in prod context, posts
 post-deploy evidence, moves issue to `verified`, then `closed`. "Tracks to
-shipped" is a state transition it owns, not a vibe.
+shipped" is a state transition it owns, not a vibe. The Telegram ping moved
+here from PR-open: you hear when something **reached production and passed**,
+not when a machine wants permission.
 
 ---
 
@@ -334,13 +394,43 @@ data too.
 
 ## 7. Gates (week 1, before WORK exists)
 
-**Evidence gate — CI, mechanical, non-negotiable:** every PR body needs
+**Green CI is the promotion gate.** Auto-merge is on: every required check
+green, `no-auto` paths untouched, no `held` label ⇒ the PR merges itself and
+deploys. Nobody taps anything. Which makes the gates the entire specification
+of what this estate will accept, so the rest of this section is about keeping
+them out of the hands of the thing they grade.
+
+**7a. Evidence gate — CI, mechanical, non-negotiable:** every PR body needs
 `## Evidence` with one `### Claim:` per claim, each followed by the command
 and real output. The workflow from the earlier sheet stands (counts claims
-vs output blocks; fails on mismatch). Corollary: CI results are the score
-the agent can see; your merge is the score it can't. Keep that asymmetry.
+vs output blocks; fails on mismatch).
 
-**Deterministic analysis stack (your Rust list, corrected to your code):**
+**7b. The scorer is out of reach.** The old asymmetry was *CI is the score the
+agent can see, your merge is the score it can't*. The tap is gone, so the
+asymmetry has to be rebuilt somewhere the agent cannot reach:
+
+| what | where it lives | why it is out of reach |
+|---|---|---|
+| gate definitions (`.github/workflows/`, `ci/`) | `CODEOWNERS`-protected, `no-auto` | a PR touching them cannot auto-merge, ever |
+| branch protection & required-check list | GitHub org settings | no API token in any lane can edit it |
+| eval corpus (`estate-evals/incidents.jsonl`) | append-only, enforced in CI | the agent adds cases; it cannot alter or delete one |
+| holdout slice | 20% of the corpus, never in the agent's context | it is scored against cases it has not read |
+| production oracle (§7c) | post-merge | the signal does not exist at PR time |
+
+A gate the agent can edit is not a gate, and a test that rewrites itself to
+match the code always passes — which removes the oracle rather than satisfying
+it. Those five rows are the difference between selection pressure and a
+closed loop congratulating itself.
+
+**7c. Production is the score it never sees.** Merge is not the end state,
+`verified` is. Post-deploy, `verify-to-prod` runs the health pulse and the
+incident's own regression test against production; two consecutive reds roll
+the deploy back automatically and open a `post-mortem` issue. This is the
+cheapest oracle in the estate because it already exists, and it is genuinely
+held out: no amount of PR-time cleverness can reach a signal that is only
+produced after the merge it would need to influence.
+
+**7d. Deterministic analysis stack (your Rust list, corrected to your code):**
 
 | concept | Python estate | .NET estate | Rust (if/where you have it) |
 |---|---|---|---|
@@ -351,7 +441,17 @@ the agent can see; your merge is the score it can't. Keep that asymmetry.
 | tool sandbox | Hermes Docker terminal backend: pinned image, `:ro` mounts, explicit env forwarding | same | (WASM fuel-metering isn't a Hermes feature; container isolation is) |
 
 All of it as branch-protection requirements beside the evidence gate. The
-agent's PR clears them or it doesn't; nothing to argue with.
+agent's PR clears them or it doesn't; nothing to argue with, and nobody to
+argue with — that is now the whole promotion decision.
+
+**What you gave up, stated plainly so it can be disagreed with.** The tap
+caught things no gate encodes: a technically-correct change that was the
+wrong idea. Auto-merge cannot catch that class and does not pretend to. The
+trade is that the tap was also a queue — work sat waiting on your attention,
+which is the scarcest thing here — and the failure it prevented is now
+handled by being *cheap to reverse* rather than *hard to reach*: revert is a
+PR, rollback is automatic, and `no-auto` on a path buys the old behaviour
+back for anything you decide is worth the wait.
 
 ---
 
@@ -370,7 +470,7 @@ rung it admits. Rungs 0–2 reduce probability; only 3–4 guarantee.
 | rung | form | applied by | guarantee |
 |---|---|---|---|
 | 0 | episodic record (session DB, issue) | automatic | none — raw material |
-| 1 | distilled lesson (MEMORY.md / skill note) | model recall | probabilistic |
+| 1 | **`SKILL.md` entry, admitted by replay (B)** | automatic | probabilistic, measured |
 | 2 | checklist step in `pr-discipline` / `incident-triage` | per-task check | probabilistic, targeted |
 | 3 | **incident-named regression test** (`test_incident_0042_*`), lint rule, CI check, pre-commit hook | CI, 100% | deterministic |
 | 4 | structural impossibility — permission removed, schema/type constraint, config made invalid | architecture | can't recur by construction |
@@ -382,18 +482,50 @@ check pool before app). "Vague instruction caused a detour" → rung 2
 (restate-and-confirm in USER.md) — admits no higher rung; accept probability
 reduction and monitor.
 
-**B. Admission control on lessons.** Lessons never free-write into memory:
-- entry is via the `post-mortem` skill output → a PR you tap (a wrong lesson
-  compiled to rung 3 is a *permanent wrong constraint*; the tap is cheap
-  insurance);
-- each lesson carries its eval case, and future outcomes are its quality
-  labels — a lesson that doesn't demonstrably help gets **deleted** at the
-  Sunday review (deletion is a safety op, per the ACL findings and MNL's
-  update-only-on-improvement rule);
-- WORK's dispatch includes a pre-flight: session_search + grep the incident
-  test suite for similar signatures — "have we failed this way before?" —
-  the deterministic version of the pre-commit-gate pattern now appearing in
-  the wild.
+**B. Admission control on lessons — automatic, and by measurement.** Nobody
+hand-edits a law here. Skills accumulate on their own, and what decides
+whether an entry lives is a replay over the incident corpus, not a review.
+
+Lessons still never free-write. The path is:
+
+```
+incident closed
+  → post-mortem skill emits {candidate lesson, its eval case}
+  → candidate written to the owning SKILL.md on a branch
+  → REPLAY: run the whole corpus with and without the candidate
+  → admitted iff  (a) batch score improves, AND
+                  (b) no case that previously passed now fails, AND
+                  (c) it also improves on the 20% holdout it never saw
+  → green CI (§7) merges it. No tap.
+  → rejected candidates are recorded with their numbers, so the same
+    lesson is never re-proposed and re-measured on a later incident
+```
+
+Condition (b) is not redundant with (a). An aggregate that improves can hide
+a regression on a case that used to pass, and a lesson that trades one class
+of correct behaviour for another is exactly the "wrong stored lesson
+propagates" failure this section opens with. Aggregate improvement is the
+cheapest thing to game and the easiest to mistake for progress.
+
+**Deletion is automatic too, and it is the half that matters.** Every active
+lesson is re-scored on the weekly replay. One that has stopped paying is
+deleted by the run that proves it, with the numbers in the commit message —
+not argued about on a Sunday. Deletion is a safety operation, per the ACL
+findings and MNL's update-only-on-improvement rule, and an accumulator with
+no eviction is just a context bill that grows until it degrades the thing it
+was meant to improve.
+
+**What keeps this from being a closed loop.** The agent writes the lesson and
+the agent runs the replay, so the corpus is the only thing standing between
+accumulation and self-congratulation. Per §7b it is append-only and CI
+enforces that: a lane may add an incident case, and may never edit or delete
+one. Twenty percent is held out of context entirely. A lesson that only
+improves the cases the agent could read is not admitted.
+
+WORK's dispatch keeps its pre-flight: session_search + grep the incident test
+suite for similar signatures — "have we failed this way before?" — the
+deterministic version of the pre-commit-gate pattern now appearing in the
+wild.
 
 **C. The eval corpus (`estate-evals/incidents.jsonl`)** — every resolved
 incident becomes selection pressure:
@@ -420,7 +552,11 @@ Mistakes are the most valuable eval data you own.
 after successful complex tasks (5+ tool calls), security-scanned on write;
 the Curator reviews agent-created skills weekly after idle
 (keep/patch/consolidate/archive, REPORT.md in `~/.hermes/logs/curator/`).
-Config: leave on; the §4 git snapshot is the safety; read the report Sundays.
+Config: leave on; the §4 git snapshot is the safety. The Curator's verdicts
+now apply themselves through §8B's replay rather than waiting to be read —
+keep/patch/consolidate execute on a measured improvement, archive executes on
+a measured decline, and REPORT.md becomes the record of what already happened
+instead of a list of things somebody has to action.
 
 **Loop 2 — evolutionary (install day 0, nightly, offline).**
 
@@ -438,9 +574,13 @@ python -m evolution.skills.evolve_skill --skill incident-triage \
 ```
 
 ~$2–10/run, API-only. Upstream gates: tests 100%, ≤15KB skills, caching
-compatibility, semantic preservation, **PR review — never direct commit**.
-Cron it nightly rotating your three most-used skills; as §8's corpus grows,
-it becomes the eval source that matters. Morning: evolution PRs with coffee.
+compatibility, semantic preservation, **PR — never direct commit**. The PR
+stands; the review does not. An evolution PR clears the same §7 checks as any
+other, plus §8B's replay including the holdout, and merges itself. Cron it
+nightly rotating your three most-used skills; as §8's corpus grows, it becomes
+the eval source that matters. Mornings you read nothing — the skills that
+improved are already in, the ~9/10 that did not are recorded as rejected with
+their numbers.
 
 **Loop 3 — the honest boundary.** In the official pipeline only Phase 1
 (SKILL.md evolution) is implemented; tool descriptions, system-prompt,
@@ -453,7 +593,7 @@ proposals to deserve rejection — a high rejection rate means the gates work.
 
 <a id="s10"></a>
 
-## 10. Leash (week 1, all five before WORK gets write access)
+## 10. Leash (week 1, all six before WORK gets write access)
 
 1. Hard USD cap per task, kill-without-asking (degenerate loops run to
    hundreds over a quiet weekend).
@@ -462,9 +602,13 @@ proposals to deserve rejection — a high rejection rate means the gates work.
 3. Append-only tool-call audit log somewhere the agent can't write.
 4. Secret hygiene: session DB indexes whatever the agent read; prod creds
    tool-scoped only.
-5. Promotion gates everywhere self-modification happens: skills via git
-   snapshot + Sunday review; lessons via post-mortem PR; evolution via
-   upstream PR flow.
+5. Promotion gates everywhere self-modification happens — now mechanical, not
+   manual: skills via git snapshot + §8B replay; lessons via replay against an
+   append-only corpus with a 20% holdout; evolution via upstream PR flow into
+   the same gates. No lane may write to what grades it (§7b).
+6. Auto-healing is a fixed catalogue, never a judgement (§5): pre-authorised
+   scripts, an idempotent verify, a per-signature cap, and escalation the
+   moment the cap is hit.
 
 ---
 
@@ -490,17 +634,36 @@ proposals to deserve rejection — a high rejection rate means the gates work.
 - **Hour 2** seed MEMORY.md + USER.md (terse).
 - **Hour 3** prune skills; per-platform gating.
 - **Hour 4** skills→git + hourly drift commit; state.db backup cron.
-- **Day 1** `estate-map` + `incident-triage`; WATCH pulse + 07:00 digest.
+- **Day 1** `estate-map` + `incident-triage`; WATCH pulse. Digest starts
+  exception-only from the first day — a quiet estate has never sent a
+  message here, so nobody ever learns to skim one.
 - **Day 2** install self-evolution; one synthetic run; read report; schedule
-  nightly. Create `estate-evals/` with the JSONL schema.
-- **Week 1** leash ×5; evidence gate + static gates in CI; board + labels;
-  skills 3–6 including `post-mortem`.
-- **Week 2** WATCH opens threshold issues; consider memory provider;
-  first `agent-go` on something that can't hurt (flaky test, docs drift —
-  which also attacks your docs-out-of-sync pain: WORK diffs docs against
-  code as a recurring `proposal`).
-- **Week 3** WORK live; first full issue→PR→merged→deployed→verified cycle;
-  first post-mortem through the ladder.
+  nightly. Create `estate-evals/` with the JSONL schema **and the append-only
+  CI check on it** — the corpus is load-bearing from the moment it exists.
+- **Week 1** leash ×6; evidence gate + static gates in CI; board + labels;
+  skills 3–6 including `post-mortem`; first two remedies in the heal
+  catalogue (restart machine, recycle worker) with caps.
+- **Week 2** WATCH opens threshold issues and heals the catalogued ones;
+  consider memory provider; first `ready` on something that can't hurt
+  (flaky test, docs drift — which also attacks your docs-out-of-sync pain:
+  WORK diffs docs against code as a recurring `proposal`).
+- **Week 3** WORK live, **still merging by hand**; first full
+  issue→PR→merged→deployed→verified cycle; first post-mortem through the
+  ladder; §8B replay running in report-only mode beside it.
+- **Week 4 — auto-merge on, and not before.** Three things must be true
+  first, in this order, because each one is what makes the next safe:
+  1. §7b holds — `CODEOWNERS` on `ci/` and `.github/`, branch protection you
+     cannot reach from any lane's token, corpus append-only in CI. Prove it
+     by trying to push a gate edit from WORK's token and getting refused.
+  2. §7c holds — `verify-to-prod` has rolled a bad deploy back on its own at
+     least once, in a drill you caused deliberately.
+  3. §8B's replay has agreed with the hand-merge decision for a full week in
+     report-only mode. If the gate would have merged something you rejected,
+     that is a missing check, and the week restarts.
+
+  Turn it on for one path first (docs, or the flaky-test lane), widen when it
+  is boring. Reversing is one setting, which is the point of doing it this way
+  round.
 - **Month 2** sessiondb becomes primary eval source; incident corpus feeds
   evolution; review whether any rung-1/2 lesson recurred → promote it.
 - **Sunday ritual (phone, ~25 min)** Curator report · skills git log ·
@@ -513,7 +676,7 @@ proposals to deserve rejection — a high rejection rate means the gates work.
 
 ## 13. Out of scope v1 — on purpose, not "later"
 
-Auto-merge (your tap IS the safety model) · a third *always-on* profile
+A third *always-on* profile
 (BENCH §6b is on-demand and label-drained, which is why it's allowed; the
 six-profile production study stands: degradation hits all profiles
 near-synchronously through shared substrate — a fleet is one mind with more
@@ -536,10 +699,13 @@ memory, skills, session search, subagents, approvals, provider fallback).
 | AIDE²: private-score selection, ~9/10 rejected, 16× context cut, emergent anti-reward-hacking, broken defence layer in lineage, Level 1 not ignition | Weco article (read in full) | **V** |
 | Experience-following: error propagation from stored mistakes; deletion + selective addition; outcomes as free quality labels | ACL 2026 (Xiong et al.) | **V** (abstract-level) |
 | MNL: mistake notes admitted only on batch improvement | arXiv | **V** (abstract-level) |
-| Cron cross-agent memory writes fail silently (skip_memory hardcoded) | arXiv "channel fracture" | **R** |
+| Cron sessions pass `skip_memory=True`; memory providers intentionally do not run during cron | Hermes `AGENTS.md:1047`, `run_agent.py:404` | **V** |
 | Six-profile synchronous degradation | arXiv reliability study | **R** |
 | Meta-cognition cost can exceed work cost; session index = secrets archive; no queryable audit log | independent reviews | **R** |
 | GitHub-as-orchestrator; two-profile split; lesson ladder; evidence gate; admission control wiring; cost ranges | this spec | **D** |
+| Auto-merge on green CI, with the tap reduced to `no-auto`/`held` | this spec (2026-08-22 revision) | **D** — *unvalidated*: the failure it names is a correct change that was the wrong idea, and no gate in §7 detects that class. §12 week 4 is the drill that has to pass before it goes on |
+| Held-out scoring (§7b/§7c) as the replacement for the tap's asymmetry | AIDE² private-score result, applied | **D, grounded in [V]** |
+| Auto-healing from a fixed remedy catalogue rather than an LLM decision | this spec | **D** — the cap, not the catalogue, is the load-bearing part; a remedy that keeps firing is a defect being hidden |
 
 Grade **D** items are choices, and they're falsifiable: each names the
 failure it prevents. Attack those, not the vibes.
