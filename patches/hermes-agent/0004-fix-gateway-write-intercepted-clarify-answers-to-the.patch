@@ -1,7 +1,7 @@
 From a8aa94645d3467e8d2baecb19ddb913eeafbd931 Mon Sep 17 00:00:00 2001
 From: chidionyema <377396+chidionyema@users.noreply.github.com>
 Date: Mon, 24 Aug 2026 02:27:55 +0100
-Subject: [PATCH 4/5] fix(gateway): write intercepted clarify answers to the
+Subject: [PATCH 4/6] fix(gateway): write intercepted clarify answers to the
  transcript
 
 While a clarify prompt is pending, the gateway takes any non-slash inbound

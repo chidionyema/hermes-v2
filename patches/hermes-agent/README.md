@@ -21,6 +21,10 @@ These files are that diff. `BASE` names the upstream commit they apply on top of
   unrecoverable from every store on this machine
 - `0005-fix-gateway-steer-...` the same swallow on the `/steer` path and the
   two busy-follow-up paths that reach `steer()`
+- `0006-fix-prompt_builder-...` a rules file lost its middle to the context-file
+  cap twice in five hours, so the agent held the index of every law and the text
+  of only some. The cap for a rules file is now computed from the model's window
+  instead of being a number a human raises after each incident
 
 ## Reapplying after a reinstall
 

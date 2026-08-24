@@ -1,7 +1,7 @@
 From b3ec1c9bc3daedcb997175e8bcd34bc7be00a790 Mon Sep 17 00:00:00 2001
 From: chidionyema <377396+chidionyema@users.noreply.github.com>
 Date: Mon, 24 Aug 2026 00:48:14 +0100
-Subject: [PATCH 3/5] feat(claim_gate): restamp an unproven DONE: as
+Subject: [PATCH 3/6] feat(claim_gate): restamp an unproven DONE: as
  UNVERIFIED: on the reply path
 
 A completion claim must join to the session's verification ledger or carry

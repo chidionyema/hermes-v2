@@ -1,7 +1,7 @@
 From 8f67ab8cb8ba798bdaa0ead7ab67664ed51beb62 Mon Sep 17 00:00:00 2001
 From: chidionyema <377396+chidionyema@users.noreply.github.com>
 Date: Sun, 23 Aug 2026 23:48:08 +0100
-Subject: [PATCH 2/5] fix(shutdown_forensics): snapshot the machine this
+Subject: [PATCH 2/6] fix(shutdown_forensics): snapshot the machine this
  gateway is actually on
 
 The shutdown diagnostic ran ps auxf, pstree, /proc/loadavg and dmesg. None of

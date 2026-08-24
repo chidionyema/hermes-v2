@@ -1,7 +1,7 @@
 From cf6def82d0cb42afa7fcadfd55d681c775eca92d Mon Sep 17 00:00:00 2001
 From: chidionyema <377396+chidionyema@users.noreply.github.com>
 Date: Mon, 24 Aug 2026 02:33:55 +0100
-Subject: [PATCH 5/5] fix(gateway): write /steer text to the transcript as well
+Subject: [PATCH 5/6] fix(gateway): write /steer text to the transcript as well
 
 Closing the class rather than the instance. The clarify swallow was one of
 two ways the gateway takes founder text and delivers it by hand: steer() is
