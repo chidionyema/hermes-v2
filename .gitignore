@@ -143,3 +143,10 @@ deploy/fly/fly.toml
 scripts/bootstrap-age-auth.sh
 scripts/check-age-drill.sh
 lsp/node_modules/
+.dependencies.json
+.curator_backups/
+.pytest-cache/
+verification_evidence.db
+verification_evidence.db-shm
+verification_evidence.db-wal
+skills/.curator_ledger.jsonl
