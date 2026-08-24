@@ -198,6 +198,57 @@ print(chr(10).join(plistlib.load(open(sys.argv[1],"rb"))["ProgramArguments"]))' 
   fi
 fi
 
+# 13. does the agent get all of the laws, or only some of them?
+# Twice now the laws file has grown past the cap and the prompt builder has
+# quietly thrown the middle away: 2026-08-23 21:47 lost the bodies of LAW 12
+# to LAW 30, and 2026-08-24 02:30 lost the back of LAW 34 and all of LAWS 35
+# to 40. Both times the only trace was one WARNING line in logs/errors.log,
+# and both times an agent bumped the number instead of noticing it recurs.
+# The laws grew 26,162 chars in one day, so the number will fall behind again.
+#
+# This does not compare numbers. It runs the real truncator over the real file
+# and fails if a single character was dropped, which is the artifact and not a
+# proxy for it. When it goes red the fix is to raise context_file_max_chars in
+# config.yaml until this passes -- the detail line says by how much.
+LAWS="$("$PY" - <<'PYEOF' 2>&1
+import logging
+import sys
+sys.path.insert(0, "hermes-agent")
+from pathlib import Path
+from agent.prompt_builder import _get_context_file_max_chars, _truncate_content
+
+# The truncator logs its own WARNING, and row() prints the first line of what
+# it captures. Left on, that line is what the founder sees instead of the one
+# telling him what number to set.
+logging.disable(logging.CRITICAL)
+
+src = None
+for p in (Path.home() / "AGENTS.md", Path("AGENTS.md"), Path("CLAUDE.md")):
+    if p.is_file():
+        src = p
+        break
+if src is None:
+    print("no laws file found")
+    raise SystemExit(1)
+
+text = src.read_text(encoding="utf-8", errors="replace")
+cap = _get_context_file_max_chars(200000)
+kept = _truncate_content(text, src.name, context_length=200000)
+if len(kept) == len(text):
+    print(f"{src.name} {len(text)} chars, whole, cap {cap}")
+    raise SystemExit(0)
+# head 70% + tail 20% is what survives, so the cap has to clear size / 0.9
+need = int(len(text) / 0.9) + 1
+print(
+    f"{src.name} is {len(text)} chars, cap {cap}, "
+    f"{len(text) - len(kept)} dropped from the middle -- "
+    f"set context_file_max_chars to at least {need}"
+)
+raise SystemExit(1)
+PYEOF
+)"; RC=$?
+row "the agent gets every law" "$RC" "$LAWS"
+
 # --full: the whole requirement ledger, which is slower
 if [ "${1:-}" = "--full" ]; then
   printf '\n'

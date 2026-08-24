@@ -13,6 +13,14 @@ These files are that diff. `BASE` names the upstream commit they apply on top of
 - `0002-fix-shutdown_forensics-...` the shutdown diagnostic ran Linux-only
   commands on macOS and wrote four complete-looking reports with every section
   empty
+- `0003-feat-claim_gate-...` a DONE the verification ledger cannot back is
+  restamped UNVERIFIED
+- `0004-fix-gateway-clarify-...` the gateway consumed a clarify answer in
+  memory, acknowledged with an empty string and never wrote the words down.
+  The founder typed 46 characters at 02:03:02 on 2026-08-24 and they were
+  unrecoverable from every store on this machine
+- `0005-fix-gateway-steer-...` the same swallow on the `/steer` path and the
+  two busy-follow-up paths that reach `steer()`
 
 ## Reapplying after a reinstall
 

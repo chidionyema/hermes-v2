@@ -1,0 +1,365 @@
+From a8aa94645d3467e8d2baecb19ddb913eeafbd931 Mon Sep 17 00:00:00 2001
+From: chidionyema <377396+chidionyema@users.noreply.github.com>
+Date: Mon, 24 Aug 2026 02:27:55 +0100
+Subject: [PATCH 4/5] fix(gateway): write intercepted clarify answers to the
+ transcript
+
+While a clarify prompt is pending, the gateway takes any non-slash inbound
+text as the answer, hands it to the blocked agent thread in memory and
+returns an empty string so adapters do not double-post. Nothing on that path
+wrote the text to the message store, and tools/clarify_gateway.py keeps its
+entries in RAM only. If the holding turn never flushed a tool result, the
+words were gone.
+
+Measured on the founder's own Telegram DM on 2026-08-24: he typed 46
+characters at 02:03:02, the gateway logged "intercepted clarify text
+response", the turn stalled, and the text was in no store on the machine.
+A separate 21-character message went the same way through /steer.
+
+The fix writes a receipt at both interception points. The row is soft
+-archived (active=0), so it is on disk and in every transcript export but is
+not replayed to the provider - a live user row between an assistant tool
+call and its result would break the required message sequence. Recording
+never raises, because a failed receipt must not cost the founder the answer
+the caller is about to deliver.
+
+append_message gained an active parameter to make that write possible; it
+hardcoded 1 before.
+
+Two incident tests, paired per LAW 38: the archived row stays out of the
+live conversation and the default write still lands in it; the receipt
+reaches disk and a broken write is silent at the caller. All 5 fail on the
+pre-fix tree and pass on this one.
+---
+ gateway/run.py                                |  73 +++++++++++
+ hermes_state.py                               |  11 +-
+ tests/gateway/test_clarify_answer_receipt.py  | 116 ++++++++++++++++++
+ .../test_append_message_active_flag.py        |  62 ++++++++++
+ 4 files changed, 261 insertions(+), 1 deletion(-)
+ create mode 100644 tests/gateway/test_clarify_answer_receipt.py
+ create mode 100644 tests/hermes_state/test_append_message_active_flag.py
+
+diff --git a/gateway/run.py b/gateway/run.py
+index eab83b7a0a..017f565829 100644
+--- a/gateway/run.py
++++ b/gateway/run.py
+@@ -6812,6 +6812,64 @@ class GatewayRunner(GatewayAuthorizationMixin, GatewayKanbanWatchersMixin, Gatew
+             return None
+         return sessions.get(session_key)
+ 
++    def _record_intercepted_input(
++        self,
++        session_key: str,
++        text: str,
++        display_kind: str,
++        clarify_id: str = "",
++    ) -> None:
++        """Write text the gateway consumed in memory into the transcript.
++
++        A clarify answer never reaches the dispatch path that persists a user
++        row. The gateway hands it straight to the blocked agent thread and
++        acknowledges with an empty string, so until 2026-08-24 the words
++        existed only in RAM and in one INFO line giving their character count.
++        Measured that morning on the founder's own DM: he typed 46 characters
++        at 02:03:02, the gateway logged "intercepted clarify text response",
++        the turn holding the answer never flushed a tool result, and the text
++        was unrecoverable from every store on this machine. A message accepted
++        and then lost with no receipt is the worst shape of failure available
++        to a gateway, because the sender has no way to know it happened.
++
++        The row is soft-archived (``active=0``). It is a receipt, not a turn:
++        the clarify tool result already carries the answer into the model's
++        history, and a live user row sitting between an assistant tool call
++        and its result would break the provider's message sequence.
++
++        Never raises. A failed receipt must not cost the founder the answer
++        itself, which the caller is about to deliver.
++        """
++        if not text:
++            return
++        try:
++            db = self._session_db
++            if db is None:
++                return
++            state = self._peek_session_state(session_key)
++            agent = getattr(getattr(state, "turn", None), "agent", None)
++            session_id = getattr(agent, "session_id", None)
++            if not session_id:
++                logger.warning(
++                    "Could not record intercepted input for %s: no live "
++                    "session id (%d chars lost from the transcript)",
++                    session_key, len(text),
++                )
++                return
++            db._db.append_message(
++                session_id,
++                "user",
++                content=text,
++                display_kind=display_kind,
++                display_metadata={"clarify_id": clarify_id} if clarify_id else None,
++                active=False,
++            )
++        except Exception:
++            logger.warning(
++                "Failed to record intercepted input for %s (%d chars)",
++                session_key, len(text), exc_info=True,
++            )
++
+     def _is_session_running(self, session_key: str) -> bool:
+         """True when the session holds a running-turn slot (agent or sentinel)."""
+         state = self._peek_session_state(session_key)
+@@ -16863,6 +16921,13 @@ class GatewayRunner(GatewayAuthorizationMixin, GatewayKanbanWatchersMixin, Gatew
+                         "Gateway intercepted clarify text response (session=%s, id=%s)",
+                         _quick_key, _pending_clarify.clarify_id,
+                     )
++                    # The answer is now in RAM on its way to a blocked agent
++                    # thread. Put it on disk first, so it survives whatever
++                    # happens to that turn.
++                    self._record_intercepted_input(
++                        _quick_key, _raw_clarify_reply,
++                        "clarify_answer", _pending_clarify.clarify_id,
++                    )
+                     # The clarify callback pauses the platform typing/status
+                     # indicator while waiting so Slack users can type their
+                     # answer. The active agent resumes as soon as this reply
+@@ -16892,6 +16957,14 @@ class GatewayRunner(GatewayAuthorizationMixin, GatewayKanbanWatchersMixin, Gatew
+                         "selection attempt (session=%s, id=%s)",
+                         _quick_key, _pending_clarify.clarify_id,
+                     )
++                    # Rejected, so no agent will ever see this text. It is
++                    # dropped entirely, which makes the receipt the only
++                    # record that the founder typed anything at all.
++                    self._record_intercepted_input(
++                        _quick_key, _raw_clarify_reply,
++                        "clarify_rejected_selection",
++                        _pending_clarify.clarify_id,
++                    )
+                     return ""
+                 if _text_outcome == _clarify_mod.TEXT_REJECTED_PROSE:
+                     # Native-choice prompts deliberately reject unmatched
+diff --git a/hermes_state.py b/hermes_state.py
+index 9fdc820035..aa9afa054e 100644
+--- a/hermes_state.py
++++ b/hermes_state.py
+@@ -9289,6 +9289,7 @@ class SessionDB(SessionSearchMixin, SessionSchemaMixin, SessionPortabilityMixin)
+         compression_lock_holder: Optional[str] = None,
+         turn_lease_holder: Optional[str] = None,
+         turn_lease_ttl_seconds: float = 300.0,
++        active: bool = True,
+     ) -> int:
+         """
+         Append a message to a session. Returns the message row ID.
+@@ -9309,6 +9310,14 @@ class SessionDB(SessionSearchMixin, SessionSchemaMixin, SessionPortabilityMixin)
+         (which sqlite3 cannot bind and which the conversation loop scrubs
+         from every outgoing payload anyway, so the scrubbed form IS the
+         wire bytes).
++
++        ``active=False`` writes the row soft-archived: it is on disk and in
++        every transcript export, and :meth:`get_messages` leaves it out of the
++        live conversation the provider replays.  Use it for a receipt — text
++        that must survive but must not become a turn — such as a founder reply
++        the gateway consumed in memory (see ``_record_intercepted_input``).
++        Inserting a live user row between an assistant tool call and its
++        result would break the provider's required message sequence.
+         """
+         # Display metadata is presentation-only and never changes the model
+         # context role/content replayed to providers.
+@@ -9377,7 +9386,7 @@ class SessionDB(SessionSearchMixin, SessionSchemaMixin, SessionPortabilityMixin)
+                     codex_message_items_json,
+                     platform_message_id,
+                     1 if observed else 0,
+-                    1,
++                    1 if active else 0,
+                     _scrub_surrogates(api_content) if isinstance(api_content, str) else None,
+                     _scrub_surrogates(display_kind) if isinstance(display_kind, str) else None,
+                     display_metadata_json,
+diff --git a/tests/gateway/test_clarify_answer_receipt.py b/tests/gateway/test_clarify_answer_receipt.py
+new file mode 100644
+index 0000000000..9c35238ddf
+--- /dev/null
++++ b/tests/gateway/test_clarify_answer_receipt.py
+@@ -0,0 +1,116 @@
++"""Incident 2026-08-24: the gateway swallowed a founder clarify answer.
++
++While a clarify prompt is pending, the interceptor in ``gateway/run.py`` takes
++any non-slash inbound text as the answer, hands it to the blocked agent thread
++in memory and returns ``""`` so adapters do not double-post.  Nothing on that
++path wrote the text to the message store, and ``tools/clarify_gateway`` is
++in-memory only.  Measured that morning on the founder's own DM: 46 characters
++typed at 02:03:02, one INFO line recording their length, the holding turn
++never flushed, and the words were unrecoverable from every store on the
++machine.  A message accepted and then lost with no receipt is the worst shape
++a gateway failure takes, because the sender cannot tell it happened.
++
++``GatewayRunner._record_intercepted_input`` is the fix.  These tests hold it
++to the two things that matter: the receipt lands on disk, and a failure to
++write one never costs the founder the answer itself.
++"""
++
++import sqlite3
++from types import SimpleNamespace
++
++import pytest
++
++from gateway.run import GatewayRunner
++from hermes_state import SessionDB
++
++
++@pytest.fixture
++def db(tmp_path):
++    database = SessionDB(tmp_path / "state.db")
++    try:
++        yield database
++    finally:
++        database.close()
++
++
++def _runner(db, session_id="sess-1", session_key="telegram:12345"):
++    """A GatewayRunner with only the two attributes this method reads.
++
++    Constructing a real runner starts adapters and schedulers.  The method
++    under test reaches for ``self._session_db._db`` and
++    ``self._peek_session_state``, and nothing else.
++    """
++    runner = object.__new__(GatewayRunner)
++    runner.__dict__["_sessions"] = {
++        session_key: SimpleNamespace(
++            turn=SimpleNamespace(agent=SimpleNamespace(session_id=session_id))
++        )
++    }
++    runner._session_db = SimpleNamespace(_db=db)
++    return runner
++
++
++def test_intercepted_clarify_answer_reaches_the_transcript(db):
++    """The pass half: his words are on disk before the agent thread sees them."""
++    db.create_session("sess-1", source="gateway")
++    runner = _runner(db)
++
++    runner._record_intercepted_input(
++        "telegram:12345",
++        "kubernetes on hetzner, not eks",
++        "clarify_answer",
++        "818ca63ae1",
++    )
++
++    rows = db.get_messages("sess-1", include_inactive=True)
++    assert [r["content"] for r in rows] == ["kubernetes on hetzner, not eks"]
++    assert rows[0]["role"] == "user"
++    assert rows[0]["display_kind"] == "clarify_answer"
++
++    # It is a receipt, not a turn: the clarify tool result already carries the
++    # answer into the model's history, so replaying this row as well would put
++    # a live user message between an assistant tool call and its result.
++    assert db.get_messages("sess-1") == []
++
++
++def test_rejected_selection_text_is_recorded_even_though_no_agent_sees_it(db):
++    """Text the clarify refuses is dropped entirely, so the receipt is the
++    only evidence he typed anything at all."""
++    db.create_session("sess-1", source="gateway")
++    runner = _runner(db)
++
++    runner._record_intercepted_input(
++        "telegram:12345", "none of those", "clarify_rejected_selection", "c-9"
++    )
++
++    rows = db.get_messages("sess-1", include_inactive=True)
++    assert [r["content"] for r in rows] == ["none of those"]
++    assert rows[0]["display_kind"] == "clarify_rejected_selection"
++
++
++def test_a_failed_receipt_never_raises_at_the_caller(db):
++    """The refusal half: recording must not be able to cost him the answer.
++
++    The caller is on its way to hand the text to a blocked agent thread.  If
++    this method raised, a broken transcript write would turn a recoverable
++    message into a hung turn -- a worse failure than the one it fixes.
++    """
++    class _Exploding:
++        def append_message(self, *a, **kw):
++            raise sqlite3.OperationalError("database is locked")
++
++    runner = _runner(_Exploding())
++    runner._record_intercepted_input("telegram:12345", "text", "clarify_answer")
++
++    # No live session id is the other way it can fail, and it is also silent.
++    orphan = object.__new__(GatewayRunner)
++    orphan.__dict__["_sessions"] = {}
++    orphan._session_db = SimpleNamespace(_db=db)
++    orphan._record_intercepted_input("telegram:12345", "text", "clarify_answer")
++
++
++def test_empty_text_writes_nothing(db):
++    db.create_session("sess-1", source="gateway")
++    runner = _runner(db)
++    runner._record_intercepted_input("telegram:12345", "", "clarify_answer")
++    assert db.get_messages("sess-1", include_inactive=True) == []
+diff --git a/tests/hermes_state/test_append_message_active_flag.py b/tests/hermes_state/test_append_message_active_flag.py
+new file mode 100644
+index 0000000000..a36ba804e8
+--- /dev/null
++++ b/tests/hermes_state/test_append_message_active_flag.py
+@@ -0,0 +1,62 @@
++"""``append_message(active=False)`` writes a durable, non-replayed receipt.
++
++Incident, 2026-08-24: the gateway consumed a clarify answer from the founder
++in memory, handed it to a blocked agent thread and acknowledged with an empty
++string.  The turn holding it never flushed, so 46 characters he typed existed
++only in RAM and in one log line giving their length.  The fix writes the text
++to the transcript as a soft-archived row, which needs ``append_message`` to be
++able to write ``active = 0`` at all -- it hardcoded ``1`` before.
++
++Paired per LAW 38: the archived row must stay out of the live conversation
++(the refusal half), and the default write must still land in it (the pass
++half).  A change that fenced everything would satisfy the first alone.
++"""
++
++import pytest
++
++from hermes_state import SessionDB
++
++
++@pytest.fixture
++def db(tmp_path):
++    database = SessionDB(tmp_path / "state.db")
++    try:
++        yield database
++    finally:
++        database.close()
++
++
++def test_active_false_row_is_on_disk_but_out_of_the_replayed_conversation(db):
++    db.create_session("s1", source="gateway")
++
++    live_id = db.append_message("s1", "user", content="ordinary message")
++    receipt_id = db.append_message(
++        "s1",
++        "user",
++        content="the answer he typed",
++        display_kind="clarify_answer",
++        display_metadata={"clarify_id": "818ca63ae1"},
++        active=False,
++    )
++    assert receipt_id != live_id
++
++    # The pass half: the default write is still replayed to the provider.
++    live = db.get_messages("s1")
++    assert [m["content"] for m in live] == ["ordinary message"]
++
++    # The refusal half: the receipt is not, so it cannot land between an
++    # assistant tool call and its result and break the message sequence.
++    assert all(m["id"] != receipt_id for m in live)
++
++    # But it is on disk, which is the whole point of writing it.
++    row = db._conn.execute(
++        "SELECT content, active, display_kind FROM messages WHERE id = ?",
++        (receipt_id,),
++    ).fetchone()
++    assert row["content"] == "the answer he typed"
++    assert row["active"] == 0
++    assert row["display_kind"] == "clarify_answer"
++
++    # And it is readable by anything that audits the transcript.
++    audited = db.get_messages("s1", include_inactive=True)
++    assert "the answer he typed" in [m["content"] for m in audited]
