@@ -6,6 +6,10 @@ fallback_providers:
     model: claude-sonnet-5
 agent:
   max_turns: 90
+  # Verify-on-stop ON even on Telegram (crew #63 A1): the claim gate joins
+  # DONE: claims to the verification ledger, so the agent must actually run
+  # verify commands or every DONE it sends is stamped UNVERIFIED.
+  verify_on_stop: true
   context_window: 200000
   # Identity does NOT live here. agent.system_prompt only reaches the message
   # path; cron/scheduler.py:5787 builds its own AIAgent without it, so every
