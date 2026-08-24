@@ -15,7 +15,18 @@ agent:
   # path; cron/scheduler.py:5787 builds its own AIAgent without it, so every
   # scheduled message would still come from a nameless agent. SOUL.md is the
   # identity slot both paths read (agent/prompt_builder.py:2323). It is there.
-context_file_max_chars: 96000
+# AGENTS.md is the estate's laws and it is 100,199 chars. A context file is
+# truncated head 70% / tail 20%, so a cap of 96000 kept 86,400 chars and cut
+# 13,799 out of the middle: measured 2026-08-24, The Architect was running with
+# the back half of LAW 34 and the whole of LAWS 35-40 missing, including LAW 35
+# ("our golden sacred goal") and LAW 39. The only signal was one WARNING line in
+# logs/errors.log that nobody reads.
+#
+# The cap must clear the file with the ratios applied: max_chars * 0.9 >= size.
+# 140000 keeps 126,000 chars, which is the laws plus ~26K of room to grow. Do
+# not delete this line to "use the default" -- the dynamic cap is
+# context_window * 4 * 0.06 = 48,000 here, which truncates far harder.
+context_file_max_chars: 140000
 memory:
   memory_enabled: true
   user_profile_enabled: true
