@@ -310,30 +310,61 @@ are tracked, so what you see below is the source they come from.
 | `docs/THE-ARCHITECT.md` | The spec. Every requirement row deep-links to the section it came from, so nothing is in this repo without a paragraph that asked for it. |
 | `docs/claude-auth.md` | The whole credential chain, with links pinned to the exact upstream commit: where identity comes from, why the laptop's token cannot travel, and what to do when the fallback goes stale. |
 | `docs/demo/` | One page per feature showing it running, with real pasted output under the command that produced it. Written for the founder, who did not build the thing and should not have to run it to find out whether it works. |
+| `docs/demo/claim-gate.md` | The claim gate restamping a real `DONE:` as `UNVERIFIED:`, real run 2026-08-24: `stamp_unproven_done` against a throwaway ledger, pasted input and output side by side. |
 | `docs/demo/the-architect.md` | The gateway doing all three of its jobs, from a real run: `bin/verify` at 17 passed 0 failed, the two live sockets to the address `api.telegram.org` resolves to, a model call, and a message delivered off this machine. |
+| `docs/demo/verify_on_stop.md` | `verify_on_stop_enabled()` returning `True` against the live gateway's own config and venv, real run 2026-08-24, proving the flip that makes verify-on-stop apply to the Telegram surface. |
 | `docs/evidence/` | A screenshot of the passing run for each pull request, committed to the branch rather than uploaded to GitHub. Evidence stored in the vendor leaves with the vendor; an image in the branch travels out with the git bundle. |
 | `docs/evidence/pr-1/` | PR #1, the consult client. One frame holding every gate and one live consult: `render --check`, `check-readme`, `check-requirements §16`, `verify`, `verify-consult`, and `bin/consult` returning an answer with exit 0. The images inside are named after the moment they were captured, so they are not listed here one by one. |
 | `docs/evidence/pr-2/` | PR #2, the age-encrypted credential and its boot drill. Same rule as `pr-1/`: the images are named after the moment they were captured, so they are not listed one by one. |
 | `docs/incidents/` | What went wrong, what it cost, and the class of mistake it belonged to. Written after the platform is serving again, never during. |
 | `docs/incidents/2026-08-22-agent-as-secret-courier.md` | The incident that produced the rule that an agent never carries a secret between two systems, and the four refusals that named the class. |
 | `docs/onboarding/` | One page per feature answering what it is for, what it costs, what it touches, where it lives and how to stop it. The off switch is one command, because that is the only reason anyone trusts a thing to run unattended. |
+| `docs/onboarding/claim-gate.md` | What the claim gate is for, what it costs (one local SQLite read per `DONE:` reply, nothing recurring), what it touches, and that it stamps rather than blocks. |
 | `docs/onboarding/the-architect.md` | The gateway: why it is the component whose failure is different from every other, what a turn costs, the launchd label that stops it, and the three failures that have actually happened, including going deaf when a second process takes the Telegram token. |
+| `docs/onboarding/verify_on_stop.md` | What verify-on-stop is for, why it was OFF on Telegram by upstream default, and what it costs: one extra verify-command run at the end of a turn that edited code. |
 | `estate-evals/` | The incident record, and what each incident bought. |
 | `estate-evals/incidents.example.jsonl` | Worked examples of the incident format: symptom, root cause, the class of mistake, and the rung and artifact that now prevent it. Your own `incidents.jsonl` is not tracked. |
 | `estate.example.yaml` | The one file you edit, filled in and commented. Copy it, change it, and `./install --estate` sets a machine up without asking a single question. |
+| `gateway/` | The running gateway's own working directory, written while it runs. Only `restart_loop.json` is tracked; the rest is process state and is ignored. |
+| `gateway/restart_loop.json` | The last-resort restart-loop breaker's boot chain (`hermes-agent/gateway/restart_loop_guard.py`). It survives process death because each boot is a fresh process; once too many boots chain within `max_gap_seconds` the gateway skips auto-resuming the session that keeps killing it, so a human is put back in the loop instead of the crash repeating unattended. |
 | `handlers/` | Code the agent runs when a message arrives, rather than when a clock fires. |
 | `handlers/tests/` | Proof that a handler still behaves when the input is bad, which for a handler is the normal case. |
 | `handlers/tests/test_screenshot_to_issue.py` | Proves a photo with almost no words still yields a well-formed issue, and that failing to read one opens nothing rather than opening a blank issue. |
 | `install` | The whole setup: five questions, a venv, the agent, the rendered files, the schedule, then `bin/verify` to prove the result. Safe to run twice. |
+| `lsp/` | The language servers the agent's editing tools call out to, installed by npm rather than generated. `node_modules/` is where npm writes and is ignored. |
+| `lsp/bin/` | The two binaries a human or the agent actually invokes; everything else under `lsp/` is a dependency of these two. |
+| `lsp/bin/bash-language-server` | Symlink into `node_modules/.bin/`, tracked so a fresh checkout has the entry point without running `npm install` first to discover its name. |
+| `lsp/bin/pyright-langserver` | Symlink into `node_modules/.bin/`, same reason as `bash-language-server`. |
+| `lsp/package-lock.json` | Pins every language-server dependency to the version actually installed, so `npm ci` here reproduces this tree rather than whatever `^` resolves to on the day. |
+| `lsp/package.json` | The two dependencies: `bash-language-server` and `pyright`, the servers `lsp/bin/` points into. |
+| `patches/` | Local commits to code this repo does not own the remote of. See `patches/hermes-agent/README.md`. |
+| `patches/hermes-agent/` | The diff between upstream `NousResearch/hermes-agent` at `BASE` and the commit this estate actually runs, so a `git clean` or a reinstall of the 977 MB checkout in `hermes-agent/` cannot silently drop a fix. |
+| `patches/hermes-agent/0001-feat-summary-port-the-isopsephy-card-from-the-old-es.patch` | The isopsephy card ported from the old estate. |
+| `patches/hermes-agent/0002-fix-shutdown_forensics-snapshot-the-machine-this-gat.patch` | The shutdown diagnostic ran Linux-only commands on macOS and wrote four complete-looking reports with every section empty. |
+| `patches/hermes-agent/0003-feat-claim_gate-restamp-an-unproven-DONE-as-UNVERIFI.patch` | A `DONE:` the verification ledger cannot back is restamped `UNVERIFIED:` — the fix that ships as the claim gate. |
+| `patches/hermes-agent/0004-fix-gateway-write-intercepted-clarify-answers-to-the.patch` | The gateway consumed a clarify answer in memory and never wrote it down; the founder typed 46 characters that were unrecoverable from every store on this machine. |
+| `patches/hermes-agent/0005-fix-gateway-write-steer-text-to-the-transcript-as-we.patch` | The same swallow as 0004, on the `/steer` path and the two busy-follow-up paths that reach `steer()`. |
+| `patches/hermes-agent/0006-fix-prompt_builder-a-rules-file-reaches-the-agent-wh.patch` | A rules file lost its middle to the context-file cap twice in five hours; the cap for a rules file is now computed from the model's window instead of a number a human raises after each incident. |
+| `patches/hermes-agent/BASE` | The upstream commit the six patches apply on top of. `git checkout $(cat BASE) && git am *.patch` in `hermes-agent/` reconstructs the running commit after a reinstall. |
+| `patches/hermes-agent/README.md` | What each patch fixes, and the two commands: reapplying after a reinstall, and refreshing the patch files after a new local commit. |
 | `profiles/` | One directory per lane. The profile is what gives a lane different powers from its neighbour, which is why the powers are a file and not a prompt. |
+| `profiles/architect/` | The main voice's profile — the lane this README describes. |
+| `profiles/architect/USER.md` | The Architect's standing instructions: timezone, tone, ask-before-acting on ambiguity, and never claim done without the command and its output in the same message. |
+| `profiles/maestro/` | The watch loop's profile: launchd job `com.chidionyema.maestro`, code at `~/dev/code/maestro`, data in `~/.maestro/experience_graph.db`. |
+| `profiles/maestro/SOUL.md` | maestro's identity: the estate's smoke alarm, not its hands — reports what is broken with the number that proves it and never claims a fix it did not watch succeed. |
+| `profiles/maestro/USER.md` | maestro's standing instructions: timezone, decisive tone, facts only, and the same done-means-command-output rule as every other lane. |
 | `profiles/watch/` | The reading lane's profile. |
+| `profiles/watch/SOUL.md` | WATCH's identity: the estate's perception lane, reads the platform and opens issues, never fixes anything — a WATCH that edits is two agents racing in one body. |
 | `profiles/watch/USER.md` | WATCH's standing instructions: it never fixes anything, and its only output is a GitHub issue with the raw evidence in it. |
 | `profiles/watch/config.yaml` | WATCH's model and toolset — the cheapest Claude, because noticing is cheap. |
 | `profiles/work/` | The writing lane's profile. |
+| `profiles/work/SOUL.md` | WORK's identity: the estate's hands, acts only on crew issues labelled `agent-go`, in a worktree, delivering a pull request — never a direct edit to a shared checkout, never a push to main. |
 | `profiles/work/USER.md` | WORK's standing instructions: never merges, never deploys, and reproduces a bug before it fixes one. |
 | `profiles/work/config.yaml` | WORK's model, its per-task cost hard stop, and the escalation ladder written out so raising the model is a decision with a number attached. |
 | `runbooks/` | What a person does by hand, in order, when the thing being done is rare and dangerous. |
 | `runbooks/hermes-upgrade.md` | Upgrading Hermes: confirm the pinned commit, back up `state.db`, read the diff of the config defaults, and the way back. Never a `git pull`. |
+| `scripts/` | The copy of a script the scheduler resolves, on the same rule as `templates/scripts/`: `cron create --script` looks at a path a human does not type. |
+| `scripts/run_tests.sh` | The verify command for this repo, resolved by hermes-agent's `detect_project_facts` as its first-priority marker, so the verification ledger and the claim gate can back a `DONE:` with a green run here. Runs `tests/` only; the vendored hermes-agent suite is not this repo's gate. |
 | `skills/` | What the agent knows how to do. Every `SKILL.md` in here is generated; only the vetting list is tracked. |
 | `skills/VETTED.md` | Which third-party skills have been read line by line and may be installed. A skill is someone else's shell commands running with your credentials. |
 | `templates/` | The source of every generated file. Editing a generated file loses the edit the next time anyone runs `bin/render`; edit the template instead. |
@@ -385,6 +416,7 @@ are tracked, so what you see below is the source they come from.
 | `tests/incidents/` | One test per incident, named for its row in the incident ledger. |
 | `tests/incidents/README.md` | The rule these files exist under: a post-mortem that adds no test here has not closed its class. |
 | `tests/incidents/test_incidents_have_guards.py` | Refuses an incident row that states a lesson without naming the rung and the artifact that enforce it, so no incident closes on a sentence. |
+| `tests/test_incident_claim_gate_false_done.py` | Rung 4, named for crew #63: the verification ledger held 0 events while a `DONE:` reached the founder over Telegram, so a false done cost nothing to say. Asserts the stamp fires on an unproven `DONE:` and stays away from a proven one, a doc-only one, `WORKING:`/`BLOCKED:`, and an unknown session — the gate fails open, it never blocks or bounces a reply. |
 | `tests/test_evidence_gate_checks_screenshots.py` | Refuses an evidence gate that reads pasted text and not the committed screenshot. Pasted text reads the same whether the command ran or not. |
 | `tests/test_features_switch.py` | Refuses a feature flip that edits another block of `estate.yaml`, and an off lane that still gets jobs created. Both happened while the switch was being built. |
 | `tests/test_no_runtime_files_are_tracked.py` | Refuses a tracked file that the running agent writes. The repo and the agent's home are the same directory, so this is a live risk on every tick. |
