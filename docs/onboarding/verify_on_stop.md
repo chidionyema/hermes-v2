@@ -34,6 +34,9 @@ Ask any session to set `agent.verify_on_stop: false` in
 ## What goes wrong
 
 In a repo with no recognized test command the nudge has nothing to run and
-stands down; those repos stay unprotected until they get a verify marker
-(crew #63 A1 follow-up). If turns on Telegram start feeling slow or noisy
+stands down. As of 2026-08-24 hermes-v2, crew, maestro and ~/.claude/scripts
+all resolve a verify command (scripts/run_tests.sh or pytest); the one root
+without one is ~/.claude itself, because its only candidate check
+(estate-selftest.py) was failing on the day and wiring a red suite as the
+gate would fake protection (crew #63 A1). If turns on Telegram start feeling slow or noisy
 after edits, that is this switch, and one line turns it off.
