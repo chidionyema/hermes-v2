@@ -347,6 +347,8 @@ are tracked, so what you see below is the source they come from.
 | `patches/hermes-agent/0006-fix-prompt_builder-a-rules-file-reaches-the-agent-wh.patch` | A rules file lost its middle to the context-file cap twice in five hours; the cap for a rules file is now computed from the model's window instead of a number a human raises after each incident. |
 | `patches/hermes-agent/BASE` | The upstream commit the six patches apply on top of. `git checkout $(cat BASE) && git am *.patch` in `hermes-agent/` reconstructs the running commit after a reinstall. |
 | `patches/hermes-agent/README.md` | What each patch fixes, and the two commands: reapplying after a reinstall, and refreshing the patch files after a new local commit. |
+| `plugins/` | Where hermes-agent looks for user plugins (`$HERMES_HOME/plugins/`). Holds only links to plugin source that lives in the repo that owns it. |
+| `plugins/sovereign` | Symlink to `idp/sovereign/otto/hermes_plugin`, the Otto plugin: `/sb-list`, `/sb-show`, `/sb-stop`, `/sb-approve`, `/sb-deny`, `/sb-steer`, each shelling out to `bin/sb --json`. Enabled by `plugins.enabled` in config.yaml. |
 | `profiles/` | One directory per lane. The profile is what gives a lane different powers from its neighbour, which is why the powers are a file and not a prompt. |
 | `profiles/architect/` | The main voice's profile — the lane this README describes. |
 | `profiles/architect/USER.md` | The Architect's standing instructions: timezone, tone, ask-before-acting on ambiguity, and never claim done without the command and its output in the same message. |
