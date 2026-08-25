@@ -83,3 +83,7 @@ platforms:
         max_commands: 12
         priority_mode: replace
         priority: [sessions, status, steer, queue, stop, approve, deny, new, resume, model, undo, help]
+
+plugins:
+  enabled:
+    - sovereign
