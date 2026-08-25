@@ -70,8 +70,9 @@ jobs:
         with:
           python-version: "3.11"
 
+      # Editable, because hermes-agent/setup.py refuses to build a wheel on purpose.
       - name: install the pinned agent and the test runner
-        run: python -m pip install -q ./hermes-agent pytest pytest-asyncio
+        run: python -m pip install -q -e ./hermes-agent pytest pytest-asyncio
 
       # The live-gateway half of CP2 SKIPs here: there is no gateway.pid on a
       # runner, and SKIP is a result. Everything else must pass.
