@@ -1,0 +1,25 @@
+This repository commits age ciphertext and its remote is public. That is a
+decision, not an accident, and this file is the record of it.
+
+What is committed
+    deploy/secrets/claude-credentials.json.age
+
+What opens it
+    AGE_PRIVATE_KEY, a Fly secret, and ~/.config/hermes/age-key.txt on the
+    founder's laptop. Neither is in this repository, and .gitignore refuses the
+    filename, so a clone gets the envelope and nothing that opens it.
+
+Why it is here
+    deploy/fly/entrypoint.sh decrypts to a scratch file on every boot, compares
+    the token against the one in use, logs one line and deletes it. Shipping the
+    ciphertext inside the image is what makes that fallback testable on every
+    boot rather than hoped for.
+
+What this accepts
+    A public git object is permanent. It stays fetchable by sha after every
+    branch is gone, so if the age key ever leaks this ciphertext is readable
+    retroactively and cannot be recalled. The credential inside it is therefore
+    treated as rotatable and is rotated, never as a long-lived secret.
+
+Withdraw the allowance by deleting this file. The estate commit gate refuses the
+next encrypted store the moment it is gone.

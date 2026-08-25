@@ -1,87 +1,85 @@
-# Hermes config - new build (architect-v2), THE ARCHITECT spec §2.
-# Upstream default max_turns here is 500. 90 is deliberate: a task that needs
-# more than 90 turns has gone wrong and should stop, not keep spending.
 model:
-  # Direct Anthropic, not OpenRouter. Measured 2026-08-22: OpenRouter returned
-  # HTTP 402, credits exhausted, and the first WATCH run failed on it. Routing
-  # through an account with no credit is a dead estate that looks configured.
-  provider: "anthropic"
-  # Cheapest current Claude, and it is the default for everything.
-  # Measured from the price table shipped in hermes-agent/agent/usage_pricing.py,
-  # sourced from https://platform.claude.com/docs/en/about-claude/pricing:
-  #   claude-haiku-4-5  $1 in / $5 out per MTok   (cache read $0.10, write $1.25)
-  #   claude-sonnet-5   $2 in / $10 out           - 2x haiku
-  #   claude-opus-4-6   $5 in / $25 out           - 5x haiku
-  # Use the dateless ID. "claude-haiku-4-5-20251001" is NOT in the price table,
-  # and a model the table does not know reports cost_status "unknown" - measured
-  # on the first run, 2026-08-22. An unpriced model is an unmeasurable bill.
-  default: "claude-haiku-4-5"
-
+  provider: anthropic
+  default: claude-sonnet-5
+fallback_providers:
+  - provider: anthropic
+    model: claude-sonnet-5
 agent:
   max_turns: 90
-  # 64K minimum. Below that the agent drops the platform map out of context and
-  # starts guessing at what is running.
+  # Verify-on-stop ON even on Telegram (crew #63 A1): the claim gate joins
+  # DONE: claims to the verification ledger, so the agent must actually run
+  # verify commands or every DONE it sends is stamped UNVERIFIED.
+  verify_on_stop: true
   context_window: 200000
-
-approvals:
-  # Smart approvals: the agent asks before anything it cannot undo, and does not
-  # ask about anything it can. Spec §2.
-  smart_approvals: true
-  always_ask:
-    - "gh pr merge"
-    - "fly deploy"
-    - "fly scale"
-    - "fly machine destroy"
-    - "git push"
-    - "rm -rf"
-  never_ask:
-    - "gh issue list"
-    - "gh issue view"
-    - "fly status"
-    - "fly logs"
-    - "git status"
-    - "git diff"
-
-# Auxiliary lane. Summaries, titles, the curator, memory extraction - none of it
-# needs a frontier model, and all of it runs constantly. Spec §11.
-aux:
-  model: "claude-haiku-4-5"
-  provider: "anthropic"
-
-# When the primary route dies, try these in order. Measured 2026-08-22: the
-# OpenRouter account is out of credit, so it sits last, not first.
-fallback_providers:
-  - provider: "anthropic"
-    model: "claude-haiku-4-5"
-  # No OpenRouter route here. Two reasons, both measured 2026-08-22: the
-  # account returned HTTP 402 (no credit), and hermes cannot price an
-  # "anthropic/..." route, so a fallback onto it would spend money invisibly.
-
+  # Identity does NOT live here. agent.system_prompt only reaches the message
+  # path; cron/scheduler.py:5787 builds its own AIAgent without it, so every
+  # scheduled message would still come from a nameless agent. SOUL.md is the
+  # identity slot both paths read (agent/prompt_builder.py:2323). It is there.
+# AGENTS.md is the estate's laws and it is 100,199 chars. A context file is
+# truncated head 70% / tail 20%, so a cap of 96000 kept 86,400 chars and cut
+# 13,799 out of the middle: measured 2026-08-24, The Architect was running with
+# the back half of LAW 34 and the whole of LAWS 35-40 missing, including LAW 35
+# ("our golden sacred goal") and LAW 39. The only signal was one WARNING line in
+# logs/errors.log that nobody reads.
+#
+# The cap must clear the file with the ratios applied: max_chars * 0.9 >= size.
+# 140000 keeps 126,000 chars, which is the laws plus ~26K of room to grow. Do
+# not delete this line to "use the default" -- the dynamic cap is
+# context_window * 4 * 0.06 = 48,000 here, which truncates far harder.
+context_file_max_chars: 140000
 memory:
   memory_enabled: true
   user_profile_enabled: true
-
 skills:
-  # The agent may write a new skill. It lands as a PR, never straight to disk.
-  # RITUALS.md promotion gate.
   skill_auto_creation: true
   skill_auto_creation_requires_pr: true
-
+approvals:
+  smart_approvals: true
+  always_ask:
+    - gh pr merge
+    - fly deploy
+    - fly scale
+    - fly machine destroy
+    - git push
+    - rm -rf
+  never_ask:
+    - gh issue list
+    - gh issue view
+    - fly status
+    - fly logs
+    - git status
+    - git diff
+command_allowlist:
+  - execute_code
+_config_version: 38
+aux:
+  model: claude-sonnet-5
+  provider: anthropic
 limits:
-  # Hard cap per task, in USD. It kills the task; it does not ask.
   max_cost_usd_per_task: 5
   budget_hard_stop: true
-
 sandbox:
-  # Tools run in a pinned image with the estate mounted read-only. Only the
-  # worktree is writable, so a tool cannot edit the estate that runs it.
-  image: "python:3.11-slim@sha256:pinned"
+  image: python:3.11-slim@sha256:pinned
   mounts:
-    - "$HERMES_HOME:/estate:ro"
-    - "$HERMES_HOME/skills:/skills:ro"
-  # Nothing is inherited. Every variable a tool sees is listed here.
+    - $HERMES_HOME:/estate:ro
+    - $HERMES_HOME/skills:/skills:ro
   env_passthrough:
     - GITHUB_TOKEN
     - ANTHROPIC_API_KEY
   network:
-    allowlist_file: "egress-allowlist.txt"
+    allowlist_file: egress-allowlist.txt
+onboarding:
+  seen:
+    busy_input_prompt: true
+
+# Telegram command menu. hermes re-registers set_my_commands on every start
+# (plugins/platforms/telegram/adapter.py:3990); without this block it pushes
+# the full 61-command upstream list. Founder, 2026-08-25: "UI has a lot of junk
+# from old Hermes". priority_mode: replace => only the list below is registered.
+platforms:
+  telegram:
+    extra:
+      command_menu:
+        max_commands: 12
+        priority_mode: replace
+        priority: [sessions, status, steer, queue, stop, approve, deny, new, resume, model, undo, help]

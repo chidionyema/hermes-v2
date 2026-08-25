@@ -53,8 +53,17 @@ echo "public key: $PUB"
 # ---------------------------------------------------------------- the source
 TMP=$(mktemp); trap 'rm -f "$TMP"' EXIT; chmod 600 "$TMP"
 
-if [ "$(uname -s)" = "Darwin" ]; then
+# HERMES_AUTH_SOURCE names a credential file that belongs to the SERVER, minted
+# by `claude setup-token`. It is the supported way past the refusal below,
+# because such a token has its own refresh lineage and local use cannot revoke
+# it. Anything read from the keychain is this Mac's own and is marked as such.
+if [ -n "${HERMES_AUTH_SOURCE:-}" ]; then
+    echo "reading the credential named by HERMES_AUTH_SOURCE"
+    [ -f "$HERMES_AUTH_SOURCE" ] || die "HERMES_AUTH_SOURCE is set but $HERMES_AUTH_SOURCE does not exist"
+    cat "$HERMES_AUTH_SOURCE" > "$TMP"
+elif [ "$(uname -s)" = "Darwin" ]; then
     echo "reading the live credential from the login keychain"
+    SOURCE_IS_INTERACTIVE=1
     if ! security find-generic-password -s "Claude Code-credentials" -w > "$TMP" 2>/dev/null; then
         die "the keychain item 'Claude Code-credentials' would not read.
        If macOS refused it, approve the prompt and run this again.
@@ -81,6 +90,43 @@ if exp:
         raise SystemExit("expired and no refresh token")
 print("   refresh token:", "yes" if o.get("refreshToken") else "no")
 PY
+
+# ------------------------------------------------------------ the rotation
+# MEASURED 2026-08-23. The blob this script wrote on 2026-08-22 at 14:48 was
+# dead by 19:54 the same day, and Fly logged "OAuth access token has been
+# revoked" on every job for the next 19 hours. The credential was live when it
+# was encrypted. That is the trap: validating liveness here proves nothing.
+#
+# Claude Code rotates the refresh token on every refresh. Two clients holding
+# one refresh token is one client too many -- whichever refreshes first gets a
+# new pair and the other's copy is revoked by the server. The laptop refreshes
+# constantly, so a copy of the laptop's credential survives on a server only
+# until the next local refresh, roughly five hours.
+#
+# Proof, comparing the shipped blob with the keychain on 2026-08-23:
+#   shipped  accessToken sha 2d35dfd04a15  refreshToken sha 302691eaf0b2  EXPIRED
+#   live     accessToken sha 510a79797de3  refreshToken sha beb3b9319c1f  LIVE
+# Different refresh tokens. The pair had rotated underneath the server.
+#
+# The server needs its OWN credential, from `claude setup-token`, which mints a
+# long-lived token with its own refresh lineage that local use does not revoke.
+if [ "${SOURCE_IS_INTERACTIVE:-0}" = "1" ] && [ "${HERMES_ALLOW_SHARED_CREDENTIAL:-0}" != "1" ]; then
+    die "refusing to encrypt this Mac's interactive Claude Code credential.
+
+       It is the same credential this laptop is using. Copying it to a server
+       gives that server about five hours before a local refresh revokes it,
+       and the failure appears as HTTP 401 in Fly logs, not here.
+
+       Mint a credential that belongs to the server:
+
+           claude setup-token
+
+       then re-run this script with HERMES_AUTH_SOURCE=/path/to/that/credential.
+
+       To ship the shared one anyway, knowing it dies within hours:
+
+           HERMES_ALLOW_SHARED_CREDENTIAL=1 $0"
+fi
 
 # --------------------------------------------------------------- the encrypt
 age -r "$PUB" "$TMP" > "$OUT"

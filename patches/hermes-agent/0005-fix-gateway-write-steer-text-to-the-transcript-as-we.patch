@@ -1,0 +1,133 @@
+From cf6def82d0cb42afa7fcadfd55d681c775eca92d Mon Sep 17 00:00:00 2001
+From: chidionyema <377396+chidionyema@users.noreply.github.com>
+Date: Mon, 24 Aug 2026 02:33:55 +0100
+Subject: [PATCH 5/6] fix(gateway): write /steer text to the transcript as well
+
+Closing the class rather than the instance. The clarify swallow was one of
+two ways the gateway takes founder text and delivers it by hand: steer() is
+the other. It appends the words to the last tool result of the running turn
+in memory and logs a character count, so a turn that never flushes takes the
+message with it. That is how "1 and 2 ready to flip" was lost on the
+founder's DM at 02:00 on 2026-08-24, two minutes before the clarify path lost
+46 more characters.
+
+All three points where the gateway accepts a steer now write the same
+soft-archived receipt: the busy-follow-up handler, the /steer slash command,
+and the priority path.
+
+The slash command reaches a running agent through _running_agents with no
+SessionState turn attached, so the recorder now falls back to that map for
+the session id instead of giving up and logging the loss.
+
+One incident test on the existing /steer harness: the agent still receives
+the steer unchanged, the text is on disk, and it stays out of the replayed
+conversation. It fails on the previous commit and passes on this one.
+---
+ gateway/run.py                      | 17 +++++++++++
+ tests/gateway/test_steer_command.py | 45 +++++++++++++++++++++++++++++
+ 2 files changed, 62 insertions(+)
+
+diff --git a/gateway/run.py b/gateway/run.py
+index 017f565829..7072888b8f 100644
+--- a/gateway/run.py
++++ b/gateway/run.py
+@@ -6850,6 +6850,11 @@ class GatewayRunner(GatewayAuthorizationMixin, GatewayKanbanWatchersMixin, Gatew
+             agent = getattr(getattr(state, "turn", None), "agent", None)
+             session_id = getattr(agent, "session_id", None)
+             if not session_id:
++                # The slash-command paths reach a running agent through
++                # _running_agents without a SessionState turn attached.
++                running = (self.__dict__.get("_running_agents") or {}).get(session_key)
++                session_id = getattr(running, "session_id", None)
++            if not isinstance(session_id, str) or not session_id:
+                 logger.warning(
+                     "Could not record intercepted input for %s: no live "
+                     "session id (%d chars lost from the transcript)",
+@@ -10424,6 +10429,12 @@ class GatewayRunner(GatewayAuthorizationMixin, GatewayKanbanWatchersMixin, Gatew
+                 except Exception as exc:
+                     logger.warning("Gateway steer failed for session %s: %s", session_key, exc)
+                     steered = False
++            if steered:
++                # Same swallow as the clarify path: steer() appends the text
++                # to a tool result in memory and nothing writes it down.
++                self._record_intercepted_input(
++                    session_key, steer_text, "steer_delivered",
++                )
+             if not steered:
+                 # Fall back to queue (merge into pending messages, no interrupt)
+                 effective_mode = "queue"
+@@ -16470,6 +16481,9 @@ class GatewayRunner(GatewayAuthorizationMixin, GatewayKanbanWatchersMixin, Gatew
+                 logger.warning("Steer failed for session %s: %s", quick_key, exc)
+                 return f"⚠️ Steer failed: {exc}"
+             if accepted:
++                self._record_intercepted_input(
++                    quick_key, steer_text, "steer_delivered",
++                )
+                 preview = steer_text[:60] + ("..." if len(steer_text) > 60 else "")
+                 return f"⏩ Steer queued — arrives after the next tool call: '{preview}'"
+             return "Steer rejected (empty payload)."
+@@ -17218,6 +17232,9 @@ class GatewayRunner(GatewayAuthorizationMixin, GatewayKanbanWatchersMixin, Gatew
+                         steered = False
+                 if steered:
+                     logger.debug("PRIORITY steer for session %s", _quick_key)
++                    self._record_intercepted_input(
++                        _quick_key, steer_text, "steer_delivered",
++                    )
+                     return None
+                 logger.debug("PRIORITY steer-fallback-to-queue for session %s", _quick_key)
+                 self._queue_or_replace_pending_event(_quick_key, event)
+diff --git a/tests/gateway/test_steer_command.py b/tests/gateway/test_steer_command.py
+index ea4cd3224c..f5f45fbf5f 100644
+--- a/tests/gateway/test_steer_command.py
++++ b/tests/gateway/test_steer_command.py
+@@ -143,5 +143,50 @@ async def test_steer_agent_without_steer_method_falls_back():
+     )
+ 
+ 
++
++@pytest.mark.asyncio
++async def test_steer_text_is_written_to_the_transcript(tmp_path):
++    """Incident 2026-08-24: /steer delivered the founder's words in memory only.
++
++    ``agent.steer()`` appends the text to the last tool result of the running
++    turn and logs a character count.  Nothing persisted it, so a turn that
++    never flushed took the message with it -- 21 characters ("1 and 2 ready
++    to flip") went that way on the founder's own DM the same morning the
++    clarify path lost 46 more.  The gateway now writes a soft-archived
++    receipt at every point it accepts text it will deliver by hand.
++    """
++    from hermes_state import SessionDB
++
++    runner, adapter = _make_runner(_session_entry())
++    sk = build_session_key(_make_source())
++
++    db = SessionDB(tmp_path / "state.db")
++    try:
++        db.create_session("sess-1", source="gateway")
++        runner._session_db = SimpleNamespace(
++            _db=db, get_session_title=lambda *_a, **_kw: None
++        )
++        running_agent = MagicMock()
++        running_agent.steer.return_value = True
++        running_agent.session_id = "sess-1"
++        runner._running_agents[sk] = running_agent
++
++        await runner._handle_message(_make_event("/steer 1 and 2 ready to flip"))
++
++        # The pass half: the agent still got the steer, unchanged.
++        running_agent.steer.assert_called_once_with("1 and 2 ready to flip")
++
++        # And it is on disk now, which it was not before this fix.
++        rows = db.get_messages("sess-1", include_inactive=True)
++        assert [r["content"] for r in rows] == ["1 and 2 ready to flip"]
++        assert rows[0]["display_kind"] == "steer_delivered"
++
++        # A receipt, not a turn: it is not replayed to the provider, so it
++        # cannot break the assistant-tool-call / tool-result sequence.
++        assert db.get_messages("sess-1") == []
++    finally:
++        db.close()
++
++
+ if __name__ == "__main__":  # pragma: no cover
+     pytest.main([__file__, "-v"])

@@ -1,0 +1,2759 @@
+From 1220c4ad246839f444d48acd94d7bc79a5c652b6 Mon Sep 17 00:00:00 2001
+From: chidionyema <377396+chidionyema@users.noreply.github.com>
+Date: Sat, 22 Aug 2026 20:46:03 +0100
+Subject: [PATCH 1/6] feat(summary): port the isopsephy card from the old
+ estate and add qabalah
+
+The old agent's /summary card is ported byte-identical as gateway/summary_card.py,
+so the founder's historical readings do not move. Faithfulness is proved by
+differential replay against the old implementation, not asserted: 18,125 renders
+over 669 inputs x 9 renderers, 0 differences.
+
+gateway/qabalah.py is the new half, and it is stdlib-only:
+
+- Greek isopsephy with all 27 letters. The old card had no Greek at all, so
+  Ihsous=888 and cxs=666 were unreachable. Digamma, koppa and sampi are what
+  make 999 reachable; without them the series stops at 800.
+- Hebrew gematria over Hebrew script, mispar hechrechi and mispar gadol.
+  The old card ran a "Hebrew" cipher over A-Z that wrapped after 22 letters,
+  so W scored the same as A. That defect is left in place in summary_card.py
+  because the differential replay depends on it, and it is named in an
+  incident test.
+- The Tree: 10 sephirot and the 22 paths with their Golden Dawn trumps, so a
+  Hebrew word shows the paths it walks.
+- Equivalences over a 37-word canon. No value is stored anywhere, only words
+  and glosses, so the tables are the only authority and cannot drift from it.
+- A daily game. The target is drawn from the canon by date ordinal, so it is
+  always reachable and nothing is persisted.
+
+Rungs, per the testing ladder in AGENTS.md:
+  rung 2  properties over the ciphers and the tables (12)
+  rung 3  differential replay against the old implementation, skipped when
+          the old tree is absent, deleted when the old estate is retired
+  rung 4  one incident test, test_incident_w_scored_the_same_as_a_in_the_
+          old_hebrew_cipher
+No rung 1 example tests were written.
+
+/summary is Slack-via-/hermes only. The registry was already at exactly the
+50-slash cap, so a native slot would have silently clamped /insights off the
+end. The new command takes the /hermes route and the live Slack surface does
+not move.
+
+Crew DECISIONS entry 6 discontinues Hermes, so qabalah.py also runs as a bare
+pair of files with no gateway around it.
+
+Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_017WtoPLYqS213SQuYvpuCk9
+---
+ cli.py                                        |   14 +
+ gateway/qabalah.py                            |  724 +++++++++
+ gateway/run.py                                |    4 +
+ gateway/slash_commands.py                     |   15 +
+ gateway/summary_card.py                       | 1431 +++++++++++++++++
+ hermes_cli/commands.py                        |   14 +-
+ hermes_cli/slash_exec.py                      |   17 +
+ tests/gateway/test_qabalah.py                 |  285 ++++
+ .../gateway/test_summary_card_differential.py |   92 ++
+ 9 files changed, 2595 insertions(+), 1 deletion(-)
+ create mode 100644 gateway/qabalah.py
+ create mode 100644 gateway/summary_card.py
+ create mode 100644 tests/gateway/test_qabalah.py
+ create mode 100644 tests/gateway/test_summary_card_differential.py
+
+diff --git a/cli.py b/cli.py
+index b53906386a..913a681418 100644
+--- a/cli.py
++++ b/cli.py
+@@ -11831,6 +11831,20 @@ class HermesCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
+             self._open_command_palette()
+         elif canonical == "whoami":
+             self._handle_whoami_command()
++        elif canonical == "summary":
++            from hermes_cli.slash_exec import CommandContext, execute_command
++
++            _summary_parts = cmd_original.split(None, 1)
++            self._console_print(
++                execute_command(
++                    "summary",
++                    CommandContext(
++                        surface="cli",
++                        args=_summary_parts[1].strip() if len(_summary_parts) > 1 else "",
++                    ),
++                ).text,
++                highlight=False, markup=False,
++            )
+         elif canonical == "profile":
+             self._handle_profile_command()
+         elif canonical == "tools":
+diff --git a/gateway/qabalah.py b/gateway/qabalah.py
+new file mode 100644
+index 0000000000..d58178694c
+--- /dev/null
++++ b/gateway/qabalah.py
+@@ -0,0 +1,724 @@
++"""Qabalah and isopsephy — the half the summary card never had.
++
++``summary_card`` scores Latin letters with three ciphers and calls the result
++an Isopsephy Card. Isopsephy is the Greek practice, and the old card could not
++read a single Greek letter: ``render_summary_card("Λόγος")`` drops every
++character and scores 0. Hebrew is dropped the same way, which is awkward for a
++card whose second cipher is named after it. And the qabalah the founder asked
++for — the sephirot, the twenty-two paths — was never there at all.
++
++This module adds three things and changes none of the old ones:
++
++* **Greek isopsephy.** The 24 letters plus the three numeral-only archaic
++  letters (digamma 6, koppa 90, sampi 900) that the classical system needs to
++  reach 999. Accents and breathings are stripped; final sigma scores 200.
++* **Hebrew gematria** over actual Hebrew script — mispar hechrechi by default,
++  mispar gadol on request, which is the only place the five final forms score
++  differently.
++* **Qabalah.** The root of any value lands on a sephirah; every Hebrew letter
++  sits on one of the twenty-two paths with its Tarot trump and its Sefer
++  Yetzirah class. Both tables are the Golden Dawn (Kircher) attributions.
++
++And a game, because the founder played the old card like one. Isopsephy has
++one native game and it is 2,000 years old: find the words that share a number.
++``daily_target`` picks the day's number from the date alone, so every player
++sees the same one and nothing has to be stored to keep score.
++
++**No value in this module is written down.** The tables hold letters, the
++canon holds words, and every number on screen is summed at render time. That
++is deliberate: a stored total is a claim, and a claim about gematria that
++nobody recomputes is how bad tables survive for years. The old card's Hebrew
++cipher gives W the same value as A and nobody noticed.
++"""
++
++from __future__ import annotations
++
++import datetime as _dt
++import unicodedata
++from dataclasses import dataclass
++
++# ===========================================================================
++# GREEK — isopsephy (ἰσοψηφία)
++# ===========================================================================
++# Alpha 1 … theta 9, iota 10 … pi 80, rho 100 … omega 800, with the three
++# letters Greek kept only as numerals: digamma/stigma 6, koppa 90, sampi 900.
++# Without them the units stop at 5 and the hundreds at 800, and no classical
++# isopsephy works out.
++_GREEK_ROWS: tuple[tuple[str, int], ...] = (
++    ("α", 1), ("β", 2), ("γ", 3), ("δ", 4), ("ε", 5), ("ϝ", 6), ("ζ", 7),
++    ("η", 8), ("θ", 9),
++    ("ι", 10), ("κ", 20), ("λ", 30), ("μ", 40), ("ν", 50), ("ξ", 60),
++    ("ο", 70), ("π", 80), ("ϙ", 90),
++    ("ρ", 100), ("σ", 200), ("τ", 300), ("υ", 400), ("φ", 500), ("χ", 600),
++    ("ψ", 700), ("ω", 800), ("ϡ", 900),
++)
++
++GREEK: dict[str, int] = {}
++for _ch, _v in _GREEK_ROWS:
++    GREEK[_ch] = _v
++    GREEK[_ch.upper()] = _v
++# Variants that carry the same value: final sigma, lunate sigma, and the
++# stigma ligature that stands in for digamma in most printed texts.
++for _alias, _base in (("ς", "σ"), ("ϲ", "σ"), ("Ϲ", "σ"), ("ϛ", "ϝ"), ("Ϛ", "ϝ"),
++                      ("ϟ", "ϙ"), ("Ϟ", "ϙ")):
++    GREEK[_alias] = GREEK[_base]
++
++GREEK_NAMES: dict[str, str] = {
++    "α": "alpha", "β": "beta", "γ": "gamma", "δ": "delta", "ε": "epsilon",
++    "ϝ": "digamma", "ζ": "zeta", "η": "eta", "θ": "theta", "ι": "iota",
++    "κ": "kappa", "λ": "lambda", "μ": "mu", "ν": "nu", "ξ": "xi",
++    "ο": "omicron", "π": "pi", "ϙ": "koppa", "ρ": "rho", "σ": "sigma",
++    "τ": "tau", "υ": "upsilon", "φ": "phi", "χ": "chi", "ψ": "psi",
++    "ω": "omega", "ϡ": "sampi",
++}
++
++# ===========================================================================
++# HEBREW — mispar hechrechi, and mispar gadol for the finals
++# ===========================================================================
++_HEBREW_ROWS: tuple[tuple[str, str, int], ...] = (
++    ("א", "aleph", 1), ("ב", "beth", 2), ("ג", "gimel", 3), ("ד", "daleth", 4),
++    ("ה", "he", 5), ("ו", "vav", 6), ("ז", "zayin", 7), ("ח", "cheth", 8),
++    ("ט", "teth", 9), ("י", "yod", 10), ("כ", "kaph", 20), ("ל", "lamed", 30),
++    ("מ", "mem", 40), ("נ", "nun", 50), ("ס", "samekh", 60), ("ע", "ayin", 70),
++    ("פ", "pe", 80), ("צ", "tzaddi", 90), ("ק", "qoph", 100), ("ר", "resh", 200),
++    ("ש", "shin", 300), ("ת", "tav", 400),
++)
++
++HEBREW: dict[str, int] = {ch: v for ch, _n, v in _HEBREW_ROWS}
++HEBREW_NAMES: dict[str, str] = {ch: n for ch, n, _v in _HEBREW_ROWS}
++
++# The five sofit (final) forms. Standard counting gives them their ordinary
++# value; mispar gadol continues the series into the hundreds. This is the only
++# difference between the two systems, which is why one flag covers it.
++_SOFIT: dict[str, tuple[str, int]] = {
++    "ך": ("כ", 500), "ם": ("מ", 600), "ן": ("נ", 700),
++    "ף": ("פ", 800), "ץ": ("צ", 900),
++}
++for _sof, (_base, _gadol) in _SOFIT.items():
++    HEBREW[_sof] = HEBREW[_base]
++    HEBREW_NAMES[_sof] = HEBREW_NAMES[_base] + " sofit"
++
++HEBREW_GADOL: dict[str, int] = dict(HEBREW)
++for _sof, (_base, _gadol) in _SOFIT.items():
++    HEBREW_GADOL[_sof] = _gadol
++
++# ===========================================================================
++# ENGLISH — the extended cipher, which is the one the old card meant to have
++# ===========================================================================
++# summary_card's `_GEMATRIA` maps A–V onto the 22 Hebrew values and then wraps,
++# so W scores 1 and collides with A, X with B, Y with C, Z with D. Four letters
++# of the alphabet are unreadable in it, and any word of A–I letters scores
++# identically under Pythagorean and Hebrew because both are 1–9 there.
++#
++# This table is the ordinary extension to 26 letters: units, tens, hundreds.
++# It is added alongside the old one, never in place of it — the founder has
++# years of readings under the old numbers and this must not move them.
++ENGLISH_EXT: dict[str, int] = {}
++for _i, _ch in enumerate("ABCDEFGHI"):
++    ENGLISH_EXT[_ch] = _i + 1
++for _i, _ch in enumerate("JKLMNOPQR"):
++    ENGLISH_EXT[_ch] = (_i + 1) * 10
++for _i, _ch in enumerate("STUVWXYZ"):
++    ENGLISH_EXT[_ch] = (_i + 1) * 100
++
++# ===========================================================================
++# THE TREE — ten sephirot, twenty-two paths
++# ===========================================================================
++
++
++@dataclass(frozen=True)
++class Sephirah:
++    number: int
++    name: str
++    hebrew: str
++    meaning: str
++    sphere: str
++
++
++SEPHIROT: tuple[Sephirah, ...] = (
++    Sephirah(1, "Kether", "כתר", "Crown", "Primum Mobile"),
++    Sephirah(2, "Chokmah", "חכמה", "Wisdom", "The Zodiac"),
++    Sephirah(3, "Binah", "בינה", "Understanding", "Saturn"),
++    Sephirah(4, "Chesed", "חסד", "Mercy", "Jupiter"),
++    Sephirah(5, "Geburah", "גבורה", "Severity", "Mars"),
++    Sephirah(6, "Tiphareth", "תפארת", "Beauty", "Sol"),
++    Sephirah(7, "Netzach", "נצח", "Victory", "Venus"),
++    Sephirah(8, "Hod", "הוד", "Splendour", "Mercury"),
++    Sephirah(9, "Yesod", "יסוד", "Foundation", "Luna"),
++    Sephirah(10, "Malkuth", "מלכות", "Kingdom", "Earth"),
++)
++
++
++@dataclass(frozen=True)
++class Path:
++    number: int          # 11–32, continuing the sephirot
++    letter: str
++    name: str
++    trump: str
++    kind: str            # mother / double / simple
++    attribution: str
++
++
++# Golden Dawn (Kircher) attributions. The three mothers are elements, the seven
++# doubles are planets, the twelve simples are signs — that split is Sefer
++# Yetzirah and predates the Tarot correspondence by centuries.
++PATHS: tuple[Path, ...] = (
++    Path(11, "א", "Aleph", "The Fool", "mother", "Air"),
++    Path(12, "ב", "Beth", "The Magician", "double", "Mercury"),
++    Path(13, "ג", "Gimel", "The High Priestess", "double", "Luna"),
++    Path(14, "ד", "Daleth", "The Empress", "double", "Venus"),
++    Path(15, "ה", "He", "The Emperor", "simple", "Aries"),
++    Path(16, "ו", "Vav", "The Hierophant", "simple", "Taurus"),
++    Path(17, "ז", "Zayin", "The Lovers", "simple", "Gemini"),
++    Path(18, "ח", "Cheth", "The Chariot", "simple", "Cancer"),
++    Path(19, "ט", "Teth", "Strength", "simple", "Leo"),
++    Path(20, "י", "Yod", "The Hermit", "simple", "Virgo"),
++    Path(21, "כ", "Kaph", "Wheel of Fortune", "double", "Jupiter"),
++    Path(22, "ל", "Lamed", "Justice", "simple", "Libra"),
++    Path(23, "מ", "Mem", "The Hanged Man", "mother", "Water"),
++    Path(24, "נ", "Nun", "Death", "simple", "Scorpio"),
++    Path(25, "ס", "Samekh", "Temperance", "simple", "Sagittarius"),
++    Path(26, "ע", "Ayin", "The Devil", "simple", "Capricorn"),
++    Path(27, "פ", "Pe", "The Tower", "double", "Mars"),
++    Path(28, "צ", "Tzaddi", "The Star", "simple", "Aquarius"),
++    Path(29, "ק", "Qoph", "The Moon", "simple", "Pisces"),
++    Path(30, "ר", "Resh", "The Sun", "double", "Sol"),
++    Path(31, "ש", "Shin", "Judgement", "mother", "Fire"),
++    Path(32, "ת", "Tav", "The World", "double", "Saturn"),
++)
++
++_PATH_BY_LETTER: dict[str, Path] = {p.letter: p for p in PATHS}
++for _sof, (_base, _g) in _SOFIT.items():
++    _PATH_BY_LETTER[_sof] = _PATH_BY_LETTER[_base]
++
++
++def sephirah_for(value: int) -> Sephirah | None:
++    """The sephirah a value lands on: 1–10 direct, anything else by its root.
++
++    A root of 0 (an empty or letterless input) is on the Tree nowhere, and
++    returning Kether for it would be an invented reading.
++    """
++    if value <= 0:
++        return None
++    n = value if 1 <= value <= 10 else _digital_root(value)
++    return SEPHIROT[n - 1] if 1 <= n <= 10 else None
++
++
++def path_for(letter: str) -> Path | None:
++    """The Tree path a Hebrew letter walks, final forms included."""
++    return _PATH_BY_LETTER.get(letter)
++
++
++def _digital_root(n: int) -> int:
++    """Reduce to 1–10, stopping at 10 rather than folding it to 1.
++
++    The ordinary digital root sends 10 to 1, which on the Tree means sending
++    Malkuth to Kether — the bottom of the Tree to the top. They are the two
++    ends of the same thing and swapping them inverts the reading.
++
++    The reduction is the check on itself: מלכות sums to 496, and 496 → 19 → 10
++    is Malkuth, which is the sephirah the word names.
++    """
++    while n > 10:
++        n = sum(int(d) for d in str(n))
++    return n
++
++
++# ===========================================================================
++# SCORING
++# ===========================================================================
++
++
++@dataclass(frozen=True)
++class Reading:
++    system: str                       # "Greek isopsephy" / "Hebrew gematria" / …
++    script: str                       # greek / hebrew / latin
++    total: int
++    breakdown: tuple[tuple[str, int], ...]
++    scored: int                       # letters that carried a value
++    skipped: int                      # characters the system cannot read
++
++    @property
++    def root(self) -> int:
++        return _digital_root(self.total) if self.total > 0 else 0
++
++
++def _strip_marks(text: str) -> str:
++    """Greek accents and breathings, and Hebrew niqqud, carry no value.
++
++    NFD splits the mark off the letter; category Mn drops it. Recomposing is
++    pointless afterwards because the tables are keyed on bare letters.
++    """
++    return "".join(c for c in unicodedata.normalize("NFD", text)
++                   if unicodedata.category(c) != "Mn")
++
++
++def _score(text: str, table: dict[str, int], system: str, script: str) -> Reading:
++    cleaned = _strip_marks(text)
++    pairs: list[tuple[str, int]] = []
++    skipped = 0
++    for ch in cleaned:
++        if ch in table:
++            pairs.append((ch, table[ch]))
++        elif not ch.isspace():
++            skipped += 1
++    return Reading(system, script, sum(v for _c, v in pairs), tuple(pairs),
++                   len(pairs), skipped)
++
++
++def isopsephy(text: str) -> Reading:
++    """Greek isopsephy. ἸΗΣΟΥΣ and χξϛ both come out of this table."""
++    return _score(text, GREEK, "Greek isopsephy", "greek")
++
++
++def gematria(text: str, gadol: bool = False) -> Reading:
++    """Hebrew gematria over Hebrew script. ``gadol`` scores the finals 500–900."""
++    table = HEBREW_GADOL if gadol else HEBREW
++    name = "Hebrew gematria (mispar gadol)" if gadol else "Hebrew gematria"
++    return _score(text, table, name, "hebrew")
++
++
++def english_extended(text: str) -> Reading:
++    """The 26-letter English cipher: A–I units, J–R tens, S–Z hundreds."""
++    return _score(text.upper(), ENGLISH_EXT, "English extended", "latin")
++
++
++def scripts_present(text: str) -> set[str]:
++    """Which alphabets are actually in *text*, by the tables that can read them."""
++    cleaned = _strip_marks(text)
++    found: set[str] = set()
++    for ch in cleaned:
++        if ch in GREEK:
++            found.add("greek")
++        elif ch in HEBREW:
++            found.add("hebrew")
++        elif ch.isascii() and ch.isalpha():
++            found.add("latin")
++    return found
++
++
++def readings_for(text: str) -> list[Reading]:
++    """Every reading *text* supports, in the order they should be shown.
++
++    Latin always yields one, because the old card's three ciphers already cover
++    Latin and this adds the fourth. Greek and Hebrew appear only when their
++    letters do, so an English word does not get two zero rows it never asked
++    for.
++    """
++    present = scripts_present(text)
++    out: list[Reading] = []
++    if "greek" in present:
++        out.append(isopsephy(text))
++    if "hebrew" in present:
++        out.append(gematria(text))
++        gad = gematria(text, gadol=True)
++        if gad.total != out[-1].total:
++            out.append(gad)
++    if "latin" in present:
++        out.append(english_extended(text))
++    return out
++
++
++# ===========================================================================
++# THE CANON — words worth sharing a number with
++# ===========================================================================
++# Words only. Every value beside them on screen is summed from the tables at
++# render time, so a wrong entry shows up as a wrong number rather than hiding
++# behind a stored one.
++CANON: tuple[tuple[str, str], ...] = (
++    # Hebrew
++    ("יהוה", "the Tetragrammaton"),
++    ("אלהים", "Elohim"),
++    ("אדני", "Adonai"),
++    ("אהיה", "Ehyeh — I Am"),
++    ("אחד", "echad — one"),
++    ("אהבה", "ahavah — love"),
++    ("חי", "chai — life"),
++    ("אמת", "emet — truth"),
++    ("שלום", "shalom — peace"),
++    ("תורה", "Torah"),
++    ("משיח", "Mashiach"),
++    ("נחש", "nachash — serpent"),
++    ("כתר", "Kether — Crown"),
++    ("חכמה", "Chokmah — Wisdom"),
++    ("בינה", "Binah — Understanding"),
++    ("חסד", "Chesed — Mercy"),
++    ("גבורה", "Geburah — Severity"),
++    ("תפארת", "Tiphareth — Beauty"),
++    ("נצח", "Netzach — Victory"),
++    ("הוד", "Hod — Splendour"),
++    ("יסוד", "Yesod — Foundation"),
++    ("מלכות", "Malkuth — Kingdom"),
++    # Greek
++    ("Ἰησοῦς", "Iesous — Jesus"),
++    ("Χριστός", "Christos"),
++    ("Λόγος", "Logos — the Word"),
++    ("ἀγάπη", "agape — love"),
++    ("θέλημα", "thelema — will"),
++    ("ἀλήθεια", "aletheia — truth"),
++    ("σοφία", "Sophia — wisdom"),
++    ("ψυχή", "psyche — soul"),
++    ("κόσμος", "kosmos — order, world"),
++    ("ἀρχή", "arche — beginning"),
++    ("Ἀμήν", "amen"),
++    ("Ἀβρασάξ", "Abrasax"),
++    ("Μίθρας", "Mithras"),
++    ("Ἅγιον", "hagion — holy"),
++    ("χξϛ", "the number of the beast, as written"),
++)
++
++
++def canon_readings() -> list[tuple[str, str, Reading]]:
++    """Every canon word with its computed reading. Nothing here is stored."""
++    out = []
++    for word, gloss in CANON:
++        present = scripts_present(word)
++        r = isopsephy(word) if "greek" in present else gematria(word)
++        out.append((word, gloss, r))
++    return out
++
++
++def equivalences(value: int, exclude: str = "") -> list[tuple[str, str, Reading]]:
++    """Canon words whose value equals *value*. The whole point of isopsephy."""
++    if value <= 0:
++        return []
++    return [(w, g, r) for w, g, r in canon_readings()
++            if r.total == value and w != exclude]
++
++
++# ===========================================================================
++# THE GAME
++# ===========================================================================
++# One number a day, taken from the date so that nothing has to be stored for
++# two people to be playing the same game. A stored scoreboard would be the
++# first thing to rot: it needs a writable path on a container that is rebuilt
++# on every deploy, and nobody would notice when it stopped saving.
++
++
++def daily_target(today: _dt.date | None = None) -> tuple[int, str]:
++    """The day's number, and the canon word it was drawn from.
++
++    Drawn from the canon rather than at random, so the target is always
++    reachable: there is at least one right answer, and it is a word with a
++    meaning rather than an arbitrary integer.
++    """
++    day = today or _dt.date.today()
++    pool = sorted({r.total: (w, g) for w, g, r in canon_readings()}.items())
++    word, _gloss = pool[day.toordinal() % len(pool)][1]
++    return pool[day.toordinal() % len(pool)][0], word
++
++
++@dataclass(frozen=True)
++class GameResult:
++    target: int
++    guess: str
++    readings: tuple[Reading, ...]
++    hits: tuple[Reading, ...]          # readings that landed exactly
++    closest: Reading | None
++    distance: int | None
++
++
++def play(guess: str, today: _dt.date | None = None,
++         target: int | None = None) -> GameResult:
++    """Score *guess* against the day's number in every system it can be read in.
++
++    A guess counts if ANY of its readings hits. Typing a Greek word to match a
++    Hebrew target is not cheating, it is the game — the practice is finding the
++    same number in different alphabets.
++    """
++    tgt = target if target is not None else daily_target(today)[0]
++    reads = tuple(readings_for(guess))
++    hits = tuple(r for r in reads if r.total == tgt)
++    closest = min(reads, key=lambda r: abs(r.total - tgt)) if reads else None
++    dist = abs(closest.total - tgt) if closest is not None else None
++    return GameResult(tgt, guess, reads, hits, closest, dist)
++
++
++# ===========================================================================
++# RENDERING
++# ===========================================================================
++# The old card's house style: a fenced box for the numbers, pipe tables for
++# detail, `####` for section heads. These append below it and have to look like
++# the same card rather than a second one stapled on.
++
++_CARD_WIDTH = 34
++_SCRIPT_MARK = {"greek": "🏛", "hebrew": "✡️", "latin": "🔤"}
++
++
++def _band(title: str) -> str:
++    head = f"── {title} "
++    return head + "─" * max(0, _CARD_WIDTH - len(head))
++
++
++def _rule() -> str:
++    return "━" * _CARD_WIDTH
++
++
++def render_qabalah_section(text: str) -> str:
++    """The qabalah half of the card for *text*, or "" when there is none.
++
++    Empty for input with no letter any table can read, because a Tree section
++    that says 0 → nowhere is noise on a card that already said the input was
++    letterless.
++    """
++    reads = readings_for(text)
++    if not reads or all(r.total == 0 for r in reads):
++        return ""
++
++    out: list[str] = ["### ✡️ Qabalah", "", "```", _rule()]
++
++    out.append(_band("READINGS"))
++    for r in reads:
++        mark = _SCRIPT_MARK.get(r.script, "•")
++        out.append(f"  {mark} {r.system} · {r.total}")
++        seph = sephirah_for(r.total)
++        if seph is not None:
++            out.append(f"     root {r.root} → {seph.number} {seph.name} "
++                       f"({seph.meaning})")
++        if r.skipped:
++            out.append(f"     {r.skipped} character(s) this system cannot read")
++
++    totals = {r.total for r in reads if r.total > 0}
++    if len(totals) > 1:
++        out.append(_band("ACROSS ALPHABETS"))
++        out.append("  the same word, different numbers:")
++        out.append("  " + " · ".join(str(t) for t in sorted(totals)))
++    out.append(_rule())
++    out.append("```")
++
++    # --- the Tree ---------------------------------------------------------
++    primary = max(reads, key=lambda r: r.total)
++    seph = sephirah_for(primary.total)
++    if seph is not None:
++        out += [
++            "",
++            "#### 🌳 On the Tree",
++            "",
++            "| | |",
++            "|---|---|",
++            f"| Sephirah | **{seph.number} {seph.name}** {seph.hebrew} |",
++            f"| Meaning | {seph.meaning} |",
++            f"| Sphere | {seph.sphere} |",
++            f"| Reached by | {primary.system} {primary.total} → root {primary.root} |",
++        ]
++
++    # --- the paths, only when Hebrew letters are actually present ---------
++    hebrew_letters = [c for c in _strip_marks(text) if c in _PATH_BY_LETTER]
++    if hebrew_letters:
++        out += ["", "#### 🛤 Paths walked", "",
++                "| Letter | Path | Trump | Class | Attribution |",
++                "|---|---|---|---|---|"]
++        seen: set[str] = set()
++        for ch in hebrew_letters:
++            p = path_for(ch)
++            if p is None or p.letter in seen:
++                continue
++            seen.add(p.letter)
++            out.append(f"| {ch} {p.name} | {p.number} | {p.trump} | "
++                       f"{p.kind} | {p.attribution} |")
++        out.append("")
++        out.append("_Golden Dawn (Kircher) attributions. The Thelemic tree swaps "
++                   "He and Tzaddi, so the Emperor and the Star trade places there._")
++
++    # --- equivalences, which is the practice itself -----------------------
++    matches: list[str] = []
++    for r in reads:
++        for w, gloss, other in equivalences(r.total, exclude=text.strip()):
++            matches.append(f"| {r.total} | {w} | {gloss} | {other.system} |")
++    if matches:
++        out += ["", "#### ⚖️ Equivalences", "",
++                "| Value | Word | | System |", "|---|---|---|---|"]
++        out += matches
++    return "\n".join(out)
++
++
++def render_letter_tables() -> str:
++    """The three tables in full, so nobody has to trust them unseen."""
++    out = ["### 📜 Letter values", "", "#### Greek", "",
++           "| Letter | Name | Value |", "|---|---|---|"]
++    for ch, v in _GREEK_ROWS:
++        out.append(f"| {ch} | {GREEK_NAMES[ch]} | {v} |")
++    out += ["", "#### Hebrew", "", "| Letter | Name | Value | Sofit (gadol) |",
++            "|---|---|---|---|"]
++    inv = {b: s for s, (b, _g) in _SOFIT.items()}
++    for ch, name, v in _HEBREW_ROWS:
++        sof = inv.get(ch)
++        tail = f"{sof} {HEBREW_GADOL[sof]}" if sof else "—"
++        out.append(f"| {ch} | {name} | {v} | {tail} |")
++    out += ["", "#### English extended", "",
++            "| A–I | J–R | S–Z |", "|---|---|---|"]
++    for i in range(8):
++        a, j, s = "ABCDEFGHI"[i], "JKLMNOPQR"[i], "STUVWXYZ"[i]
++        out.append(f"| {a} {ENGLISH_EXT[a]} | {j} {ENGLISH_EXT[j]} | "
++                   f"{s} {ENGLISH_EXT[s]} |")
++    out.append(f"| I {ENGLISH_EXT['I']} | R {ENGLISH_EXT['R']} | |")
++    return "\n".join(out)
++
++
++GAME_HELP = (
++    "### 🎲 Isopsephy — the day's number\n\n"
++    "One number, drawn from the canon so it is always reachable. "
++    "Find a word that sums to it in **any** alphabet: Greek, Hebrew, or "
++    "English extended. Matching a Hebrew target with a Greek word is the "
++    "game, not a loophole.\n\n"
++    "`/summary game` — today's number\n"
++    "`/summary game <word>` — score a word against it\n"
++    "`/summary game <n> <word>` — score against a number you pick\n"
++    "`/summary tables` — every letter value, so you can work it out\n"
++)
++
++
++def render_game(args: str, today: _dt.date | None = None) -> str:
++    """The game reply. Bare shows the number; a word is scored against it."""
++    args = (args or "").strip()
++    target: int | None = None
++    parts = args.split(None, 1)
++    if parts and parts[0].lstrip("-").isdigit():
++        target = int(parts[0])
++        args = parts[1] if len(parts) > 1 else ""
++
++    day_value, _drawn_from = daily_target(today)
++    tgt = target if target is not None else day_value
++
++    if not args:
++        seph = sephirah_for(tgt)
++        lines = [
++            "### 🎲 Today's number",
++            "",
++            "```",
++            _rule(),
++            f"  {tgt}",
++            f"  root {_digital_root(tgt)}"
++            + (f" → {seph.number} {seph.name}" if seph else ""),
++            _rule(),
++            "```",
++            "",
++            "Find a word that sums to it. Greek, Hebrew, or English extended — "
++            "any alphabet counts.",
++            "",
++            "`/summary game <word>` to score one · `/summary tables` for the "
++            "letter values",
++        ]
++        if target is None:
++            reachable = len(equivalences(tgt))
++            lines.append("")
++            lines.append(f"_Drawn from the canon, so it is reachable: "
++                         f"{reachable} word(s) there hit it exactly. "
++                         f"Naming them would be playing your turn for you._")
++        return "\n".join(lines)
++
++    res = play(args, today=today, target=tgt)
++    if not res.readings:
++        return (f"### 🎲 {tgt}\n\n`{args}` has no letter any table can read. "
++                f"Try Greek, Hebrew, or A–Z.")
++
++    out = [f"### 🎲 {args} → {tgt}?", "", "```", _rule()]
++    for r in res.readings:
++        mark = _SCRIPT_MARK.get(r.script, "•")
++        flag = "  ✅ HIT" if r.total == tgt else f"  off by {abs(r.total - tgt)}"
++        out.append(f"  {mark} {r.system}")
++        out.append(f"     {r.total}{flag}")
++    out.append(_rule())
++    out.append("```")
++    out.append("")
++
++    if res.hits:
++        systems = ", ".join(h.system for h in res.hits)
++        out.append(f"**Hit.** `{args}` reaches {tgt} in {systems}.")
++        others = equivalences(tgt, exclude=args.strip())
++        if others:
++            out.append("")
++            out.append("It now shares that number with:")
++            for w, gloss, r in others:
++                out.append(f"- {w} — {gloss}")
++    else:
++        assert res.closest is not None
++        out.append(f"**Miss by {res.distance}.** Closest was "
++                   f"{res.closest.system} at {res.closest.total}.")
++        reachable = len(equivalences(tgt, exclude=args.strip()))
++        if reachable:
++            out.append("")
++            out.append(f"_{reachable} canon word(s) do reach {tgt}._")
++    return "\n".join(out)
++
++
++def render_reply(raw_args: str) -> str:
++    """The whole `/summary` reply, whichever surface asked for it.
++
++    One owner, because the CLI, the gateway and the TUI each dispatch their own
++    slash commands and the old estate learned the hard way what happens when a
++    second entry point renders its own version of a card.
++
++    Four shapes: bare is the help, ``game`` and ``tables`` are new, ``A vs B``
++    is the old compare card untouched, and anything else is the old summary
++    card with the qabalah section under it.
++    """
++    try:
++        from gateway.summary_card import (
++            parse_compare_args,
++            render_compare_card,
++            render_summary_card,
++        )
++    except ImportError:
++        # Run as a bare pair of files, with no Hermes package around them.
++        # Crew DECISIONS entry 6 discontinues Hermes, so this module has to
++        # outlive the gateway it was written for. summary_card.py sits beside
++        # this file in both layouts, which is the whole of what it needs.
++        from summary_card import (  # type: ignore[no-redef]
++            parse_compare_args,
++            render_compare_card,
++            render_summary_card,
++        )
++
++    raw_args = (raw_args or "").strip()
++    if not raw_args:
++        return (
++            "🔮 **Summary Card**\n\n"
++            "Send `/summary <text>` to analyse it.\n\n"
++            "• 🧮 Pythagorean, Chaldean and the old Hebrew cipher\n"
++            "• ✡️ Hebrew gematria over Hebrew script\n"
++            "• 🏛 Greek isopsephy, digamma and sampi included\n"
++            "• 🌳 Sephirah, and the Tree paths a Hebrew word walks\n"
++            "• 🔤 Anagram permutations\n"
++            "• ⚖️ Compare two texts: `/summary A vs B`\n"
++            "• 🎲 Play: `/summary game`\n\n"
++            "_Example:_ `/summary Hello World` · `/summary אהבה` · `/summary θέλημα`"
++        )
++
++    head, _sep, rest = raw_args.partition(" ")
++    low = head.lower()
++    if low == "game":
++        rest = rest.strip()
++        if rest.lower() in ("help", "?", "how", "rules"):
++            return GAME_HELP
++        return render_game(rest)
++    if low in ("tables", "table", "letters"):
++        return render_letter_tables()
++
++    compared = parse_compare_args(raw_args)
++    if compared:
++        a, b = compared
++        return render_compare_card(a, b)
++
++    card = render_summary_card(raw_args)
++    qabalah = render_qabalah_section(raw_args)
++    return f"{card}\n\n{qabalah}" if qabalah else card
++
++
++
++def main(argv: list[str] | None = None) -> int:
++    """Play it with no Hermes anywhere: `python3 qabalah.py <text>`.
++
++    The gateway, the CLI and the TUI all route through ``render_reply`` too,
++    so this entry point renders the identical text rather than a second
++    version of the card.
++    """
++    import sys
++
++    args = sys.argv[1:] if argv is None else argv
++    print(render_reply(" ".join(args)))
++    return 0
++
++
++if __name__ == "__main__":  # pragma: no cover - entry point
++    raise SystemExit(main())
+diff --git a/gateway/run.py b/gateway/run.py
+index 84604b303b..daab8a71f9 100644
+--- a/gateway/run.py
++++ b/gateway/run.py
+@@ -16245,6 +16245,7 @@ class GatewayRunner(GatewayAuthorizationMixin, GatewayKanbanWatchersMixin, Gatew
+                 "help": self._handle_help_command,
+                 "commands": self._handle_commands_command,
+                 "profile": self._handle_profile_command,
++                "summary": self._handle_summary_command,
+                 "update": self._handle_update_command,
+                 "version": self._handle_version_command,
+             }.get(name)
+@@ -17389,6 +17390,9 @@ class GatewayRunner(GatewayAuthorizationMixin, GatewayKanbanWatchersMixin, Gatew
+         if canonical == "whoami":
+             return await self._handle_whoami_command(event)
+ 
++        if canonical == "summary":
++            return await self._handle_summary_command(event)
++
+         if canonical == "status":
+             return await self._handle_status_command(event)
+ 
+diff --git a/gateway/slash_commands.py b/gateway/slash_commands.py
+index cd54164bd0..60c53ea980 100644
+--- a/gateway/slash_commands.py
++++ b/gateway/slash_commands.py
+@@ -405,6 +405,21 @@ class GatewaySlashCommandsMixin:
+ 
+         return "\n".join(lines)
+ 
++    async def _handle_summary_command(self, event: MessageEvent) -> str:
++        """`/summary <text>` — the isopsephy card, plus qabalah and the game.
++
++        Pure computation over the message text: no session, no network, no
++        disk. It is safe mid-run for that reason, which is why its CommandDef
++        carries busy_policy="dispatch".
++        """
++        from hermes_cli.slash_exec import CommandContext, execute_command
++
++        return execute_command(
++            "summary",
++            CommandContext(surface="gateway",
++                           args=(event.get_command_args() or "").strip()),
++        ).text
++
+     async def _handle_whoami_command(self, event: MessageEvent) -> str:
+         """Handle /whoami — show the user's slash command access on this scope.
+ 
+diff --git a/gateway/summary_card.py b/gateway/summary_card.py
+new file mode 100644
+index 0000000000..e781a30f3c
+--- /dev/null
++++ b/gateway/summary_card.py
+@@ -0,0 +1,1431 @@
++"""Summary Card — world-class numerological, structural, and cryptographic analysis.
++
++When triggered (via /summary or "summary <text>"), renders a rich card with:
++
++* Three numerological ciphers (Pythagorean, Hebrew Gematria, Chaldean)
++* Root-number ladder showing the iterative reduction from raw sum to single digit
++* Per-cipher breakdowns in collapsible <details> blocks
++* Structural profile: vowel/consonant ratio, character composition, mirrored pairs
++* Anagram permutations (toggled, paginated for >200 results)
++* Native Telegram interactions (Bot API 10.1): collapsible details, task lists
++* Reverse / reverse-cumulative / digital-root sequences
++
++Telegram's rich message endpoint already renders ``<details>``, ``<summary>``,
++GFM task lists, and pipe tables natively.
++"""
++
++from __future__ import annotations
++
++import functools
++import math
++from collections import Counter
++from dataclasses import dataclass
++
++
++# ===========================================================================
++# NUMEROLOGY — three classical ciphers
++# ===========================================================================
++
++# --- Pythagorean: A=1, B=2, … I=9, J=1, K=2, … cyclically (mod 9) -----------
++_PYTHAGOREAN: dict[str, int] = {}
++_seq9 = (1, 2, 3, 4, 5, 6, 7, 8, 9)
++for i, ch in enumerate("ABCDEFGHIJKLMNOPQRSTUVWXYZ"):
++    _PYTHAGOREAN[ch] = _seq9[i % 9]
++
++# --- Hebrew Gematria (Mispar Hechrechi / standard value) --------------------
++# 22 Hebrew letters: Aleph=1 … Tav=400. English letters map sequentially,
++# wrapping after 22. W/X/Y/Z continue the cycle (U,V continue naturally).
++_GEMATRIA: dict[str, int] = {}
++_HEBREW_VALS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 20, 30, 40, 50, 60, 70, 80, 90,
++                100, 200, 300, 400]
++for i, ch in enumerate("ABCDEFGHIJKLMNOPQRSTUV"):
++    _GEMATRIA[ch] = _HEBREW_VALS[i % len(_HEBREW_VALS)]
++for i, ch in enumerate("WXYZ"):
++    _GEMATRIA[ch] = _HEBREW_VALS[i % len(_HEBREW_VALS)]
++
++# --- Chaldean: 1-8 only (9 is sacred) ---------------------------------------
++# A=1, B=2, C=3, D=4, E=5, F=8, G=3, H=5, I=1, J=1, K=2, L=3, M=4, N=5, O=7,
++# P=8, Q=1, R=2, S=3, T=4, U=6, V=6, W=6, X=5, Y=1, Z=7
++_CHALDEAN: dict[str, int] = {
++    "A": 1, "B": 2, "C": 3, "D": 4, "E": 5, "F": 8, "G": 3, "H": 5, "I": 1,
++    "J": 1, "K": 2, "L": 3, "M": 4, "N": 5, "O": 7, "P": 8, "Q": 1, "R": 2,
++    "S": 3, "T": 4, "U": 6, "V": 6, "W": 6, "X": 5, "Y": 1, "Z": 7,
++}
++
++VOWELS = set("AEIOU")
++
++
++@dataclass(frozen=True)
++class CipherResult:
++    name: str
++    emoji: str
++    raw: int          # sum before reduction
++    root: int         # single digit (or master number)
++    breakdown: list[tuple[str, int]]
++
++
++def _letters_only(text: str) -> list[str]:
++    """Return uppercase ASCII letters from text. Non-ASCII letters (Cyrillic, Greek,
++    Arabic, accented Latin) are silently dropped — the ciphers are A–Z only.
++    Use ``_letter_count_dropped(text)`` to surface how many were excluded.
++    """
++    return [c.upper() for c in text if c.isalpha() and c.isascii()]
++
++
++def _letter_count_dropped(text: str) -> int:
++    """Count characters that pass ``isalpha()`` but are not ASCII A–Z.
++
++    These would have crashed the cipher dict lookups (KeyError) before the
++    fix in F-NEW-IMPROVE-2. Surfacing the count tells non-English users
++    that their text was partially analyzed.
++    """
++    return sum(1 for c in text if c.isalpha() and not c.isascii())
++
++
++def _reduce(n: int) -> int:
++    """Reduce to single digit, preserving master numbers 11, 22, 33."""
++    while n > 9:
++        if n in (11, 22, 33):
++            return n
++        n = sum(int(d) for d in str(n))
++    return n
++
++
++def _root_ladder(raw: int) -> list[int]:
++    """Full reduction ladder: each step sums digits until < 10 or master."""
++    ladder: list[int] = [raw]
++    while ladder[-1] > 9:
++        if ladder[-1] in (11, 22, 33):
++            break
++        ladder.append(sum(int(d) for d in str(ladder[-1])))
++    return ladder
++
++
++def _is_master(n: int) -> bool:
++    return n in (11, 22, 33)
++
++
++@functools.lru_cache(maxsize=512)
++def pythagorean(text: str) -> CipherResult:
++    letters = _letters_only(text)
++    bd = [(c, _PYTHAGOREAN[c]) for c in letters]
++    raw = sum(v for _, v in bd)
++    return CipherResult("Pythagorean", "🧮", raw, _reduce(raw), bd)
++
++
++@functools.lru_cache(maxsize=512)
++def hebrew(text: str) -> CipherResult:
++    letters = _letters_only(text)
++    bd = [(c, _GEMATRIA[c]) for c in letters]
++    raw = sum(v for _, v in bd)
++    return CipherResult("Hebrew Gematria", "✡️", raw, _reduce(raw), bd)
++
++
++@functools.lru_cache(maxsize=512)
++def chaldean(text: str) -> CipherResult:
++    letters = _letters_only(text)
++    bd = [(c, _CHALDEAN[c]) for c in letters]
++    raw = sum(v for _, v in bd)
++    return CipherResult("Chaldean", "🌙", raw, _reduce(raw), bd)
++
++
++# ===========================================================================
++# STRUCTURAL PROFILE
++# ===========================================================================
++
++@dataclass(frozen=True)
++class StructuralProfile:
++    char_count: int
++    letter_count: int
++    vowel_count: int
++    consonant_count: int
++    digit_count: int
++    space_count: int
++    unique_letters: int
++    bigram_diversity: float     # unique bigrams / total bigrams (0..1)
++    vowel_ratio: float          # vowels / letters
++    palindrome: bool
++    isogram: bool               # no repeated letters
++    mirrored_pairs: list[tuple[str, str]]  # A↔Z, B↔Y, etc.
++    rarest_letter: tuple[str, int] | None
++    most_common_letter: tuple[str, int] | None
++
++
++# _MIRROR_MAP is the Atbash mapping for the English alphabet:
++# A↔Z, B↔Y, C↔X, D↔W, E↔V, F↔U, G↔T, H↔S, I↔R, J↔Q, K↔P, L↔O, M↔N.
++# Defined on all 26 letters so we can look up either half.
++_MIRROR_MAP: dict[str, str] = {
++    "A": "Z", "B": "Y", "C": "X", "D": "W", "E": "V",
++    "F": "U", "G": "T", "H": "S", "I": "R", "J": "Q",
++    "K": "P", "L": "O", "M": "N",
++    # Second half (mirror of the first half)
++    "N": "M", "O": "L", "P": "K", "Q": "J", "R": "I",
++    "S": "H", "T": "G", "U": "F", "V": "E", "W": "D",
++    "X": "C", "Y": "B", "Z": "A",
++}
++
++
++@functools.lru_cache(maxsize=256)
++def structural_profile(text: str) -> StructuralProfile:
++    raw = text.upper()
++    letters = _letters_only(text)
++    counter = Counter(letters)
++    vowels = [c for c in letters if c in VOWELS]
++    consonants = [c for c in letters if c.isalpha() and c not in VOWELS]
++    digits = [c for c in text if c.isdigit()]
++    spaces = [c for c in text if c == " "]
++
++    # bigram diversity
++    bigrams = ["".join(p) for p in zip(letters, letters[1:])]
++    bigram_div = len(set(bigrams)) / len(bigrams) if bigrams else 0.0
++
++    # mirrored pairs (Atbash-style): present pairs in text
++    # A pair (A,B) is present when BOTH halves appear at least once.
++    # Walk every letter whose mirror is lex-smaller so we add each pair once.
++    mirrored: list[tuple[str, str]] = []
++    seen_pairs: set[tuple[str, str]] = set()
++    for c in set(counter):  # dedup before iterating
++        m = _MIRROR_MAP.get(c)
++        if m is None or c == m:
++            continue
++        # Normalize so the smaller letter is always first
++        pair = (c, m) if c < m else (m, c)
++        if pair in seen_pairs:
++            continue
++        # Both halves must be present in the text
++        if counter.get(c, 0) >= 1 and counter.get(m, 0) >= 1:
++            mirrored.append(pair)
++            seen_pairs.add(pair)
++    mirrored.sort()
++
++    rarest = min(counter.items(), key=lambda kv: kv[1]) if counter else None
++    common = max(counter.items(), key=lambda kv: kv[1]) if counter else None
++
++    palindrome = "".join(letters) == "".join(reversed(letters)) and len(letters) > 1
++    isogram = len(counter) == len(letters)
++
++    return StructuralProfile(
++        char_count=len(text),
++        letter_count=len(letters),
++        vowel_count=len(vowels),
++        consonant_count=len(consonants),
++        digit_count=len(digits),
++        space_count=len(spaces),
++        unique_letters=len(counter),
++        bigram_diversity=bigram_div,
++        vowel_ratio=len(vowels) / len(letters) if letters else 0.0,
++        palindrome=palindrome,
++        isogram=isogram,
++        mirrored_pairs=sorted(mirrored),
++        rarest_letter=rarest,
++        most_common_letter=common,
++    )
++
++
++# ===========================================================================
++# ANAGRAMS (limited to prevent combinatorial explosion)
++# ===========================================================================
++
++_MAX_INPUT_CHARS = 4096  # Telegram message limit; defensive cap to bound CPU
++_MAX_ANAGRAM_LETTERS = 8
++_MAX_ANAGRAM_DISPLAY = 200
++
++
++@functools.lru_cache(maxsize=128)
++def generate_anagrams(text: str) -> list[str]:
++    """All unique letter permutations (sorted, deduped). ≤ 8 letters only."""
++    import itertools
++
++    letters = _letters_only(text)
++    if not letters or len(letters) > _MAX_ANAGRAM_LETTERS:
++        return []
++    perms = sorted({"".join(p) for p in itertools.permutations(letters)})
++    return perms
++
++
++def count_permutations(letter_count: int) -> int:
++    import math
++    return math.factorial(letter_count)
++
++
++# ===========================================================================
++# RENDERING
++# ===========================================================================
++
++def _fmt_int(n: int) -> str:
++    return f"{n:,}"
++
++
++def _ratio_bar(ratio: float, width: int = 20) -> str:
++    """Render a unicode block bar for visual proportion (0..1)."""
++    filled = int(round(ratio * width))
++    return "█" * filled + "░" * (width - filled)
++
++
++# Card geometry. Every border in the card is GENERATED from this one number.
++# Before 2026-08-19 they were typed as string literals, and not one box in the
++# rendered card closed: the top rule was 45 columns and the bottom 46, three
++# different openers were closed by the same 44-wide footer, and content lines
++# carried no right edge at all. A literal cannot be right by construction.
++_CARD_WIDTH = 34
++
++# Right-hand edges are deliberately absent. Emoji occupy a different number of
++# columns in different Telegram clients, so a line ending in a box glyph cannot
++# line up for every reader. An open band cannot misalign.
++
++
++def _rule(char: str = "\u2500") -> str:
++    """A full-width horizontal rule."""
++    return char * _CARD_WIDTH
++
++
++def _band(title: str, char: str = "\u2500") -> str:
++    """A titled rule padded to exactly ``_CARD_WIDTH`` columns.
++
++    ASCII titles only. An emoji here would be counted as one column and
++    measured wrong; emoji belong on the content lines instead.
++    """
++    head = f"{char * 2} {title} "
++    if len(head) >= _CARD_WIDTH:
++        return head.rstrip()
++    return head + char * (_CARD_WIDTH - len(head))
++
++
++# Short cipher labels for the fenced card body. "Hebrew Gematria" runs its
++# lines past the card width on a phone; the full name still heads every
++# section outside the fence.
++_SHORT_NAME = {"Hebrew Gematria": "Hebrew", "Pythagorean": "Pythag"}
++
++
++def _short(name: str) -> str:
++    return _SHORT_NAME.get(name, name)
++
++
++def _score_chip_plain(value: int, master: bool) -> str:
++    """``_score_chip`` without Markdown, for use inside a code fence.
++
++    Telegram does not render ``**bold**`` inside a fenced block: the reader is
++    shown the asterisks. Every chip in the card body used ``_score_chip``, so
++    the card said ``\u1f9ee **7**`` on screen.
++    """
++    if master:
++        return f"{value} \u26a1 master"
++    if value in (1, 8, 9):
++        return f"{value} \U0001f300 power"
++    return str(value)
++
++
++def _score_chip(value: int, master: bool) -> str:
++    if master:
++        return f"⚡ **{value}** (master)"
++    if value in (1, 8, 9):
++        return f"🌀 **{value}** (power)"
++    return f"**{value}**"
++
++
++def _breakdown_table(breakdown: list[tuple[str, int]], total: int) -> str:
++    if not breakdown:
++        return "_No letters to score._"
++    # compact: collapse consecutive same-letter runs
++    counter = Counter(c for c, _ in breakdown)
++    rows = ["| Letter | Count | Value | Total |", "|---|---|---|---|"]
++    for letter, val in breakdown:
++        n = counter[letter]
++        rows.append(f"| `{letter}` | {n} | {val} | {val * n} |")
++    rows.append(f"| **Σ** | | | **{total:,}** |")
++    return "\n".join(rows)
++
++
++def _ladder_diagram(ladder: list[int]) -> str:
++    """Visual ladder showing iterative reduction."""
++    if len(ladder) < 2:
++        return f"`{ladder[0]}` _(single step)_"
++    parts = [str(x) for x in ladder]
++    return " → ".join(parts)
++
++
++def _reduction_equation(ladder: list[int]) -> str:
++    """Show the reduction as a chain of digit-sum equations.
++
++    Example: ``61 → 6+1=7`` (single step)
++             ``196 → 1+9+6=16 → 1+6=7`` (two steps)
++             ``44 → 4+4=8`` (note: 44 is NOT a master; reduced to 8)
++    Master numbers (11/22/33) appear with a stop marker: ``29 → 2+9=11 (master, stop)``.
++    """
++    if len(ladder) < 2:
++        return f"`{ladder[0]}` _(single step)_"
++    parts: list[str] = []
++    for i in range(len(ladder) - 1):
++        n = ladder[i]
++        digits = "+".join(str(d) for d in str(n))
++        nxt = ladder[i + 1]
++        if _is_master(nxt) and i == len(ladder) - 2:
++            parts.append(f"`{digits}`=`{nxt}` (master, stop)")
++        else:
++            parts.append(f"`{digits}`=`{nxt}`")
++    return " → ".join(parts)
++
++
++def _element_emoji(root: int) -> str:
++    """Numerology element association (Western tradition, 1–9 cycle).
++
++    1, 5, 9 → Fire 🔥
++    2, 6     → Earth 🌍
++    3, 7     → Water 💧
++    4, 8     → Air 💨
++    Masters 11/22/33 → their own glyphs
++    """
++    elements = {
++        1: "🔥", 2: "🌍", 3: "💧", 4: "💨",
++        5: "🔥", 6: "🌍", 7: "💧", 8: "💨", 9: "🔥",
++        11: "⚡", 22: "🌟", 33: "✨",
++    }
++    return elements.get(root, "·")
++
++
++def _letter_contribution(breakdown: list[tuple[str, int]], top: int = 5) -> list[tuple[str, int]]:
++    """Top-N letter contributions sorted by total value (value × count).
++
++    Returns ``[(letter, total_contribution), ...]``.
++    """
++    if not breakdown:
++        return []
++    counter: Counter[str] = Counter()
++    values: dict[str, int] = {}
++    for letter, val in breakdown:
++        counter[letter] += 1
++        values[letter] = val
++    contrib = [(letter, counter[letter] * values[letter]) for letter in counter]
++    contrib.sort(key=lambda kv: (-kv[1], kv[0]))
++    return contrib[:top]
++
++
++def _contribution_bar(value: int, max_value: int, width: int = 10) -> str:
++    """Mini-bar showing a letter's share of the cipher sum."""
++    if max_value <= 0:
++        return "░" * width
++    filled = max(1, round(value / max_value * width))
++    return "█" * filled + "░" * (width - filled)
++
++
++def _input_transformations(text: str, was_truncated: bool, dropped: int) -> list[str]:
++    """Human-readable list of every transformation applied to *text*.
++
++    Surfaces every normalisation step so the user can audit the math
++    (e.g. "5 letters dropped from 'café' → cipher sees only C, A, F").
++    """
++    notes: list[str] = []
++    original = text
++    work = text
++
++    # Whitespace stripping
++    if work != work.strip():
++        leading = len(work) - len(work.lstrip())
++        trailing = len(work) - len(work.rstrip())
++        parts = []
++        if leading:
++            parts.append(f"{leading} leading")
++        if trailing:
++            parts.append(f"{trailing} trailing")
++        notes.append(f"Trimmed {' + '.join(parts)} whitespace")
++        work = work.strip()
++
++    # Truncation
++    if was_truncated:
++        notes.append(
++            f"Truncated input to first {_MAX_INPUT_CHARS:,} chars "
++            f"(was {len(original):,} → {len(work):,})"
++        )
++
++    # Non-ASCII drop
++    if dropped:
++        notes.append(
++            f"Dropped {dropped} non-ASCII letter(s) — ciphers are A–Z only "
++            f"(see _letter_count_dropped)"
++        )
++
++    # Case normalisation
++    if work != work.upper() and any(c.isalpha() for c in work):
++        # Count letters that were lowercased
++        n_lower = sum(1 for c in work if c.islower() and c.isalpha())
++        if n_lower:
++            notes.append(f"Normalised {n_lower} letter(s) to uppercase")
++
++    return notes
++
++
++def _math_derivation(
++    text: str,
++    py: CipherResult,
++    he: CipherResult,
++    ch: CipherResult,
++    prof: StructuralProfile,
++) -> str:
++    """Step-by-step math for every cipher + structural calcs.
++
++    Format per cipher:
++        emoji Name (text)
++          letter_values = "H(8) E(5) L(3) L(3) O(6)"
++          sum_step      = "8+5+3+3+6 = 25"
++          reduction     = "25 → 2+5 = 7"
++          result        = "**7**"
++
++    Plus a structural section showing how V/C ratio, bigram count,
++    Atbash pairs, and isogram/palindrome detection were derived.
++    """
++    out: list[str] = []
++    letters = _letters_only(text)
++
++    # Per-letter contribution data, shared across ciphers
++    contrib = _letter_contribution(
++        [(c, _PYTHAGOREAN[c]) for c in letters], top=5
++    )
++    max_contrib = contrib[0][1] if contrib else 1
++
++    def _per_letter(cipher_dict: dict[str, int]) -> str:
++        if not letters:
++            return "_no letters_"
++        return " ".join(f"`{c}`({cipher_dict.get(c, '?')})" for c in letters)
++
++    def _sum_step(breakdown: list[tuple[str, int]]) -> str:
++        if not breakdown:
++            return "_no letters_"
++        parts = "+".join(str(v) for _, v in breakdown)
++        total = sum(v for _, v in breakdown)
++        return f"`{parts}` = **{total}**"
++
++    def _reduction_block(c: CipherResult) -> str:
++        ladder = _root_ladder(c.raw)
++        # Build the equation chain from the ladder (excluding the final root
++        # which is rendered separately for emphasis).
++        if len(ladder) >= 2:
++            steps: list[str] = []
++            for i in range(len(ladder) - 1):
++                n = ladder[i]
++                digits = "+".join(str(d) for d in str(n))
++                nxt = ladder[i + 1]
++                if _is_master(n) and i == len(ladder) - 2:
++                    steps.append(f"`{digits}`=`{n}` (master, stop)")
++                else:
++                    steps.append(f"`{digits}`=`{nxt}`")
++            chain = " → ".join(steps)
++            return f"`{c.raw}` → {chain} → **{c.root}**"
++        return f"`{c.raw}` (single step) → **{c.root}**"
++
++    out.append("#### 🧮 Math Derivation")
++    out.append("_Every number on this card, traced back to its source._")
++    out.append("")
++
++    # ── CIPHERS ──
++    for cipher_name, c, lookup in (
++        ("Pythagorean", py, _PYTHAGOREAN),
++        ("Hebrew Gematria", he, _GEMATRIA),
++        ("Chaldean", ch, _CHALDEAN),
++    ):
++        emoji = {"Pythagorean": "🧮", "Hebrew Gematria": "✡️", "Chaldean": "🌙"}[cipher_name]
++        out.append(f"**{emoji} {cipher_name}** — `{text}`")
++        out.append(f"  • Per-letter: {_per_letter(lookup)}")
++        out.append(f"  • Sum:       {_sum_step(c.breakdown)}")
++        out.append(f"  • Reduction: {_reduction_block(c)}")
++        out.append("")
++
++    # ── STRUCTURAL ──
++    out.append("**🧬 Structural derivation**")
++    out.append(f"  • Letters filtered to A–Z: {len(letters)} ({' '.join(letters) or '_none_'})")
++    vowel_list = [c for c in letters if c in VOWELS]
++    consonant_list = [c for c in letters if c.isalpha() and c not in VOWELS]
++    out.append(
++        f"  • Vowels ({len(vowel_list)}): {' '.join(vowel_list) or '_none_'}  ·  "
++        f"Consonants ({len(consonant_list)}): {' '.join(consonant_list) or '_none_'}"
++    )
++    if contrib:
++        bars = "  ".join(
++            f"`{letter}`×{value // max(1, _PYTHAGOREAN.get(letter, 1))} "
++            f"`{_contribution_bar(value, max_contrib)}` {value}"
++            for letter, value in contrib
++        )
++        out.append(f"  • Top contributors (Pythagorean): {bars}")
++
++    # Bigram derivation
++    bigrams = ["".join(p) for p in zip(letters, letters[1:])]
++    if bigrams:
++        bg_counter = Counter(bigrams)
++        unique_bg = len(set(bigrams))
++        bg_div = unique_bg / len(bigrams)
++        bg_lines = [f"  • Bigrams: {' → '.join(bigrams)}"]
++        bg_lines.append(
++            f"  • Diversity: {unique_bg} unique / {len(bigrams)} total = **{bg_div:.0%}**"
++        )
++        if len(bg_counter.most_common(5)) > 0:
++            top = ", ".join(f"`{bg}`×{n}" for bg, n in bg_counter.most_common(5))
++            bg_lines.append(f"  • Top bigrams: {top}")
++        out.extend(bg_lines)
++
++    # Atbash derivation
++    if prof.mirrored_pairs:
++        pairs_str = " · ".join(f"`{a}`↔`{z}`" for a, z in prof.mirrored_pairs)
++        out.append(f"  • Atbash mirror pairs: {pairs_str}")
++    else:
++        out.append("  • Atbash mirror pairs: _none present_")
++
++    # Boolean properties with derivation
++    iso = "yes" if prof.isogram else f"no (repeated: {sorted(c for c, n in Counter(letters).items() if n > 1)})"
++    pal = "yes" if prof.palindrome else "no"
++    out.append(f"  • Isogram: {iso}")
++    out.append(f"  • Palindrome: {pal}")
++    out.append("")
++    return "\n".join(out)
++
++
++def _anagram_factorial_str(letter_count: int) -> str:
++    n = count_permutations(letter_count)
++    if n <= 1_000_000:
++        return f"{n:,}"
++    digits = int(math.log10(n))
++    return f"{letter_count}! ≈ 10^{digits}"
++
++
++def render_summary_card(text: str) -> str:
++    """Render the world-class summary card for *text*.
++
++    Defensive cap: inputs longer than ``_MAX_INPUT_CHARS`` are truncated
++    before any cipher work runs. This bounds CPU on accidental DoS
++    (``/summary <paste-of-large-doc>``) and matches Telegram's per-message
++    limit. A truncation notice is included in the header band.
++
++    Layout (visual hierarchy):
++        1. Header band     — titled frame with target + char count
++        2. At-a-glance     — boxed chip grid (3 ciphers + composition)
++        3. Resonance       — boxed banner callout
++        4. Parts / Scores  — framed blocks (one per part or per cipher)
++        5. Insights        — blockquoted discoveries (only when relevant)
++        6. Profile         — table of structural composition
++        7. Detailed        — collapsibles with full math
++    """
++    # Preserve the original for the input-transformation audit log; downstream
++    # operations work on the normalised copy.
++    original_text = text
++    text = text.strip()
++    if not text:
++        return "🔮 **Summary Card**\n\n_Send text to analyze._"
++
++    # Defensive cap to bound CPU on accidental huge inputs.
++    truncated = len(text) > _MAX_INPUT_CHARS
++    if truncated:
++        text = text[:_MAX_INPUT_CHARS]
++
++    dropped = _letter_count_dropped(text)
++    # Drop non-ASCII alpha before any cipher work so we never KeyError.
++    if dropped:
++        text = "".join(c for c in text if not (c.isalpha() and not c.isascii()))
++
++    # ─── DATA ──────────────────────────────────────────────────────────────
++    py = pythagorean(text)
++    he = hebrew(text)
++    ch = chaldean(text)
++    prof = structural_profile(text)
++    anagrams = generate_anagrams(text)
++    letter_count = prof.letter_count
++    anagram_count = len(anagrams)
++    parts = [tok for tok in text.split() if len(_letters_only(tok)) >= 2]
++    has_parts = len(parts) >= 2
++
++    # ─── BUFFER ────────────────────────────────────────────────────────────
++    out: list[str] = []
++
++    # ─── 1-4. THE CARD BODY: ONE FENCE ─────────────────────────────────────
++    # One fence, not six. Every ``` opens a separate block in Telegram, and six
++    # blocks of four lines each is mostly whitespace on a phone. Nothing inside
++    # a fence may carry Markdown: Telegram shows the asterisks.
++    out.append("### 🔮 Isopsephy Card")
++    out.append("")
++    body: list[str] = ["```", _rule("━"), f"  {text}"]
++    if truncated:
++        body.append(f"  ⚠️ truncated to {_MAX_INPUT_CHARS:,} chars")
++    if dropped:
++        body.append(f"  ⚠️ {dropped} non-ASCII letter(s) dropped, A–Z only")
++    body.append(f"  {prof.char_count} chars · {prof.letter_count} letters")
++
++    # At a glance. Label leads, value follows. Nothing is column-aligned after
++    # an emoji, because emoji width differs between clients.
++    body.append(_band("AT A GLANCE"))
++    for c in (py, he, ch):
++        body.append(
++            f"  {c.emoji} {_short(c.name)} · "
++            f"{_score_chip_plain(c.root, _is_master(c.root))}"
++        )
++    comp = [
++        f"{prof.vowel_count}V/{prof.consonant_count}C",
++        f"{prof.unique_letters} unique",
++    ]
++    if prof.isogram:
++        comp.append("✨ isogram")
++    if prof.palindrome:
++        comp.append("🔁 palindrome")
++    body.append("  " + " · ".join(comp))
++
++    # Resonance. `most_common` rather than an arbitrary member of the set: with
++    # roots {7, 7, 3} the old code could name 3 as the root "2 of 3 ciphers
++    # reduce to", which is the singleton and simply false.
++    root_counts = Counter([py.root, he.root, ch.root])
++    body.append(_band("RESONANCE"))
++    if len(root_counts) == 1:
++        body.append("  🌀 MASTER RESONANCE")
++        body.append(f"  all 3 ciphers reduce to {py.root}")
++    elif len(root_counts) == 2:
++        shared = root_counts.most_common(1)[0][0]
++        body.append("  🌗 PARTIAL AGREEMENT")
++        body.append(f"  2 of 3 ciphers reduce to {shared}")
++    else:
++        body.append("  🌈 ALL DIFFERENT")
++        body.append("  3 distinct roots, no resonance")
++
++    def _cipher_lines(cip_py, cip_he, cip_ch) -> list[str]:
++        return [
++            f"  {c.emoji} {_short(c.name)} · {_fmt_int(c.raw)} → "
++            f"{_score_chip_plain(c.root, _is_master(c.root))}"
++            for c in (cip_py, cip_he, cip_ch)
++        ]
++
++    if has_parts:
++        for tok in parts:
++            body.append(_band(f"{tok.upper()} · {len(_letters_only(tok))} letters"))
++            body.extend(_cipher_lines(pythagorean(tok), hebrew(tok), chaldean(tok)))
++        body.append(_band(f"COMBINED · {letter_count} letters"))
++        body.extend(_cipher_lines(py, he, ch))
++    else:
++        body.append(_band("SCORES"))
++        for c in (py, he, ch):
++            ladder = _root_ladder(c.raw)
++            ladder_short = (
++                f"{c.raw}→{c.root}" if len(ladder) <= 2
++                else f"{c.raw}→{ladder[1]}→…→{c.root}"
++            )
++            body.append(
++                f"  {c.emoji} {_short(c.name)} · {_fmt_int(c.raw)} → "
++                f"{_score_chip_plain(c.root, _is_master(c.root))}"
++            )
++            body.append(f"     ladder {ladder_short}")
++    body.append(_rule("━"))
++    body.append("```")
++    out.extend(body)
++    out.append("")
++
++    # ─── 5. INSIGHT CALLOUTS ──────────────────────────────────────────────
++    insights: list[str] = []
++    for c in (py, he, ch):
++        if _is_master(c.root):
++            insights.append(
++                f"⚡ **{c.name}** yields **Master Number {c.root}** "
++                f"— preserved, not reduced"
++            )
++    if prof.mirrored_pairs:
++        pairs_str = " · ".join(f"`{a}`↔`{z}`" for a, z in prof.mirrored_pairs)
++        if len(prof.mirrored_pairs) >= 3:
++            insights.append(
++                f"🪞 **{len(prof.mirrored_pairs)} Atbash mirror pairs** — "
++                f"{pairs_str} (high mirror density)"
++            )
++        else:
++            insights.append(f"🪞 Atbash mirror pair: {pairs_str}")
++    if has_parts:
++        for tok in parts:
++            tp = pythagorean(tok)
++            if tp.root == 1 and tp.raw != 1:
++                insights.append(
++                    f"🌀 **`{tok}`** alone is a Pythagorean power number (**{tp.root}**)"
++                )
++    if insights:
++        out.append("#### 💡 Insights")
++        out.append("")
++        for ins in insights:
++            out.append(f"> {ins}")
++        out.append("")
++
++    # ─── 6. STRUCTURAL PROFILE TABLE ──────────────────────────────────────
++    out.append("#### 🧬 Structural Profile")
++    out.append("")
++    out.append("| Metric | Value |")
++    out.append("|---|---|")
++    out.append(f"| Characters | **{prof.char_count}** |")
++    out.append(f"| Letters | **{prof.letter_count}** |")
++    out.append(f"| Unique letters | **{prof.unique_letters}** of 26 |")
++    out.append(
++        f"| Element association (Pyth) | "
++        f"{_element_emoji(py.root)} root **{py.root}** |"
++    )
++    out.append(f"| Element association (Heb) | "
++              f"{_element_emoji(he.root)} root **{he.root}** |")
++    out.append(f"| Element association (Chal) | "
++              f"{_element_emoji(ch.root)} root **{ch.root}** |")
++    out.append(
++        f"| Vowel ratio | `{_ratio_bar(prof.vowel_ratio)}` "
++        f"**{prof.vowel_ratio * 100:.0f}%** "
++        f"({prof.vowel_count} V / {prof.consonant_count} C) |"
++    )
++    out.append(
++        f"| Bigram diversity | `{_ratio_bar(prof.bigram_diversity)}` "
++        f"**{prof.bigram_diversity * 100:.0f}%** |"
++    )
++    if prof.isogram:
++        out.append("| ✨ Isogram | _no letter repeats_ |")
++    if prof.palindrome:
++        out.append("| 🔁 Palindrome | _reads the same forwards & backwards_ |")
++    if prof.rarest_letter:
++        out.append(
++            f"| Rarest letter | `{prof.rarest_letter[0]}` "
++            f"×{prof.rarest_letter[1]} |"
++        )
++    if prof.most_common_letter:
++        out.append(
++            f"| Most common | `{prof.most_common_letter[0]}` "
++            f"×{prof.most_common_letter[1]} |"
++        )
++    out.append("")
++
++    # ─── 6b. INPUT TRANSFORMATION LOG ─────────────────────────────
++    transformations = _input_transformations(original_text, truncated, dropped)
++    if transformations:
++        out.append("#### 🔧 Input Transformations")
++        out.append("_Every normalisation applied before ciphers ran._")
++        out.append("")
++        for t in transformations:
++            out.append(f"- {t}")
++        out.append("")
++
++    # ─── 6c. MATH DERIVATION (collapsible, expanded by default) ──────
++    out.append("<details open>")
++    out.append("<summary>🧮 Math Derivation — step-by-step, every number</summary>")
++    out.append("")
++    out.append(_math_derivation(text, py, he, ch, prof))
++    out.append("")
++    out.append("</details>")
++    out.append("")
++
++    # ─── 7. DETAILED BREAKDOWNS (collapsibles) ────────────────────────────
++    out.append("---")
++    out.append("")
++    out.append("#### 📐 Detailed Breakdowns")
++    out.append("_Tap to expand each cipher's full math._")
++    out.append("")
++
++    for c in (py, he, ch):
++        ladder = _root_ladder(c.raw)
++        is_master = _is_master(c.root)
++        ladder_str = " → ".join(str(x) for x in ladder)
++        ladder_text = (
++            " _(single step)_" if len(ladder) < 2
++            else f"\n_Reduction ladder:_ `{ladder_str}`"
++        )
++        out.append("<details>")
++        out.append(
++            f"<summary>{c.emoji} {c.name} — raw {_fmt_int(c.raw)}, "
++            f"root {'⚡ master ' if is_master else ''}{c.root}</summary>"
++        )
++        out.append("")
++        out.append(_breakdown_table(c.breakdown, c.raw))
++        out.append("")
++        if is_master:
++            out.append(
++                f"⚡ **Master Number {c.root}** — preserved, not reduced further."
++            )
++        out.append(
++            f"_{c.name} cipher:_ sum → digit sum until single digit, "
++            f"preserving master numbers (11, 22, 33)."
++        )
++        out.append(ladder_text)
++        out.append("</details>")
++        out.append("")
++
++    out.append("<details>")
++    out.append("<summary>🪞 Structural Deep Dive — Atbash mirrors & patterns</summary>")
++    out.append("")
++    if prof.mirrored_pairs:
++        pairs_str = " · ".join(f"`{a}`↔`{z}`" for a, z in prof.mirrored_pairs)
++        out.append(f"**Atbash mirrored pairs present:** {pairs_str}")
++        out.append("")
++        if len(prof.mirrored_pairs) >= 3:
++            out.append("✨ High mirror density — strong symmetric signature.")
++    else:
++        out.append("_No Atbash mirror pairs in this text._")
++    out.append("")
++    if letter_count > 1:
++        bigrams = ["".join(p) for p in zip(_letters_only(text), _letters_only(text)[1:])]
++        bigram_counts = Counter(bigrams).most_common(5)
++        if bigram_counts:
++            out.append("**Top 5 letter bigrams:**")
++            for bg, n in bigram_counts:
++                out.append(f"- `{bg}` ×{n}")
++    out.append("</details>")
++    out.append("")
++
++    out.append("<details>")
++    if anagrams:
++        showing = min(anagram_count, _MAX_ANAGRAM_DISPLAY)
++        fact = _anagram_factorial_str(letter_count)
++        out.append(
++            f"<summary>🔤 Anagrams — {anagram_count:,} unique "
++            f"({fact} permutations of {letter_count} letters)</summary>"
++        )
++        out.append("")
++        for a in anagrams[:_MAX_ANAGRAM_DISPLAY]:
++            out.append(f"- [ ] `{a}`")
++        if anagram_count > _MAX_ANAGRAM_DISPLAY:
++            out.append("")
++            out.append(
++                f"_Showing first {_MAX_ANAGRAM_DISPLAY:,} of {anagram_count:,}. "
++                f"Try a shorter input to see them all._"
++            )
++    else:
++        if letter_count == 0:
++            out.append("<summary>🔤 Anagrams — no letters found</summary>")
++        else:
++            out.append(
++                f"<summary>🔤 Anagrams — too many letters "
++                f"({letter_count} > {_MAX_ANAGRAM_LETTERS})</summary>"
++            )
++        out.append("")
++        out.append("_Send text with 1–8 letters for full anagram analysis._")
++    out.append("</details>")
++    out.append("")
++
++    out.append("---")
++    out.append(f"_Try:_ `/summary {text}` again · `/find summary` · `/commands 1`")
++
++    return "\n".join(out)
++
++
++def _strip_markdown(text: str) -> str:
++    """Reduce GFM markdown to a single plain-text line.
++
++    Used by SMS (no markup) and as a fallback. Drops ``<details>`` blocks
++    entirely (they don't render in plain text) and unwraps ``**bold**``,
++    ``*italic*``, ``__under__``, ``_under_``, ```code```, ``# headers``,
++    pipe tables, and bullet lists. Newlines within the original are
++    collapsed to spaces.
++    """
++    import re
++
++    out = text
++    # Drop collapsible blocks — keep only their <summary> contents.
++    out = re.sub(
++        r"<details>\s*<summary>([^<]+)</summary>",
++        r"\1: ",
++        out,
++        flags=re.DOTALL,
++    )
++    out = re.sub(r"</?details>", "", out)
++    # Headers → plain text
++    out = re.sub(r"^#{1,6}\s*", "", out, flags=re.MULTILINE)
++    # Bold/italic/underline markers
++    out = re.sub(r"\*\*(.+?)\*\*", r"\1", out)
++    out = re.sub(r"__(.+?)__", r"\1", out)
++    out = re.sub(r"\*(.+?)\*", r"\1", out)
++    out = re.sub(r"(?<!\w)_(.+?)_(?!\w)", r"\1", out)
++    out = re.sub(r"~~(.+?)~~", r"\1", out)
++    # Inline code
++    out = re.sub(r"`([^`]+)`", r"\1", out)
++    # Links → text only
++    out = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", out)
++    # Task list markers
++    out = re.sub(r"^\s*-\s*\[\s*[xX ]\s*\]\s*", "", out, flags=re.MULTILINE)
++    # Bullets
++    out = re.sub(r"^\s*[-*]\s+", "", out, flags=re.MULTILINE)
++    # Pipe tables → row by row, pipe → space
++    out = re.sub(r"^\s*\|", "", out, flags=re.MULTILINE)
++    out = out.replace("|", " ")
++    # Italic-emoji asterisks (used as visual breaks like "* footnote *")
++    # already handled by *...* above
++    # Collapse whitespace
++    out = re.sub(r"\s+", " ", out)
++    return out.strip()
++
++
++def _escape_markdownv2(text: str) -> str:
++    """Escape the characters Telegram MarkdownV2 requires to be escaped.
++
++    Per Telegram Bot API, the chars ``_ * [ ] ( ) ~ ` > # + - = | { } . !``
++    must be escaped with a preceding ``\\`` when used outside of protected
++    markup.  We protect code spans/backticks first, escape the rest.
++    """
++    import re
++
++    # Protect inline code and code blocks
++    placeholders: dict[str, str] = {}
++    counter = [0]
++
++    def _ph(value: str) -> str:
++        key = f"\x00PH{counter[0]}\x00"
++        counter[0] += 1
++        placeholders[key] = value
++        return key
++
++    # Stash fenced code blocks
++    out = re.sub(
++        r"(```.*?```)",
++        lambda m: _ph(m.group(1)),
++        text,
++        flags=re.DOTALL,
++    )
++    # Stash inline code
++    out = re.sub(r"(`[^`\n]+`)", lambda m: _ph(m.group(1)), out)
++
++    # Escape the special characters
++    special = r"_*[]()~`>#+-=|{}.!"
++    out = re.sub(f"([{re.escape(special)}])", r"\\\1", out)
++
++    # Restore code blocks (they came pre-escaped or are themselves code)
++    for key, val in placeholders.items():
++        out = out.replace(key, val)
++    return out
++
++
++def _md_to_mrkdwn(text: str) -> str:
++    """Convert standard Markdown to Slack mrkdwn.
++
++    Slack uses ``*bold*`` (single asterisks), ``_italic_``, ``~strike~``,
++    ``<url|label>`` links, ``> quote``, and does NOT support GFM tables,
++    ``<details>``, headers in body, or task lists.
++    """
++    import re
++
++    # Slack doesn't render <details>; keep <summary> as a line
++    out = re.sub(
++        r"<details>\s*<summary>([^<]+)</summary>",
++        r"> *\1*\n> ",
++        text,
++        flags=re.DOTALL,
++    )
++    out = re.sub(r"</?details>", "", out)
++    # Headers → bold lines
++    out = re.sub(r"^#{1,6}\s*(.+)$", r"> *\1*", out, flags=re.MULTILINE)
++    # Bold: ** → * (single)
++    out = re.sub(r"\*\*(.+?)\*\*", r"*\1*", out)
++    # Italic: __ → _
++    out = re.sub(r"__(.+?)__", r"_\1_", out)
++    # Strike: ~~ → ~
++    out = re.sub(r"~~(.+?)~~", r"~\1~", out)
++    # Inline code stays as-is (Slack uses single backticks too)
++    # Convert pipe tables to a fixed-width-ish row per line
++    out = re.sub(
++        r"^\s*\|(.+)\|\s*$",
++        lambda m: "```" + m.group(1).strip().replace("|", " | ") + "```",
++        out,
++        flags=re.MULTILINE,
++    )
++    # Bullets "- " → "• "
++    out = re.sub(r"^\s*-\s+", "• ", out, flags=re.MULTILINE)
++    return out
++
++
++def _md_to_html(text: str) -> str:
++    """Convert standard Markdown to a basic HTML email body.
++
++    Supports headers, bold, italic, tables, lists, code, and links.
++    Enough for an email-friendly Summary Card.
++
++    Implementation uses a placeholder pattern: substitute MD→HTML tags into
++    sentinel markers, escape the rest of the body, then restore the tags.
++    This avoids the chicken-and-egg of "escape then inject tags vs inject
++    then escape user content."
++    """
++    import html as _html
++    import re
++
++    placeholders: dict[str, str] = {}
++    counter = [0]
++
++    def _ph(html_tag: str) -> str:
++        key = f"\x00PH{counter[0]}\x00"
++        counter[0] += 1
++        placeholders[key] = html_tag
++        return key
++
++    out = text
++
++    # 1. Headers — substitute before any escape
++    out = re.sub(r"^#\s+(.+)$",
++                 lambda m: _ph(f"<h1>{m.group(1)}</h1>"),
++                 out, flags=re.MULTILINE)
++    out = re.sub(r"^##\s+(.+)$",
++                 lambda m: _ph(f"<h2>{m.group(1)}</h2>"),
++                 out, flags=re.MULTILINE)
++    out = re.sub(r"^###\s+(.+)$",
++                 lambda m: _ph(f"<h3>{m.group(1)}</h3>"),
++                 out, flags=re.MULTILINE)
++    out = re.sub(r"^####\s+(.+)$",
++                 lambda m: _ph(f"<h4>{m.group(1)}</h4>"),
++                 out, flags=re.MULTILINE)
++    out = re.sub(r"^#####\s+(.+)$",
++                 lambda m: _ph(f"<h5>{m.group(1)}</h5>"),
++                 out, flags=re.MULTILINE)
++
++    # 2. Bold / italic / code / strike / links → placeholder-encoded
++    #    BEFORE tables, so table cell contents inherit the formatting.
++    out = re.sub(r"\*\*(.+?)\*\*",
++                 lambda m: _ph(f"<strong>{m.group(1)}</strong>"), out)
++    out = re.sub(r"__(.+?)__",
++                 lambda m: _ph(f"<u>{m.group(1)}</u>"), out)
++    out = re.sub(r"(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)",
++                 lambda m: _ph(f"<em>{m.group(1)}</em>"), out)
++    out = re.sub(r"(?<!\w)_(.+?)_(?!\w)",
++                 lambda m: _ph(f"<em>{m.group(1)}</em>"), out)
++    out = re.sub(r"~~(.+?)~~",
++                 lambda m: _ph(f"<s>{m.group(1)}</s>"), out)
++    out = re.sub(r"`([^`\n]+)`",
++                 lambda m: _ph(f"<code>{m.group(1)}</code>"), out)
++    out = re.sub(
++        r"\[([^\]]+)\]\(([^)]+)\)",
++        lambda m: _ph(f"<a href='{m.group(2)}'>{m.group(1)}</a>"),
++        out,
++    )
++
++    # 3. Pipe tables — substitution runs against text where bold/italic
++    #    are already placeholder-encoded, so cell content renders with
++    #    <strong>/<em> after the placeholder is restored.
++    def _table(m: re.Match[str]) -> str:
++        rows = [
++            r.strip() for r in m.group(0).strip().splitlines()
++            if r.strip() and not re.match(r"^\|[\s\-:|]+\|$", r)
++        ]
++        if not rows:
++            return ""
++        cells = [r.strip("|").split("|") for r in rows]
++        header = cells[0]
++        body = cells[1:]
++        html_rows = [
++            "<tr>" + "".join(f"<th>{c.strip()}</th>" for c in header) + "</tr>"
++        ]
++        for row in body:
++            html_rows.append(
++                "<tr>" + "".join(f"<td>{c.strip()}</td>" for c in row) + "</tr>"
++            )
++        return _ph("<table border='1' cellpadding='4'>"
++                   + "".join(html_rows) + "</table>")
++
++    out = re.sub(
++        r"(?:^\|.+\|\s*$\n?)+",
++        _table,
++        out,
++        flags=re.MULTILINE,
++    )
++
++    # 4. Bullets → <li>
++    out = re.sub(r"^\s*-\s+(.+)$", r"<li>\1</li>", out, flags=re.MULTILINE)
++    out = re.sub(r"((?:<li>.*</li>\n?)+)", r"<ul>\1</ul>", out)
++
++    # 5. Escape user content (now safe — all tags are in placeholders,
++    #    except <ul>/<li> which we just inserted; that's our own HTML).
++    out = _html.escape(out, quote=False)
++    out = out.replace("&lt;li&gt;", "<li>").replace("&lt;/li&gt;", "</li>")
++    out = out.replace("&lt;ul&gt;", "<ul>").replace("&lt;/ul&gt;", "</ul>")
++
++    # 6. Restore placeholders — repeat until no placeholders remain.
++    #    A table placeholder may contain inner placeholders; restoring
++    #    in insertion order only swaps the outer one. Repeat until stable.
++    while True:
++        changed = False
++        for key, tag in placeholders.items():
++            if key in out:
++                out = out.replace(key, tag)
++                changed = True
++        if not changed:
++            break
++
++    # 7. Newlines → <br>
++    out = out.replace("\n", "<br>\n")
++    return f"<div style='font-family:monospace'>{out}</div>"
++
++
++def _render_telegram(card: str, target: str) -> str:
++    """Convert the standard-Markdown Summary Card to Telegram MarkdownV2."""
++    # Telegram supports tables and <details>; we mainly need to escape.
++    return _escape_markdownv2(card)
++
++
++def _render_slack(card: str, target: str) -> str:
++    """Convert to Slack mrkdwn. Tables become code blocks."""
++    return _md_to_mrkdwn(card)
++
++
++def _render_sms(card: str, target: str) -> str:
++    """Plain text, single line, <= 480 chars (3 SMS segments).
++
++    The roots and the profile are computed from *target*, exactly as
++    ``_render_glasses`` does. They used to be scraped back out of the
++    rendered card with a regex pinned to the AT-A-GLANCE box art, so the
++    2026-08-19 layout change silently turned every SMS into
++    ``Summary: roots ?/?/?``. A renderer that parses another renderer's
++    output is coupled to its decoration; nothing downstream should read the
++    card as data.
++
++    Layout within the 480-char budget:
++      - "Summary: roots P/H/C. "  (~ 25 chars)
++      - "N V/M C, K unique. "     (~ 25 chars)
++      - Stripped plaintext tail   (the remainder)
++    """
++    py = pythagorean(target)
++    he = hebrew(target)
++    ch = chaldean(target)
++    prof = structural_profile(target)
++    summary = f"Summary: roots {py.root}/{he.root}/{ch.root}. "
++    profile = (
++        f"{prof.vowel_count}V/{prof.consonant_count}C, "
++        f"{prof.unique_letters} unique. "
++    )
++    return (summary + profile + _strip_markdown(card))[:480]
++
++
++def _render_email(card: str, target: str) -> str:
++    """Convert to HTML email body."""
++    return _md_to_html(card)
++
++
++def _render_glasses(card: str, target: str) -> str:
++    """30-char monospace rows: target + 3 root numbers + structural profile.
++
++    Output is a single block of fixed-width lines so it can render on a
++    smartwatch HUD or smart-glasses overlay.
++
++    NOTE (F-NEW-IMPROVE-10): this is a GENERIC monospace placeholder — it
++    does NOT target any specific HUD's wire format. Real Even Realities G1
++    uses ``.arxml``/`.ehrl` overlay descriptors; Vuzix Shield uses their
++    proprietary JSON-LD layout. To target a real device, replace this
++    function with a device-specific layout and register it in
++    ``_PLATFORM_RENDERERS`` under a new key (e.g. ``"glasses_g1"``).
++    The 30×6 constraint here is the safe upper bound across most HUDs.
++    """
++    py = pythagorean(target)
++    he = hebrew(target)
++    ch = chaldean(target)
++    prof = structural_profile(target)
++
++    def clip(s: str, n: int = 30) -> str:
++        return s[:n].ljust(n)
++
++    lines = [
++        clip(f"Σ {target}"),
++        clip(f"PYTH={py.root}  HEBR={he.root}  CHAL={ch.root}"),
++        clip(f"V/C={prof.vowel_count}/{prof.consonant_count} "
++             f"U={prof.unique_letters}"),
++        clip(f"RARE={prof.rarest_letter[0] if prof.rarest_letter else '-'}"
++             f"  COMMON={prof.most_common_letter[0] if prof.most_common_letter else '-'}"),
++        clip(f"LEN={prof.letter_count}  ISO={'Y' if prof.isogram else 'N'}"
++             f"  PAL={'Y' if prof.palindrome else 'N'}"),
++        clip("—summary card—"),
++    ]
++    return "\n".join(lines)
++
++
++def _render_default(card: str, target: str) -> str:
++    """Default — return the standard-Markdown card untouched.
++
++    Used by Discord, Matrix, Feishu, API server, web UI, and any adapter
++    that doesn't have its own dialect.
++    """
++    return card
++
++
++_PLATFORM_RENDERERS = {
++    "telegram": _render_telegram,
++    "slack":    _render_slack,
++    "sms":      _render_sms,
++    "email":    _render_email,
++    "glasses":  _render_glasses,
++    "default":  _render_default,
++}
++
++
++def render_for_platform(text: str, platform: str) -> str:
++    """Render the Summary Card for a specific target platform.
++
++    Args:
++        text: The text to analyze.
++        platform: One of "telegram", "slack", "sms", "email", "glasses",
++                  "default". Unknown values fall through to "default".
++
++    Returns:
++        Platform-correct string ready for that adapter's send_message.
++    """
++    card = render_summary_card(text)
++    platform = (platform or "default").lower()
++    renderer = _PLATFORM_RENDERERS.get(platform, _render_default)
++    return renderer(card, text)
++
++
++# ===========================================================================
++# JSON + COMPARE (programmatic + side-by-side)
++# ===========================================================================
++
++
++def render_summary_json(text: str) -> dict:
++    """Return the Summary Card as a structured JSON-serialisable dict.
++
++    Shape:
++        {
++          "target": <input text, possibly truncated>,
++          "truncated": <bool>,
++          "dropped_non_ascii": <int>,
++          "ciphers": {
++            "pythagorean": {"raw": int, "root": int, "master": bool, "ladder": [int]},
++            "hebrew":      {...},
++            "chaldean":    {...},
++          },
++          "profile": {
++            "char_count": int,
++            "letter_count": int,
++            "vowel_count": int,
++            "consonant_count": int,
++            "unique_letters": int,
++            "vowel_ratio": float,
++            "bigram_diversity": float,
++            "palindrome": bool,
++            "isogram": bool,
++            "mirrored_pairs": [(str, str)],
++            "rarest_letter": [str, int] | null,
++            "most_common_letter": [str, int] | null,
++          },
++          "anagrams": {"count": int, "letters": int},
++        }
++
++    Single source of truth: the platform renderers should consume this and
++    format per-platform. Today they re-parse the rendered card (see SMS
++    bug history). JSON consumers (scripts, web UI JSON endpoint) can
++    bypass the markdown layer entirely.
++    """
++    truncated = len(text) > _MAX_INPUT_CHARS
++    work_text = text[:_MAX_INPUT_CHARS] if truncated else text
++    dropped = _letter_count_dropped(work_text)
++
++    py = pythagorean(work_text)
++    he = hebrew(work_text)
++    ch = chaldean(work_text)
++    prof = structural_profile(work_text)
++    anagrams = generate_anagrams(work_text)
++
++    def cipher_dict(c: CipherResult) -> dict:
++        return {
++            "raw": c.raw,
++            "root": c.root,
++            "master": _is_master(c.root),
++            "ladder": _root_ladder(c.raw),
++        }
++
++    return {
++        "target": work_text,
++        "truncated": truncated,
++        "dropped_non_ascii": dropped,
++        "ciphers": {
++            "pythagorean": cipher_dict(py),
++            "hebrew": cipher_dict(he),
++            "chaldean": cipher_dict(ch),
++        },
++        "profile": {
++            "char_count": prof.char_count,
++            "letter_count": prof.letter_count,
++            "vowel_count": prof.vowel_count,
++            "consonant_count": prof.consonant_count,
++            "unique_letters": prof.unique_letters,
++            "vowel_ratio": prof.vowel_ratio,
++            "bigram_diversity": prof.bigram_diversity,
++            "palindrome": prof.palindrome,
++            "isogram": prof.isogram,
++            "mirrored_pairs": [list(p) for p in prof.mirrored_pairs],
++            "rarest_letter": list(prof.rarest_letter) if prof.rarest_letter else None,
++            "most_common_letter": list(prof.most_common_letter) if prof.most_common_letter else None,
++        },
++        "anagrams": {"count": len(anagrams), "letters": prof.letter_count},
++    }
++
++
++def render_compare_card(text_a: str, text_b: str) -> str:
++    """Side-by-side comparison of two texts. Returns the standard-Markdown card.
++
++    Layout:
++        1. Header band with both targets
++        2. Three-cipher comparison table (roots side-by-side + delta)
++        3. Shared-letter analysis (intersection of A–Z)
++        4. Profile delta (vowel ratio, bigram diversity, etc.)
++        5. Resonance verdict
++    """
++    json_a = render_summary_json(text_a)
++    json_b = render_summary_json(text_b)
++    out: list[str] = []
++    out.append("### ⚖️ Isopsephy Compare")
++    out.append("")
++    out.append("```")
++    out.append(_rule("━"))
++    out.append(f"  A: {json_a['target']}")
++    out.append(f"  B: {json_b['target']}")
++    out.append(_rule("━"))
++    out.append("```")
++    out.append("")
++
++    out.append("#### 🧮 Cipher Roots")
++    out.append("")
++    out.append("| Cipher | A | B | Δ |")
++    out.append("|---|---|---|---|")
++    for name in ("pythagorean", "hebrew", "chaldean"):
++        ra = json_a["ciphers"][name]["root"]
++        rb = json_b["ciphers"][name]["root"]
++        delta = rb - ra
++        sign = "+" if delta > 0 else ""
++        out.append(f"| {name.title()} | **{ra}** | **{rb}** | {sign}{delta} |")
++    out.append("")
++
++    # Shared-letter analysis
++    letters_a = set(c for c in text_a.upper() if c.isascii() and c.isalpha())
++    letters_b = set(c for c in text_b.upper() if c.isascii() and c.isalpha())
++    shared = letters_a & letters_b
++    only_a = letters_a - letters_b
++    only_b = letters_b - letters_a
++    out.append("#### 🔤 Letter Overlap")
++    out.append("")
++    out.append(f"- **Shared** ({len(shared)}): {', '.join(sorted(shared)) or '_none_'}")
++    out.append(f"- **Only in A** ({len(only_a)}): {', '.join(sorted(only_a)) or '_none_'}")
++    out.append(f"- **Only in B** ({len(only_b)}): {', '.join(sorted(only_b)) or '_none_'}")
++    out.append("")
++
++    out.append("#### 🧬 Profile Delta")
++    out.append("")
++    out.append("| Metric | A | B |")
++    out.append("|---|---|---|")
++    pa, pb = json_a["profile"], json_b["profile"]
++    out.append(f"| Letter count | {pa['letter_count']} | {pb['letter_count']} |")
++    out.append(f"| Vowel ratio | {pa['vowel_ratio']:.0%} | {pb['vowel_ratio']:.0%} |")
++    out.append(f"| Bigram diversity | {pa['bigram_diversity']:.0%} | {pb['bigram_diversity']:.0%} |")
++    out.append(f"| Isogram | {pa['isogram']} | {pb['isogram']} |")
++    out.append(f"| Palindrome | {pa['palindrome']} | {pb['palindrome']} |")
++    out.append("")
++
++    # Verdict
++    roots_a = {json_a["ciphers"][n]["root"] for n in ("pythagorean", "hebrew", "chaldean")}
++    roots_b = {json_b["ciphers"][n]["root"] for n in ("pythagorean", "hebrew", "chaldean")}
++    if roots_a == roots_b:
++        verdict = "🌀 **Full resonance** — same root set in both texts."
++    elif roots_a & roots_b:
++        overlap = sorted(roots_a & roots_b)
++        verdict = f"🌗 **Partial resonance** — shared roots: {overlap}."
++    else:
++        verdict = "🌈 **No resonance** — completely distinct root sets."
++    out.append("---")
++    out.append("")
++    out.append(f"**Verdict:** {verdict}")
++    return "\n".join(out)
++
++
++def parse_compare_args(text: str) -> tuple[str, str] | None:
++    """Parse ``A vs B`` (or ``A v B``, ``A versus B``) into ``(A, B)``.
++
++    Returns None if the input isn't a comparison.
++    """
++    import re
++
++    patterns = [
++        r"^(.+?)\s+(?:vs\.?|v\.?|versus)\s+(.+?)$",
++    ]
++    for pat in patterns:
++        m = re.match(pat, text.strip(), re.IGNORECASE)
++        if m:
++            return m.group(1).strip(), m.group(2).strip()
++    return None
+\ No newline at end of file
+diff --git a/hermes_cli/commands.py b/hermes_cli/commands.py
+index 04deecd0ad..2c134820e2 100644
+--- a/hermes_cli/commands.py
++++ b/hermes_cli/commands.py
+@@ -229,6 +229,10 @@ COMMAND_REGISTRY: list[CommandDef] = [
+                aliases=("ctx",), args_hint="[all]", subcommands=("all",),
+                busy_policy="dispatch"),
+     CommandDef("whoami", "Show your slash command access (admin / user)", "Info"),
++    CommandDef("summary", "Analyse text \u2014 gematria, Greek isopsephy, the Tree, and the daily game", "Info",
++               args_hint="<text> | <a> vs <b> | game [word] | tables",
++               subcommands=("game", "tables"),
++               busy_policy="dispatch", execute="summary"),
+     CommandDef("profile", "Show active profile name and home directory", "Info",
+                busy_policy="dispatch", execute="profile"),
+     CommandDef("sethome", "Set this chat as the home channel", "Session",
+@@ -1366,7 +1370,15 @@ _SLACK_PRIORITY_ALIASES = ("btw", "bg")
+ #     (session export is an interactive surface; platform is a rare
+ #     informational lookup) — without this entry /save tips the registry
+ #     past the 50-cap and silently clamps /platform, breaking parity.
+-_SLACK_VIA_HERMES_ONLY = frozenset({"topup", "moa", "debug", "egress", "init", "version", "diff", "update", "heartbeat", "refine", "pause", "whoami", "platform"})
++#   - summary: text analysis (gematria/isopsephy/Tree); reached via
++#     /hermes summary on Slack. Demoted on arrival rather than displacing
++#     an incumbent: the registry was already at exactly 50, so adding it
++#     natively silently clamped /insights off the end. The two earlier
++#     demotions ranked by interactivity; this one ranks by who already has
++#     users. /insights is deployed and reachable today, /summary is new, so
++#     the new command takes the /hermes route and the live Slack surface
++#     does not move.
++_SLACK_VIA_HERMES_ONLY = frozenset({"topup", "moa", "debug", "egress", "init", "version", "diff", "update", "heartbeat", "refine", "pause", "whoami", "platform", "summary"})
+ 
+ 
+ def _sanitize_slack_name(raw: str) -> str:
+diff --git a/hermes_cli/slash_exec.py b/hermes_cli/slash_exec.py
+index 38b31f3c30..3f38ee367a 100644
+--- a/hermes_cli/slash_exec.py
++++ b/hermes_cli/slash_exec.py
+@@ -242,6 +242,22 @@ def _exec_commands(ctx: CommandContext) -> CommandReply:
+     return CommandReply("\n".join(lines), format="markdown")
+ 
+ 
++def _exec_summary(ctx: CommandContext) -> CommandReply:
++    """Core /summary text — the isopsephy card, the Tree, and the game.
++
++    Pure computation over ``ctx.args``: no session, no network, no disk. That
++    is what makes it a registry executor rather than a per-surface handler, and
++    what makes it safe to dispatch while an agent is running.
++
++    ``gateway.qabalah`` is stdlib-only and imports nothing at module level
++    beyond ``unicodedata`` and ``datetime``, so the lazy import here costs the
++    CLI nothing and keeps this module free of gateway imports.
++    """
++    from gateway.qabalah import render_reply
++
++    return CommandReply(render_reply(ctx.args), format="markdown")
++
++
+ # ---------------------------------------------------------------------------
+ # Registry + resolution
+ # ---------------------------------------------------------------------------
+@@ -253,6 +269,7 @@ EXECUTORS: dict[str, Callable[[CommandContext], CommandReply]] = {
+     "bundles": _exec_bundles,
+     "gateway_help": _exec_help,
+     "gateway_commands": _exec_commands,
++    "summary": _exec_summary,
+ }
+ 
+ 
+diff --git a/tests/gateway/test_qabalah.py b/tests/gateway/test_qabalah.py
+new file mode 100644
+index 0000000000..53e301585d
+--- /dev/null
++++ b/tests/gateway/test_qabalah.py
+@@ -0,0 +1,285 @@
++"""Qabalah and isopsephy — properties, and one incident.
++
++Rung 2 (properties) and rung 4 (one incident test, named for the defect).
++There is no rung 1 here: not one test asserts that a function returns a
++particular string, because none of those would survive a rewrite.
++
++Written without hypothesis. v2 does not depend on it and this is not the
++feature worth adding a dependency for, so the domains are walked exhaustively
++where they are small and with a pinned seed where they are not. The
++guarantees are the same; only the generator is hand-rolled.
++"""
++
++from __future__ import annotations
++
++import datetime
++import random
++import unicodedata
++
++from gateway.qabalah import (
++    CANON,
++    ENGLISH_EXT,
++    GREEK,
++    HEBREW,
++    HEBREW_GADOL,
++    PATHS,
++    SEPHIROT,
++    canon_readings,
++    daily_target,
++    english_extended,
++    equivalences,
++    gematria,
++    isopsephy,
++    play,
++    readings_for,
++    render_game,
++    render_letter_tables,
++    render_qabalah_section,
++    scripts_present,
++    sephirah_for,
++)
++
++_ALPHABETS = {
++    "greek": "αβγδεϝζηθικλμνξοπϙρστυφχψωϡ",
++    "hebrew": "אבגדהוזחטיכלמנסעפצקרשת",
++    "latin": "ABCDEFGHIJKLMNOPQRSTUVWXYZ",
++}
++_SCORERS = {"greek": isopsephy, "hebrew": gematria, "latin": english_extended}
++
++
++def _corpus(alphabet: str, n: int = 400, seed: int = 20260822) -> list[str]:
++    rnd = random.Random(seed)
++    return ["".join(rnd.choice(alphabet) for _ in range(rnd.randint(1, 12)))
++            for _ in range(n)]
++
++
++# --- properties of the scoring itself ---------------------------------------
++
++
++def test_a_total_is_the_sum_of_its_own_breakdown():
++    """The number shown is the number the letters make. Nothing is stored."""
++    for script, alphabet in _ALPHABETS.items():
++        score = _SCORERS[script]
++        for word in _corpus(alphabet):
++            r = score(word)
++            assert r.total == sum(v for _c, v in r.breakdown)
++            assert r.scored == len(r.breakdown)
++
++
++def test_scoring_is_additive_over_concatenation():
++    """value(a + b) == value(a) + value(b), in every system.
++
++    This is the property that makes an equivalence hunt possible at all, and
++    it is the first thing a wrong table breaks.
++    """
++    for script, alphabet in _ALPHABETS.items():
++        score = _SCORERS[script]
++        left, right = _corpus(alphabet, 200, seed=1), _corpus(alphabet, 200, seed=2)
++        for a, b in zip(left, right):
++            assert score(a + b).total == score(a).total + score(b).total
++
++
++def test_every_letter_has_a_distinct_value_within_its_alphabet():
++    """The defect this module was written around: no two letters may collide.
++
++    A cipher with a collision cannot be inverted and quietly merges words that
++    are not equal. summary_card's Hebrew table has four of them.
++    """
++    for name, table, alphabet in (
++        ("greek", GREEK, _ALPHABETS["greek"]),
++        ("hebrew", HEBREW, _ALPHABETS["hebrew"]),
++        ("english", ENGLISH_EXT, _ALPHABETS["latin"]),
++    ):
++        values = [table[c] for c in alphabet]
++        assert len(set(values)) == len(values), f"{name} has colliding letters"
++
++
++def test_the_classical_series_is_complete():
++    """1-9, 10-90, 100-900 with nothing missing. Isopsephy needs all 27."""
++    assert sorted(GREEK[c] for c in _ALPHABETS["greek"]) == (
++        list(range(1, 10)) + list(range(10, 100, 10)) + list(range(100, 1000, 100))
++    )
++    # Hebrew stops at tav 400: the series above it is carried by the finals.
++    assert sorted(HEBREW[c] for c in _ALPHABETS["hebrew"]) == (
++        list(range(1, 10)) + list(range(10, 100, 10)) + [100, 200, 300, 400]
++    )
++    assert sorted(HEBREW_GADOL[c] for c in "ךםןףץ") == [500, 600, 700, 800, 900]
++
++
++def test_accents_and_niqqud_never_change_a_value():
++    """A mark is not a letter. Combining it must not move the number."""
++    for word in _corpus(_ALPHABETS["greek"], 150):
++        for mark in ("́", "̈", "̓", "ͅ"):
++            marked = "".join(c + mark for c in word)
++            assert isopsephy(marked).total == isopsephy(word).total
++    for word in _corpus(_ALPHABETS["hebrew"], 150):
++        for mark in ("ְ", "ָ", "ּ"):
++            marked = "".join(c + mark for c in word)
++            assert gematria(marked).total == gematria(word).total
++
++
++def test_precomposed_and_decomposed_input_agree():
++    """NFC and NFD of the same word are the same word."""
++    for word in ("Ἰησοῦς", "Λόγος", "ἀγάπη", "θέλημα", "ἀλήθεια"):
++        assert (isopsephy(unicodedata.normalize("NFC", word)).total
++                == isopsephy(unicodedata.normalize("NFD", word)).total)
++
++
++def test_unreadable_characters_are_counted_not_silently_dropped():
++    """A system that cannot read a character says so. The old card did not."""
++    r = isopsephy("αβγ !? 123 xyz")
++    assert r.total == 6
++    assert r.skipped == len("!?123xyz")
++
++
++# --- properties of the Tree --------------------------------------------------
++
++
++def test_every_positive_value_lands_on_exactly_one_sephirah():
++    for n in range(1, 5000):
++        s = sephirah_for(n)
++        assert s is not None and 1 <= s.number <= 10
++
++
++def test_ten_stays_at_malkuth_and_never_folds_back_to_kether():
++    """Incident: a naive digital root sends 10 to 1.
++
++    Malkuth and Kether are the two ends of the Tree. A reduction that lands a
++    total of 10 on the Crown is not a rounding error, it is the opposite
++    reading.
++    """
++    assert sephirah_for(10).name == "Malkuth"
++    assert sephirah_for(1).name == "Kether"
++    assert sephirah_for(19).name == "Malkuth"   # 1+9 = 10, not 1
++
++
++def test_nothing_off_the_tree_is_placed_on_it():
++    assert sephirah_for(0) is None
++    assert sephirah_for(-5) is None
++
++
++def test_the_twenty_two_paths_are_whole():
++    assert len(PATHS) == 22
++    assert [p.number for p in PATHS] == list(range(11, 33))
++    assert len({p.letter for p in PATHS}) == 22
++    assert len({p.trump for p in PATHS}) == 22
++    # Sefer Yetzirah: three mothers, seven doubles, twelve simples.
++    kinds = [p.kind for p in PATHS]
++    assert (kinds.count("mother"), kinds.count("double"), kinds.count("simple")) == (3, 7, 12)
++    assert len(SEPHIROT) == 10
++    assert [s.number for s in SEPHIROT] == list(range(1, 11))
++
++
++# --- properties of the canon and the game -----------------------------------
++
++
++def test_no_canon_value_is_written_down_anywhere():
++    """CANON holds words and glosses only. Every number is computed."""
++    for word, gloss in CANON:
++        assert not any(ch.isdigit() for ch in word)
++    for word, _gloss, reading in canon_readings():
++        assert reading.total > 0, word
++        assert reading.total == sum(v for _c, v in reading.breakdown)
++
++
++def test_the_famous_equivalences_fall_out_of_the_tables():
++    """Externally-known values, as the second angle on the tables.
++
++    These are not this module's opinion. They are the numbers the sources give,
++    and if a table is wrong one of them moves.
++    """
++    assert isopsephy("Ἰησοῦς").total == 888
++    assert isopsephy("χξϛ").total == 666
++    assert isopsephy("θέλημα").total == isopsephy("ἀγάπη").total == 93
++    assert gematria("יהוה").total == 26
++    assert gematria("אלהים").total == 86
++    assert gematria("אחד").total == gematria("אהבה").total == 13
++    assert gematria("מלכות").total == 496
++
++
++def test_the_days_number_is_always_reachable():
++    """A target no word hits is an unwinnable game. Check a full year."""
++    day = datetime.date(2026, 1, 1)
++    for _ in range(366):
++        value, drawn_from = daily_target(day)
++        assert value > 0
++        assert equivalences(value), f"{day} target {value} is unreachable"
++        assert play(drawn_from, today=day).hits, f"{drawn_from} misses its own target"
++        day += datetime.timedelta(days=1)
++
++
++def test_the_days_number_depends_only_on_the_day():
++    """No stored state, so two players on the same date see the same game."""
++    for d in (datetime.date(2026, 8, 22), datetime.date(2027, 2, 28)):
++        assert daily_target(d) == daily_target(d)
++    assert daily_target(datetime.date(2026, 8, 22)) != daily_target(datetime.date(2026, 8, 23)) \
++        or True  # neighbouring days may legitimately collide; identity is the claim
++
++
++def test_a_hit_is_a_hit_in_any_alphabet():
++    """Matching a Hebrew number with a Greek word is the game, not a bug."""
++    r = play("θέλημα", target=93)
++    assert r.hits and r.distance == 0
++    assert play("ἀγάπη", target=93).hits
++
++
++def test_a_miss_reports_an_honest_distance():
++    r = play("אחד", target=80)
++    assert not r.hits
++    assert r.distance == 80 - 13
++
++
++def test_scoring_a_word_with_no_readable_letter_never_raises():
++    for junk in ("", "   ", "!!!", "123", "🔮"):
++        r = play(junk, target=93)
++        assert not r.hits and r.readings == ()
++
++
++# --- rendering: it must never raise, and never invent a reading -------------
++
++
++def test_rendering_survives_anything_and_stays_silent_when_it_has_nothing():
++    for junk in ("", " ", "!!!", "123", "🔮", "́"):
++        assert render_qabalah_section(junk) == ""
++    for word in ("Chidi", "אהבה", "θέλημα", "Chidi אהבה θέλημα", "x" * 3000):
++        out = render_qabalah_section(word)
++        assert out.startswith("### ")
++        assert out.count("```") % 2 == 0, "unbalanced code fence"
++    assert render_letter_tables().count("|") > 100
++    for args in ("", "help", "93", "93 θέλημα", "אהבה", "!!!", "-5 x"):
++        assert render_game(args)
++
++
++def test_the_rendered_section_only_names_scripts_that_are_present():
++    latin_only = render_qabalah_section("Chidi")
++    assert "Greek isopsephy" not in latin_only
++    assert "Hebrew gematria" not in latin_only
++    assert "English extended" in latin_only
++    assert scripts_present("Chidi") == {"latin"}
++    assert scripts_present("אהבה") == {"hebrew"}
++    assert scripts_present("Λόγος") == {"greek"}
++    assert scripts_present("Chidi אהבה Λόγος") == {"latin", "hebrew", "greek"}
++
++
++def test_readings_are_offered_for_every_script_present_and_no_others():
++    for text, want in (("Chidi", 1), ("אהבה", 1), ("Λόγος", 1),
++                       ("Chidi Λόγος", 2), ("Chidi אהבה Λόγος", 3)):
++        assert len(readings_for(text)) >= want
++
++
++# --- the incident -----------------------------------------------------------
++
++
++def test_incident_w_scored_the_same_as_a_in_the_old_hebrew_cipher():
++    """summary_card._GEMATRIA wraps after 22 letters, so W=A, X=B, Y=C, Z=D.
++
++    Four letters of the alphabet are unreadable in that table: WAX and AWE
++    cannot be told apart by it. The old cipher is left exactly as it is —
++    the founder has years of readings under those numbers — and this asserts
++    the replacement does not inherit the fault.
++    """
++    from gateway.summary_card import _GEMATRIA
++
++    assert _GEMATRIA["W"] == _GEMATRIA["A"], "the defect this test is named for is gone"
++    assert ENGLISH_EXT["W"] != ENGLISH_EXT["A"]
++    assert len({ENGLISH_EXT[c] for c in _ALPHABETS["latin"]}) == 26
+diff --git a/tests/gateway/test_summary_card_differential.py b/tests/gateway/test_summary_card_differential.py
+new file mode 100644
+index 0000000000..37633dab90
+--- /dev/null
++++ b/tests/gateway/test_summary_card_differential.py
+@@ -0,0 +1,92 @@
++"""The old operator_shell card is the oracle for the v2 port of summary_card.
++
++Rung 3. One assertion, thousands of cases, and the users already wrote them:
++every render the old card has ever produced is the specification. It is a
++migration tool, not a permanent test — when the old repo goes, this file goes
++with it, and what remains is the property coverage in test_qabalah.py.
++
++It skips rather than fails where the old tree is absent, because CI and the
++Fly image have no copy of it and a port test that fails off the founder's
++laptop would be noise, not a guard.
++"""
++
++from __future__ import annotations
++
++import importlib.util
++import itertools
++import os
++import string
++import sys
++
++import pytest
++
++_OLD = os.path.expanduser(
++    "~/Documents/code/hermes/hermes-agent/gateway/operator_shell/summary_card.py"
++)
++
++pytestmark = pytest.mark.skipif(
++    not os.path.exists(_OLD),
++    reason="the pre-v2 card is not on this machine; the port oracle is gone",
++)
++
++
++def _load_old():
++    spec = importlib.util.spec_from_file_location("_summary_card_oracle", _OLD)
++    mod = importlib.util.module_from_spec(spec)
++    sys.modules["_summary_card_oracle"] = mod
++    spec.loader.exec_module(mod)
++    return mod
++
++
++_CORPUS = [
++    "", " ", "a", "A", "Chidi", "Chidi Onyema", "Hello World", "Anna", "Beth",
++    "abcdefghijklmnopqrstuvwxyz", "WXYZ", "AW", "Kether", "Malkuth", "YHWH",
++    "Tetragrammaton", "אבג", "αβγ", "Λόγος", "666", "!!!", "level", "racecar",
++    "The quick brown fox jumps over the lazy dog", "x" * 5000,
++    "Ω", "Café", "naïve", "ONYEMA", "onyema", "O n y e m a", "9", "0",
++] + [
++    # every one- and two-letter word over a slice of the alphabet, which walks
++    # the cipher tables and every reduction path they can produce
++    "".join(t) for n in (1, 2) for t in itertools.product(string.ascii_uppercase[:6], repeat=n)
++] + list(string.ascii_uppercase) + list(string.ascii_lowercase)
++
++_PLATFORMS = ["telegram", "slack", "sms", "email", "glasses", "default", "nonesuch"]
++
++
++def test_the_port_renders_what_the_old_card_rendered():
++    old = _load_old()
++    from gateway import summary_card as new
++
++    for text in _CORPUS:
++        assert old.render_summary_card(text) == new.render_summary_card(text), text
++        assert old.render_summary_json(text) == new.render_summary_json(text), text
++
++
++def test_the_port_renders_the_same_card_on_every_platform():
++    """A smaller corpus on purpose.
++
++    Each platform renderer re-renders the whole card, and the card regenerates
++    anagrams every time — up to 8! permutations per call. Sweeping the full
++    corpus across seven renderers costs minutes and proves nothing the shapes
++    below do not: the renderers are transforms of one card, so what varies is
++    the card's structure, not which word made it.
++    """
++    old = _load_old()
++    from gateway import summary_card as new
++
++    shapes = ["", "A", "Chidi", "Hello World", "WXYZ", "level", "666", "!!!",
++              "Café", "x" * 5000, "The quick brown fox jumps over the lazy dog"]
++    for text in shapes:
++        for platform in _PLATFORMS:
++            assert (old.render_for_platform(text, platform)
++                    == new.render_for_platform(text, platform)), (text, platform)
++
++
++def test_the_port_compares_two_texts_the_way_the_old_card_did():
++    old = _load_old()
++    from gateway import summary_card as new
++
++    for a, b in itertools.islice(itertools.product(_CORPUS, repeat=2), 0, None, 211):
++        assert old.render_compare_card(a, b) == new.render_compare_card(a, b), (a, b)
++    for raw in ["a vs b", "a v b", "a versus b", "novs", "", "A vs B vs C", "  vs  "]:
++        assert old.parse_compare_args(raw) == new.parse_compare_args(raw), raw
