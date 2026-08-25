@@ -367,6 +367,7 @@ are tracked, so what you see below is the source they come from.
 | `runbooks/` | What a person does by hand, in order, when the thing being done is rare and dangerous. |
 | `runbooks/hermes-upgrade.md` | Upgrading Hermes: confirm the pinned commit, back up `state.db`, read the diff of the config defaults, and the way back. Never a `git pull`. |
 | `scripts/` | The copy of a script the scheduler resolves, on the same rule as `templates/scripts/`: `cron create --script` looks at a path a human does not type. |
+| `scripts/dispatch-agent-go.py` | The WORK dispatcher (crew#182 CP7). Reads the board through `gh`, claims one `agent-go` issue into a worktree and branch, starts the configured runtime, and only then labels the issue. `--drill` runs the same logic against a fixture with no GitHub, which `bin/verify` and the incident test use. |
 | `scripts/run_tests.sh` | The verify command for this repo, resolved by hermes-agent's `detect_project_facts` as its first-priority marker, so the verification ledger and the claim gate can back a `DONE:` with a green run here. Runs `tests/` only; the vendored hermes-agent suite is not this repo's gate. |
 | `skills/` | What the agent knows how to do. Every `SKILL.md` in here is generated; only the vetting list is tracked. |
 | `skills/VETTED.md` | Which third-party skills have been read line by line and may be installed. A skill is someone else's shell commands running with your credentials. |
@@ -421,6 +422,7 @@ are tracked, so what you see below is the source they come from.
 | `tests/incidents/test_incidents_have_guards.py` | Refuses an incident row that states a lesson without naming the rung and the artifact that enforce it, so no incident closes on a sentence. |
 | `tests/test_incident_claim_gate_false_done.py` | Rung 4, named for crew #63: the verification ledger held 0 events while a `DONE:` reached the founder over Telegram, so a false done cost nothing to say. Asserts the stamp fires on an unproven `DONE:` and stays away from a proven one, a doc-only one, `WORKING:`/`BLOCKED:`, and an unknown session — the gate fails open, it never blocks or bounces a reply. |
 | `tests/test_evidence_gate_checks_screenshots.py` | Refuses an evidence gate that reads pasted text and not the committed screenshot. Pasted text reads the same whether the command ran or not. |
+| `tests/test_incident_crew182_cp7_dispatch.py` | The dispatcher drill both ways: an `agent-go` issue becomes a worktree, a branch and a run; an `icebox` issue and an `in-progress` issue are never claimed; a second tick claims nothing new. |
 | `tests/test_features_switch.py` | Refuses a feature flip that edits another block of `estate.yaml`, and an off lane that still gets jobs created. Both happened while the switch was being built. |
 | `tests/test_no_runtime_files_are_tracked.py` | Refuses a tracked file that the running agent writes. The repo and the agent's home are the same directory, so this is a live risk on every tick. |
 | `tests/test_spec_links_resolve.py` | Refuses a requirement whose `spec` link does not resolve to a real anchor in the spec, which is what keeps the traceability honest rather than decorative. |
@@ -453,7 +455,7 @@ the `evolution` feature. It costs $2-10 a night, so it ships off.
 | `watch-board` | `30 7 * * *` | WATCH | The morning digest. Lists anything labelled `agent-go` that nobody has touched in three days. One line each. |
 | `sunday-review` | `0 9 * * 0` | WATCH | The weekly review in `RITUALS.md`. Mostly deletes lessons that did not help, and reports what the week cost. |
 | `sunday-proposals` | `0 10 * * 0` | WATCH | Opens exactly three `proposal` issues: the three things most worth doing next week, each with the measurement that says so. It may never apply `agent-go` — that label is yours. |
-| `work-agent-go` | `*/20 * * * *` | WORK | Takes the oldest issue labelled `agent-go`, works it in a worktree, opens a pull request, stops. Never merges, never deploys. |
+| `work-agent-go` | `*/20 * * * *` | WORK | No model. Takes the oldest issue labelled `agent-go` (never `icebox`, never `in-progress`) into `<repo>/.worktrees/agent-go-<n>` on branch `agent-go/<n>`, starts the runtime named in `dispatch.runtime`, then labels it `in-progress`. Asleep laptop: the issue waits. |
 | `work-verify` | `0 8 * * *` | WORK | For every issue labelled `merged`, proves the change is actually live, and moves it to `verified` only with two angles of evidence. |
 
 <!-- /cron -->

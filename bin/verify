@@ -249,6 +249,19 @@ PYEOF
 )"; RC=$?
 row "the agent gets every law" "$RC" "$LAWS"
 
+# 9. dispatch (crew#182 CP7): the drill proves both ways in one run - an
+# agent-go issue is claimed into a worktree, branch and run; icebox never is.
+# Then the runtime the config names must actually be on this machine, or a
+# claimed issue would sit with no session behind it.
+OUT="$("$PY" -m pytest tests/test_incident_crew182_cp7_dispatch.py -q 2>&1 | tail -1)"; RC=$?
+row "dispatch claims agent-go and never icebox" "$RC" "$OUT"
+RT="$("$PY" - <<'PYEOF'
+import yaml; e = yaml.safe_load(open("estate.yaml")) or {}
+d = e.get("dispatch") or {}; print(((d.get("runtimes") or {}).get(d.get("runtime", "claude")) or [d.get("runtime", "claude")])[0])
+PYEOF
+)"
+command -v "$RT" >/dev/null 2>&1; row "the dispatch runtime is installed" "$?" "$RT"
+
 # --full: the whole requirement ledger, which is slower
 if [ "${1:-}" = "--full" ]; then
   printf '\n'
