@@ -289,8 +289,9 @@ are tracked, so what you see below is the source they come from.
 | `ci/EVIDENCE_GATE_PROOF.md` | The evidence gate refusing ten dishonest pull request bodies and passing three honest ones, with the output. A gate nobody has watched refuse anything is a claim. |
 | `ci/evidence-gate.js` | Reads the pull request body and rejects a claim with no command output behind it. Placeholder blocks, and blocks that only repeat the claim, are rejected too. |
 | `.github/` | The CI this repo runs on itself. Not to be confused with `ci/`, which holds the workflows this repo installs into another one. |
-| `.github/workflows/` | One workflow. Everything a runner can honestly answer runs here on every pull request. |
+| `.github/workflows/` | Two workflows. Everything a runner can honestly answer runs here on every pull request. |
 | `.github/workflows/gates.yml` | The three gates that mean the same thing away from the founder's laptop: every template renders from `estate.example.yaml`, `check-readme.py`, and `verify-consult`. `bin/verify` is left out on purpose — it asks about the gateway, the venv and a credential, and a runner has none of them, so it would be red for being in the wrong place. This repo is public, so the minutes are free. |
+| `.github/workflows/security-scan.yml` | The estate security gate, the same composite action every active repo runs (`chidionyema/idp/.github/actions/security-scan@main`): gitleaks over the full history, pip-audit, and npm audit at High+ on shipped dependencies only. It is installed by `idp/bin/estate-security-rollout`, so this file is the rollout's, not this repo's; edit it in idp. |
 | `ci/evidence-gate.yml` | The workflow that runs the gate: first the body check, then the check that a screenshot of the run is committed under `docs/evidence/pr-<n>/`. |
 | `ci/static-gates.yml` | ruff, pyright strict, pip-audit and deptry as required checks on main. A red job here is not advisory. |
 | `ci/tests/` | Tests of the gates themselves, because a gate that passes everything looks exactly like a gate that works. |
