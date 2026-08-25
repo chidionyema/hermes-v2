@@ -55,3 +55,16 @@ def test_missing_runtime_leaves_issue_unclaimed(tmp_path):
                        capture_output=True, text=True)
     assert r.returncode == 1 and "FAIL #1" in r.stdout
     assert not (tmp_path / "claims.json").exists()
+
+
+def test_runtime_exiting_nonzero_leaves_issue_unclaimed(tmp_path):
+    # code-c1 on hermes-v2#10: `--runtime-cmd false` printed CLAIMED and wrote claims.json.
+    co = tmp_path / "checkout"
+    co.mkdir()
+    _git(co, "init", "-q", "-b", "main")
+    _git(co, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "--allow-empty", "-m", "base")
+    (tmp_path / "issues.json").write_text(json.dumps([{"number": 1, "title": "x", "body": "", "labels": [{"name": "agent-go"}]}]))
+    r = subprocess.run([sys.executable, str(SCRIPT), "--drill", str(tmp_path), "--runtime-cmd", "false"],
+                       capture_output=True, text=True)
+    assert r.returncode == 1 and "FAIL #1" in r.stdout and "CLAIMED" not in r.stdout, r.stdout + r.stderr
+    assert not (tmp_path / "claims.json").exists()
