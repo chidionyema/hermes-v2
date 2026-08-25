@@ -119,6 +119,16 @@ def start(issue, checkout, runtime_argv, cfg, log_dir):
     p = subprocess.Popen([exe, *argv[1:]], cwd=wt, stdin=subprocess.DEVNULL,
                          stdout=open(log, "ab"), stderr=subprocess.STDOUT,
                          start_new_session=True, env=env)
+    # A runtime that dies at once (bad flag, no credential, `false`) must not
+    # claim the issue: peer review on #10 showed `--runtime-cmd false` still
+    # printed CLAIMED. Wait five seconds; a session that is still running by
+    # then is a real session, and a nonzero exit before then is a failure.
+    try:
+        rc = p.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        rc = None
+    if rc:
+        return None, f"FAIL #{n}: runtime exited {rc} within 5s; see {log}; issue left unclaimed"
     return p, f"CLAIMED #{n} -> {wt} ({branch}) runtime={cfg['runtime']} pid={p.pid} log={log}"
 
 

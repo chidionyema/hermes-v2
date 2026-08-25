@@ -13,5 +13,5 @@
 # the issue waits with its label; nothing is lost.
 #
 # Same format as cron/watch.jobs: one JSON job per line.
-{"name": "work-agent-go", "schedule": "*/20 * * * *", "script": "dispatch-agent-go.py", "no_agent": true, "prompt": ""}
-{"name": "work-verify", "schedule": "0 8 * * *", "skills": ["verify-to-prod"], "prompt": "For every issue labelled merged, run verify-to-prod. Move it to verified only when two angles of evidence are in the comment."}
+{"name": "work-agent-go", "schedule": "*/20 * * * *", "script": "dispatch-agent-go.py", "no_agent": true, "prompt": "", "deliver": "telegram"}
+{"name": "work-verify", "schedule": "0 8 * * *", "skills": ["verify-to-prod"], "deliver": "telegram", "prompt": "For every issue labelled merged, run verify-to-prod. Move it to verified only when two angles of evidence are in the comment."}
