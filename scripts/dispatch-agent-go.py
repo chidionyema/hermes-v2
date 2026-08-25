@@ -101,7 +101,10 @@ def start(issue, checkout, runtime_argv, cfg, log_dir):
     wt = os.path.join(checkout, ".worktrees", f"agent-go-{n}")
     if not os.path.isdir(wt):
         sh(["git", "-C", checkout, "fetch", "-q", "origin"])
-        base = "origin/HEAD" if sh(["git", "-C", checkout, "rev-parse", "-q", "--verify", "origin/HEAD"]).returncode == 0 else "HEAD"
+        # Base on the remote default branch, never on whatever the checkout has
+        # open: the first live run branched off feat/research-engine-step1.
+        base = next((b for b in ("origin/HEAD", "origin/main", "origin/master")
+                     if sh(["git", "-C", checkout, "rev-parse", "-q", "--verify", b]).returncode == 0), "HEAD")
         r = sh(["git", "-C", checkout, "worktree", "add", "-q", "-b", branch, wt, base])
         if r.returncode:
             return None, f"FAIL #{n}: git worktree add: {r.stderr.strip()}"
