@@ -6,6 +6,12 @@
 #
 #   bin/install-cron.py cron/work.jobs
 #
+# work-agent-go is a script job with no model (crew#182 CP7): it reads the board
+# ({{ github.slug }} issues, labels as columns), claims the oldest agent-go
+# issue into a worktree and branch, and starts the session in the runtime
+# named by `dispatch.runtime` in estate.yaml. An asleep laptop misses ticks and
+# the issue waits with its label; nothing is lost.
+#
 # Same format as cron/watch.jobs: one JSON job per line.
-{"name": "work-agent-go", "schedule": "*/20 * * * *", "skills": ["pr-discipline"], "prompt": "List issues on {{ github.slug }} labelled agent-go and not labelled in-progress. Take the oldest one only. Post your one-line interpretation on it, move it to in-progress, then follow the pr-discipline skill. Open a pull request and stop. Never merge, never deploy."}
+{"name": "work-agent-go", "schedule": "*/20 * * * *", "script": "dispatch-agent-go.py", "no_agent": true, "prompt": ""}
 {"name": "work-verify", "schedule": "0 8 * * *", "skills": ["verify-to-prod"], "prompt": "For every issue labelled merged, run verify-to-prod. Move it to verified only when two angles of evidence are in the comment."}

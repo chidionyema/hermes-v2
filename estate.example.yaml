@@ -52,6 +52,23 @@ models:
   watch: claude-haiku-4-5
   work: claude-haiku-4-5
 
+# The dispatcher (cron work-agent-go, crew#182 CP7). The board is GitHub issues
+# and the labels are the columns; `runtime` names which coding agent a claimed
+# issue is handed to, and `runtimes` is the argv for each with {prompt} for the
+# task text. Change `runtime` and nothing else to swap the provider (CP13).
+dispatch:
+  board: YOURORG/crew
+  label: agent-go
+  claimed: in-progress
+  never: [icebox]
+  checkouts: ..              # where owner/name checkouts live, relative to this repo
+  runtime: claude            # claude | gemini | opencode | codex
+  runtimes:
+    claude: [claude, -p, "{prompt}", --permission-mode, acceptEdits, --allowedTools, "Bash(git *) Bash(gh *)"]
+    gemini: [gemini, -p, "{prompt}", --yolo]
+    opencode: [opencode, run, "{prompt}"]
+    codex: [codex, exec, --full-auto, "{prompt}"]
+
 limits:
   max_cost_usd_per_task: 5
   budget_hard_stop: true
