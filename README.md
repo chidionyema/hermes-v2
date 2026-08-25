@@ -233,6 +233,7 @@ learns is never overwritten by a template.
 | `skills/consult/SKILL.md` | Ask a different model when you are stuck, and treat the answer as the weakest evidence you hold. Never acts on it unchecked. |
 | `skills/estate-map/SKILL.md` | Print the current shape of the estate — apps, health, repos, open board. Run before guessing where anything lives. |
 | `skills/incident-triage/SKILL.md` | Turn a red platform into one GitHub issue with real evidence in it. Never fixes anything. |
+| `skills/phone-idea-flow/SKILL.md` | Rendered from `templates/skills/phone-idea-flow/SKILL.md.tmpl`: the phone idea flow with this estate's board repo filled in. |
 | `skills/post-mortem/SKILL.md` | Close an incident by naming the class of mistake and adding a guard. Runs after the platform is serving again, never during. |
 | `skills/pr-discipline/SKILL.md` | How a change is made: worktree, reproduce, smallest diff, pull request, stop. Never merges. |
 | `skills/screenshot-to-story/SKILL.md` | Turn a photo the founder sends into a well-formed issue, when the message has an image and almost no words. |
@@ -329,6 +330,7 @@ are tracked, so what you see below is the source they come from.
 | `gateway/` | The running gateway's own working directory, written while it runs. Only `restart_loop.json` is tracked; the rest is process state and is ignored. |
 | `gateway/restart_loop.json` | The last-resort restart-loop breaker's boot chain (`hermes-agent/gateway/restart_loop_guard.py`). It survives process death because each boot is a fresh process; once too many boots chain within `max_gap_seconds` the gateway skips auto-resuming the session that keeps killing it, so a human is put back in the loop instead of the crash repeating unattended. |
 | `handlers/` | Code the agent runs when a message arrives, rather than when a clock fires. |
+| `handlers/idea_flow.py` | The phone idea flow (crew#182): classify a message as exploring or building, dedup against open issues, PRs and worktrees, draft a feature, and write the board only after the founder chose To Do, Icebox or Drop on a prompt this flow issued. |
 | `handlers/tests/` | Proof that a handler still behaves when the input is bad, which for a handler is the normal case. |
 | `handlers/tests/test_screenshot_to_issue.py` | Proves a photo with almost no words still yields a well-formed issue, and that failing to read one opens nothing rather than opening a blank issue. |
 | `install` | The whole setup: five questions, a venv, the agent, the rendered files, the schedule, then `bin/verify` to prove the result. Safe to run twice. |
@@ -407,6 +409,8 @@ are tracked, so what you see below is the source they come from.
 | `templates/skills/estate-map/SKILL.md.tmpl` | Print the current shape of the estate — apps, health, repos, open board — which is what you run instead of guessing where something lives. |
 | `templates/skills/incident-triage/` | The incident-triage skill. |
 | `templates/skills/incident-triage/SKILL.md.tmpl` | Turn a red platform into one GitHub issue with real evidence in it. It never fixes anything, which is what keeps it usable while the fire is lit. |
+| `templates/skills/phone-idea-flow/` | The phone-idea-flow skill. |
+| `templates/skills/phone-idea-flow/SKILL.md.tmpl` | What the agent does when a message from the phone is an idea: run `handlers/idea_flow.py`, show the draft, ask To Do / Icebox / Drop through the transport's confirmation prompt, then and only then create the issue. |
 | `templates/skills/post-mortem/` | The post-mortem skill. |
 | `templates/skills/post-mortem/SKILL.md.tmpl` | Close an incident by naming the class of mistake and adding the guard. It runs after the platform is serving again, never during. |
 | `templates/skills/pr-discipline/` | The pr-discipline skill. |
@@ -415,6 +419,7 @@ are tracked, so what you see below is the source they come from.
 | `templates/skills/screenshot-to-story/SKILL.md.tmpl` | Turn a photo the founder sends into a well-formed issue, for the message that is an image and almost no words. |
 | `templates/skills/verify-to-prod/` | The verify-to-prod skill. |
 | `templates/skills/verify-to-prod/SKILL.md.tmpl` | Prove a merged change is actually running in production, from two angles, before anything is called done. |
+| `tests/test_incident_crew182_idea_flow.py` | Proves the phone idea flow cannot write the board without the confirmation prompt, that exploratory phrasing builds nothing, and that Icebox is labelled so the dispatcher never claims it (crew#182). |
 | `tests/` | The guards. Each one is a mistake that already happened here and cannot now happen quietly. |
 | `tests/incidents/` | One test per incident, named for its row in the incident ledger. |
 | `tests/incidents/README.md` | The rule these files exist under: a post-mortem that adds no test here has not closed its class. |
