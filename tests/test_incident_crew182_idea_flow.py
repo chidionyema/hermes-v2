@@ -61,6 +61,7 @@ def test_cp3_dedup_names_the_existing_card_pr_or_branch():
         branches=["refs/heads/feat/phone-idea-flow"],
     )
     kinds = {(m["kind"], m["id"]) for m in got["matches"]}
+    assert len(got["matches"]) == len(kinds), "a match is named once"
     assert ("issue", 182) in kinds and ("branch", "feat/phone-idea-flow") in kinds
     assert ("issue", 9) not in kinds and ("pr", 274) not in kinds
 

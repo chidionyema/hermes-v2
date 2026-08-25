@@ -91,7 +91,7 @@ def _worktrees() -> list[str]:
         except (OSError, subprocess.TimeoutExpired):
             continue
         names += [line.split(" ", 1)[1] for line in out.splitlines() if line.startswith("branch ")]
-    return names
+    return sorted(set(names))  # each worktree of a repo lists every branch; name each once
 
 
 def dedup(title: str, issues: list | None = None, prs: list | None = None, branches: list | None = None) -> dict:
