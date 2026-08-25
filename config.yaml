@@ -71,3 +71,15 @@ sandbox:
 onboarding:
   seen:
     busy_input_prompt: true
+
+# Telegram command menu. hermes re-registers set_my_commands on every start
+# (plugins/platforms/telegram/adapter.py:3990); without this block it pushes
+# the full 61-command upstream list. Founder, 2026-08-25: "UI has a lot of junk
+# from old Hermes". priority_mode: replace => only the list below is registered.
+platforms:
+  telegram:
+    extra:
+      command_menu:
+        max_commands: 12
+        priority_mode: replace
+        priority: [sessions, status, steer, queue, stop, approve, deny, new, resume, model, undo, help]
