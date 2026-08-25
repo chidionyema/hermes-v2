@@ -1,0 +1,87 @@
+---
+name: phone-idea-flow
+description: A founder message that is an idea, a request to build something, "what if", or "remember that idea" on any chat transport. Classify, dedup, draft, ask To Do / Icebox / Drop, then and only then write the board. Spec idp/docs/specs/phone-idea-flow.md, crew#182.
+---
+
+# phone-idea-flow
+
+The founder types an idea from the phone. Nothing reaches the board ({{ github.slug }} issues)
+until he has chosen a destination on a prompt this flow issued. Every decision below is made by
+`handlers/idea_flow.py`, not by you; you run it and relay. The runtime, the model and the chat
+transport are interchangeable: you call `clarify`, the adapter draws the buttons.
+
+## 1. Classify (CP4)
+
+```bash
+python3 $HERMES_HOME/handlers/idea_flow.py classify "<his message, verbatim>"
+```
+
+`"mode": "explore"` — sounding-board mode. Talk it through, read the estate if it helps, and
+create nothing: no issue, no file, no draft. Do not run steps 2–5. If he later says "build
+this" or "let's do it", start again from step 1 with that message.
+
+`"mode": "build"` — PM mode. Continue. `"urgent": true` is a flag you carry to step 5; it never
+interrupts a running session (CP10).
+
+## 2. Dedup before drafting (CP3)
+
+```bash
+python3 $HERMES_HOME/handlers/idea_flow.py dedup "<a short title for the idea>"
+```
+
+If `matches` is not empty, reply naming each match by kind and id ("crew#182 is open and
+labelled agent-go; branch feat/phone-idea-flow exists") and ask whether to update that one or
+leave it. Do not draft until he answers. If `blind` is not empty, say what could not be read
+and continue; a blind dedup is not a clean one.
+
+## 3. Draft (CP5, first half)
+
+```bash
+python3 $HERMES_HOME/handlers/idea_flow.py draft "<title>" "<his message>" [--urgent] [--repo owner/name]
+```
+
+Pass `--repo` when he named the repo the work belongs in; the dispatcher checks out that repo
+(the body line `Repo:`). Without it the issue is worked in the board repo itself.
+
+Show him `feature` verbatim in a code block. Keep `nonce`; it is the only key to step 5.
+
+## 4. Ask, with the three choices (CP5, CP5a)
+
+Call the `clarify` tool with `question` = the `prompt` from step 3 and
+`choices` = `["To Do", "Icebox", "Drop"]`, exactly those three, in that order. Wait for the
+answer. On Telegram they are buttons; on another transport they are whatever it offers. Never
+guess the answer, never default, never skip this because the message sounded certain.
+
+## 5. Write the board, once (CP5, CP6, CP10, CP11)
+
+```bash
+python3 $HERMES_HOME/handlers/idea_flow.py create --nonce <nonce> --choice <todo|icebox|drop> [--urgent]
+```
+
+- To Do → issue labelled `agent-go`; the dispatcher (WORK) takes it in its next cycle (CP7).
+- Icebox → issue labelled `icebox`; the dispatcher never reads that label (CP6).
+- Drop → nothing is written; say so in one line.
+
+Reply with the issue URL and the labels. `create` refuses without a live nonce; if it refuses,
+you skipped step 3 or 4 — go back, do not work around it.
+
+## 6. "Remember that idea, let's do it" (CP9)
+
+```bash
+python3 $HERMES_HOME/handlers/idea_flow.py activate "<the idea's name or #number>"
+```
+
+It returns a fresh draft from the Icebox issue. Continue at step 3's "show" and step 4. On
+To Do, follow the `note`: relabel that issue `agent-go` and remove `icebox` rather than
+opening a second one:
+
+```bash
+gh issue edit <n> -R {{ github.slug }} --add-label agent-go --remove-label icebox
+```
+
+## Never
+
+- Never create, label or move an issue by any other command while handling an idea.
+- Never touch a running laptop session, its worktree or its branch (CP1).
+- Never keep the draft only in the chat: step 3 wrote it to `state/idea-flow/` and step 5 to the
+  issue body, so deleting the conversation loses nothing (CP11).
