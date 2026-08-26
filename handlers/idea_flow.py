@@ -187,6 +187,8 @@ def activate(ref: str) -> dict:
     """CP9: an Icebox issue becomes a draft again; it moves only through `create` (the same gate)."""
     issues = _gh_json(["issue", "list", "-R", REPO, "--label", "icebox", "--state", "open", "--limit", "100",
                        "--json", "number,title,body"])
+    # "remember that idea, let's do it: <card>" names the card after the trigger phrase.
+    ref = re.sub(r"\b(remember that idea|let'?s do it|do it)\b[\s:,.-]*", "", ref, flags=re.I)
     hit = None
     for r in issues:
         if "blind" in r:
