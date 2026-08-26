@@ -140,6 +140,20 @@ row "every service is as ordered" "$?" ""
 OUT="$("$PY" bin/check-platform.py estate.yaml 2>&1)"; RC=$?
 row "no service on a platform we left" "$RC" "$(echo "$OUT" | head -1)"
 
+# 8c. the URL card on his phone is the current one
+# crew#282: every UI's URL pinned in Telegram. state/urls-pin.json holds the
+# pinned message id and the hash of what was pinned; this rebuilds the card
+# from the catalogue and fails when the pin is missing or behind.
+if [ -f state/urls-pin.json ] && grep -q '^urls:' estate.yaml; then
+  WANT="$("$PY" scripts/estate-urls.py --dry-run 2>/dev/null | shasum -a 256 | cut -c1-64)"
+  HAVE="$("$PY" -c 'import json;print(json.load(open("state/urls-pin.json"))["hash"])' 2>/dev/null)"
+  N="$("$PY" -c 'import json;print(json.load(open("state/urls-pin.json"))["n"])' 2>/dev/null)"
+  [ -n "$WANT" ] && [ "$WANT" = "$HAVE" ]
+  row "the URL card is pinned and current" "$?" "$N links, pinned msg $("$PY" -c 'import json;print(json.load(open("state/urls-pin.json"))["message_id"])' 2>/dev/null)"
+elif grep -q '^urls:' estate.yaml; then
+  row "the URL card is pinned and current" 1 "nothing pinned yet: run scripts/estate-urls.py"
+fi
+
 # 9. the schedule exists
 JOBS="$(./bin/hermes cron list 2>/dev/null | grep -cE '^  [0-9a-f]{12} \[')"
 [ "${JOBS:-0}" -gt 0 ]; row "cron jobs installed" "$?" "${JOBS:-0} jobs"
