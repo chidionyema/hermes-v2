@@ -87,3 +87,4 @@ platforms:
 plugins:
   enabled:
     - sovereign
+    - guide
