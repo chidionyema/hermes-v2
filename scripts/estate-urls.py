@@ -40,6 +40,7 @@ import shutil
 import subprocess
 import sys
 import urllib.parse
+import urllib.error
 import urllib.request
 
 HOME = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -132,25 +133,50 @@ def card(found):
 
 
 class TelegramError(RuntimeError):
-    pass
+    def __init__(self, code, description):
+        super().__init__(f"HTTP {code}: {description}")
+        self.code, self.description = code, description
+
+    def message_gone(self):
+        # Only the 400 Telegram sends for an edited-away message earns a resend; a
+        # network blip or a 5xx must not pin a second card.
+        return self.code == 400 and "not found" in self.description.lower()
+
+
+def _bot_call(url, data, transport, method):
+    """One HTTPS round-trip, or the recorded stub. Both raise HTTPError the same way."""
+    if transport:
+        fake = os.environ.get("HERMES_URLS_FAKE_HTTP")  # "400" = deleted card, else a raw status
+        if method == "editMessageText" and fake:
+            import io
+            desc = "Bad Request: message to edit not found" if fake == "400" else "Bad Gateway"
+            raise urllib.error.HTTPError(url, int(fake), desc, {}, io.BytesIO(
+                json.dumps({"ok": False, "error_code": int(fake), "description": desc}).encode()))
+        return None
+    req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"})
+    with urllib.request.urlopen(req, timeout=20) as resp:
+        return json.load(resp)
 
 
 def telegram(method, payload, transport):
-    if transport and method == "editMessageText" and os.environ.get("HERMES_URLS_FAKE_DELETED"):
-        raise TelegramError("Bad Request: message to edit not found")
+    token = os.environ.get("TELEGRAM_BOT_TOKEN", "stub")
+    url = f"https://api.telegram.org/bot{token}/{method}"
+    try:
+        body = _bot_call(url, json.dumps(payload).encode(), transport, method)
+    except urllib.error.HTTPError as e:
+        try:
+            desc = json.load(e).get("description", e.reason)
+        except Exception:
+            desc = str(e.reason)
+        raise TelegramError(e.code, desc)
     if transport:
         with open(transport, "a") as f:
             f.write(json.dumps({"method": method, "payload": payload}) + "\n")
         return {"message_id": 1}
-    token = os.environ.get("TELEGRAM_BOT_TOKEN")
-    if not token:
+    if "TELEGRAM_BOT_TOKEN" not in os.environ:
         sys.exit("FAIL TELEGRAM_BOT_TOKEN is not in the environment")
-    req = urllib.request.Request(f"https://api.telegram.org/bot{token}/{method}",
-                                 data=json.dumps(payload).encode(), headers={"Content-Type": "application/json"})
-    with urllib.request.urlopen(req, timeout=20) as resp:
-        body = json.load(resp)
     if not body.get("ok"):
-        raise TelegramError(f"{method}: {body.get('description', body)}")
+        raise TelegramError(body.get("error_code", 0), str(body.get("description", body)))
     return body["result"] if isinstance(body["result"], dict) else {}
 
 
@@ -171,6 +197,8 @@ def tick(cfg, text, transport):
         try:
             telegram("editMessageText", dict(payload, message_id=mid), transport)
         except TelegramError as e:
+            if not e.message_gone():
+                sys.exit(f"FAIL telegram editMessageText: {e}")
             # The founder deleted the pinned card: send and pin a fresh one instead of
             # failing every tick until someone removes the state file.
             print(f"edit of {mid} failed ({e}); sending a new card", file=sys.stderr)
@@ -199,7 +227,10 @@ def main():
     if a.dry_run:
         print(body)
         return 0
-    mid = tick(cfg, body, a.transport)
+    try:
+        mid = tick(cfg, body, a.transport)
+    except TelegramError as e:
+        sys.exit(f"FAIL telegram: {e}")
     if mid:
         print(f"URLS pinned msg={mid} n={sum(len(v) for v in found.values())}")
     return 0

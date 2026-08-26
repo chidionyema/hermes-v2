@@ -69,8 +69,16 @@ def test_incident_crew282_first_tick_pins_then_silent_then_edits(tmp_path):
 def test_incident_crew282_deleted_pin_is_replaced_not_fatal(tmp_path, monkeypatch):
     # code-c1 review on #17: a deleted pinned message must not fail every tick.
     run(tmp_path, CATALOG)
-    monkeypatch.setenv("HERMES_URLS_FAKE_DELETED", "1")
+    monkeypatch.setenv("HERMES_URLS_FAKE_HTTP", "400")
     r = run(tmp_path, CATALOG.replace("dagster.example.com", "dagster2.example.com"))
     assert r.returncode == 0 and "sending a new card" in r.stderr, r.stdout + r.stderr
     assert calls(tmp_path)[-2:] == ["sendMessage", "pinChatMessage"]
     assert json.loads((tmp_path / "pin.json").read_text())["message_id"] == 1
+
+
+def test_incident_crew282_network_blip_fails_and_does_not_pin_a_second_card(tmp_path, monkeypatch):
+    run(tmp_path, CATALOG)
+    monkeypatch.setenv("HERMES_URLS_FAKE_HTTP", "502")
+    r = run(tmp_path, CATALOG.replace("dagster.example.com", "dagster2.example.com"))
+    assert r.returncode != 0 and "FAIL telegram" in r.stderr, r.stdout + r.stderr
+    assert calls(tmp_path).count("sendMessage") == 1
