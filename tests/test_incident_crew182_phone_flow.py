@@ -65,6 +65,10 @@ def _need_agent() -> None:
 def _snapshot(root: pathlib.Path) -> dict[str, str]:
     out: dict[str, str] = {}
     for p in root.rglob("*"):
+        # git's own bookkeeping is not a laptop file: background maintenance wrote
+        # .git/objects/maintenance.lock mid-test on a runner (hermes-v2#25, 2026-08-26).
+        if ".git" in p.parts:
+            continue
         if p.is_file():
             out[str(p)] = hashlib.sha256(p.read_bytes()).hexdigest()
     return out
