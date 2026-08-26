@@ -159,7 +159,7 @@ def _bot_call(url, data, transport, method):
 
 
 def telegram(method, payload, transport):
-    token = os.environ.get("TELEGRAM_BOT_TOKEN", "stub")
+    token = secret("TELEGRAM_BOT_TOKEN") or "stub"
     url = f"https://api.telegram.org/bot{token}/{method}"
     try:
         body = _bot_call(url, json.dumps(payload).encode(), transport, method)
@@ -173,15 +173,29 @@ def telegram(method, payload, transport):
         with open(transport, "a") as f:
             f.write(json.dumps({"method": method, "payload": payload}) + "\n")
         return {"message_id": 1}
-    if "TELEGRAM_BOT_TOKEN" not in os.environ:
-        sys.exit("FAIL TELEGRAM_BOT_TOKEN is not in the environment")
+    if not secret("TELEGRAM_BOT_TOKEN"):
+        sys.exit("FAIL TELEGRAM_BOT_TOKEN is neither in the environment nor in .env")
     if not body.get("ok"):
         raise TelegramError(body.get("error_code", 0), str(body.get("description", body)))
     return body["result"] if isinstance(body["result"], dict) else {}
 
 
+def secret(name):
+    """The scheduler scrubs TELEGRAM_* and every other secret from a cron script's
+    environment (tools/environments/local.py build_subprocess_env), so under cron
+    the values come from the same .env the gateway loads. Direct runs see the env."""
+    v = os.environ.get(name)
+    if v:
+        return v
+    try:
+        from dotenv import dotenv_values
+        return dotenv_values(os.environ.get("HERMES_URLS_DOTENV") or os.path.join(HOME, ".env")).get(name)
+    except ImportError:
+        return None
+
+
 def tick(cfg, text, transport):
-    chat = os.environ.get(cfg["chat_env"])
+    chat = secret(cfg["chat_env"])
     if not chat:
         sys.exit(f"FAIL {cfg['chat_env']} is not in the environment")
     digest = hashlib.sha256(text.encode()).hexdigest()

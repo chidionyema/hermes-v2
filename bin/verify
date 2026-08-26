@@ -145,7 +145,7 @@ row "no service on a platform we left" "$RC" "$(echo "$OUT" | head -1)"
 # pinned message id and the hash of what was pinned; this rebuilds the card
 # from the catalogue and fails when the pin is missing or behind.
 if [ -f state/urls-pin.json ] && grep -q '^urls:' estate.yaml; then
-  WANT="$("$PY" scripts/estate-urls.py --dry-run 2>/dev/null | shasum -a 256 | cut -c1-64)"
+  WANT="$(printf '%s' "$("$PY" scripts/estate-urls.py --dry-run 2>/dev/null)" | shasum -a 256 | cut -c1-64)"  # the card is hashed without its trailing newline
   HAVE="$("$PY" -c 'import json;print(json.load(open("state/urls-pin.json"))["hash"])' 2>/dev/null)"
   N="$("$PY" -c 'import json;print(json.load(open("state/urls-pin.json"))["n"])' 2>/dev/null)"
   [ -n "$WANT" ] && [ "$WANT" = "$HAVE" ]

@@ -82,3 +82,19 @@ def test_incident_crew282_network_blip_fails_and_does_not_pin_a_second_card(tmp_
     r = run(tmp_path, CATALOG.replace("dagster.example.com", "dagster2.example.com"))
     assert r.returncode != 0 and "FAIL telegram" in r.stderr, r.stdout + r.stderr
     assert calls(tmp_path).count("sendMessage") == 1
+
+
+def test_incident_crew282_cron_scrubbed_env_reads_dotenv(tmp_path, monkeypatch):
+    # The scheduler strips TELEGRAM_* before running a script; the first live tick
+    # died "TELEGRAM_HOME_CHANNEL is not in the environment". Under cron the values
+    # come from HERMES_HOME/.env, the file the gateway itself loads.
+    monkeypatch.delenv("TELEGRAM_HOME_CHANNEL", raising=False)
+    (tmp_path / "estate.yaml").write_text("urls:\n  catalog_repo: x/idp\n  include: example.com\n")
+    (tmp_path / "catalog.yaml").write_text(CATALOG)
+    (tmp_path / ".env").write_text("TELEGRAM_HOME_CHANNEL=-100\n")
+    env = {k: v for k, v in os.environ.items() if not k.startswith("TELEGRAM_")}
+    env.update(HERMES_ESTATE_YAML=str(tmp_path / "estate.yaml"), HERMES_URLS_STATE=str(tmp_path / "pin.json"),
+               HERMES_URLS_DOTENV=str(tmp_path / ".env"))
+    r = subprocess.run([sys.executable, str(SCRIPT), "--catalog", str(tmp_path / "catalog.yaml"), "--transport",
+                        str(tmp_path / "calls.jsonl")], capture_output=True, text=True, env=env)
+    assert r.returncode == 0 and r.stdout.startswith("URLS pinned"), r.stdout + r.stderr
