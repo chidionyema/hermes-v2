@@ -40,6 +40,7 @@ import shutil
 import subprocess
 import sys
 import urllib.parse
+import urllib.error
 import urllib.request
 
 HOME = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -68,11 +69,23 @@ def fetch_catalog(cfg):
         for t in ("flux", "gh"):
             if not shutil.which(t):
                 sys.exit(f"FAIL {t} is not on PATH")
-        user = subprocess.run(["gh", "api", "user", "-q", ".login"], capture_output=True, text=True).stdout.strip()
-        token = subprocess.run(["gh", "auth", "token"], capture_output=True, text=True).stdout.strip()
-        with tempfile.TemporaryDirectory() as d:
-            r = subprocess.run(["flux", "pull", "artifact", oci, "-o", d, "--creds", f"{user}:{token}"],
-                               capture_output=True, text=True)
+        # The machine's own GitHub login, never a GITHUB_TOKEN from .env: that one is a
+        # repo token without read:packages and gh prefers it over the keyring (crew#282:
+        # the first live tick was DENIED on the private package).
+        env = {k: v for k, v in os.environ.items() if k not in ("GITHUB_TOKEN", "GH_TOKEN")}
+        user = subprocess.run(["gh", "api", "user", "-q", ".login"], capture_output=True, text=True, env=env).stdout.strip()
+        token = subprocess.run(["gh", "auth", "token"], capture_output=True, text=True, env=env).stdout.strip()
+        if not (user and token):
+            sys.exit("FAIL gh has no login on this machine (gh auth login)")
+        registry = oci.removeprefix("oci://").split("/")[0]
+        with tempfile.TemporaryDirectory() as d, tempfile.TemporaryDirectory() as dc:
+            # flux reads docker's config.json; a private DOCKER_CONFIG keeps the token out of ps argv.
+            import base64
+            auth = base64.b64encode(f"{user}:{token}".encode()).decode()
+            with open(os.path.join(dc, "config.json"), "w") as f:
+                json.dump({"auths": {registry: {"auth": auth}}}, f)
+            r = subprocess.run(["flux", "pull", "artifact", oci, "-o", d],
+                               capture_output=True, text=True, env=dict(env, DOCKER_CONFIG=dc))
             if r.returncode:
                 sys.exit(f"FAIL flux pull {oci}: {r.stderr.strip()[-200:]}")
             import yaml
@@ -119,20 +132,51 @@ def card(found):
     return "\n".join(lines)
 
 
+class TelegramError(RuntimeError):
+    def __init__(self, code, description):
+        super().__init__(f"HTTP {code}: {description}")
+        self.code, self.description = code, description
+
+    def message_gone(self):
+        # Only the 400 Telegram sends for an edited-away message earns a resend; a
+        # network blip or a 5xx must not pin a second card.
+        return self.code == 400 and "not found" in self.description.lower()
+
+
+def _bot_call(url, data, transport, method):
+    """One HTTPS round-trip, or the recorded stub. Both raise HTTPError the same way."""
+    if transport:
+        fake = os.environ.get("HERMES_URLS_FAKE_HTTP")  # "400" = deleted card, else a raw status
+        if method == "editMessageText" and fake:
+            import io
+            desc = "Bad Request: message to edit not found" if fake == "400" else "Bad Gateway"
+            raise urllib.error.HTTPError(url, int(fake), desc, {}, io.BytesIO(
+                json.dumps({"ok": False, "error_code": int(fake), "description": desc}).encode()))
+        return None
+    req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"})
+    with urllib.request.urlopen(req, timeout=20) as resp:
+        return json.load(resp)
+
+
 def telegram(method, payload, transport):
+    token = os.environ.get("TELEGRAM_BOT_TOKEN", "stub")
+    url = f"https://api.telegram.org/bot{token}/{method}"
+    try:
+        body = _bot_call(url, json.dumps(payload).encode(), transport, method)
+    except urllib.error.HTTPError as e:
+        try:
+            desc = json.load(e).get("description", e.reason)
+        except Exception:
+            desc = str(e.reason)
+        raise TelegramError(e.code, desc)
     if transport:
         with open(transport, "a") as f:
             f.write(json.dumps({"method": method, "payload": payload}) + "\n")
         return {"message_id": 1}
-    token = os.environ.get("TELEGRAM_BOT_TOKEN")
-    if not token:
+    if "TELEGRAM_BOT_TOKEN" not in os.environ:
         sys.exit("FAIL TELEGRAM_BOT_TOKEN is not in the environment")
-    req = urllib.request.Request(f"https://api.telegram.org/bot{token}/{method}",
-                                 data=json.dumps(payload).encode(), headers={"Content-Type": "application/json"})
-    with urllib.request.urlopen(req, timeout=20) as resp:
-        body = json.load(resp)
     if not body.get("ok"):
-        sys.exit(f"FAIL telegram {method}: {body}")
+        raise TelegramError(body.get("error_code", 0), str(body.get("description", body)))
     return body["result"] if isinstance(body["result"], dict) else {}
 
 
@@ -150,8 +194,16 @@ def tick(cfg, text, transport):
     payload = {"chat_id": chat, "text": text, "disable_web_page_preview": True}
     mid = state.get("message_id")
     if mid:
-        telegram("editMessageText", dict(payload, message_id=mid), transport)
-    else:
+        try:
+            telegram("editMessageText", dict(payload, message_id=mid), transport)
+        except TelegramError as e:
+            if not e.message_gone():
+                sys.exit(f"FAIL telegram editMessageText: {e}")
+            # The founder deleted the pinned card: send and pin a fresh one instead of
+            # failing every tick until someone removes the state file.
+            print(f"edit of {mid} failed ({e}); sending a new card", file=sys.stderr)
+            mid = None
+    if not mid:
         mid = telegram("sendMessage", payload, transport)["message_id"]
         telegram("pinChatMessage", {"chat_id": chat, "message_id": mid, "disable_notification": True}, transport)
     os.makedirs(os.path.dirname(STATE), exist_ok=True)
@@ -175,7 +227,10 @@ def main():
     if a.dry_run:
         print(body)
         return 0
-    mid = tick(cfg, body, a.transport)
+    try:
+        mid = tick(cfg, body, a.transport)
+    except TelegramError as e:
+        sys.exit(f"FAIL telegram: {e}")
     if mid:
         print(f"URLS pinned msg={mid} n={sum(len(v) for v in found.values())}")
     return 0
