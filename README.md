@@ -286,6 +286,7 @@ are tracked, so what you see below is the source they come from.
 | `bin/teardown` | Stops everything firing and keeps the estate. `--all` also removes the agent and its dependencies. |
 | `bin/check-platform.py` | Refuses an estate.yaml that names a platform the estate has left (fly.dev, flyctl, kind: fly). Incident 2026-08-26: three dead Fly rows sat in the live file two days after R1 and verify called them "stopped, as ordered". |
 | `bin/verify` | The probe: one command that says whether the whole thing works, in a few seconds. `--full` also runs the requirement ledger. |
+| `bin/verify-sovereign-plugin` | Loads `plugins/sovereign` the way the gateway does and exits 0 only when the seven `sb-*` commands and the photo hook are registered. `bin/verify` reads it as one row (crew#284 CP1). |
 | `bin/verify-consult` | The same probe for the consult service (§16): daemon, loopback bind, 401 without a token, a live round-trip timed cold and warm, and the token never appearing in a log. Rows that cannot apply on this machine SKIP rather than fail, so it still runs off the founder's laptop. |
 | `ci/` | The gates that run on a pull request. Each one refuses a mistake rather than reporting it. |
 | `ci/EVIDENCE_GATE_PROOF.md` | The evidence gate refusing ten dishonest pull request bodies and passing three honest ones, with the output. A gate nobody has watched refuse anything is a claim. |
@@ -429,6 +430,7 @@ are tracked, so what you see below is the source they come from.
 | `tests/test_incident_crew182_idea_flow.py` | Proves the phone idea flow cannot write the board without the confirmation prompt, that exploratory phrasing builds nothing, and that Icebox is labelled so the dispatcher never claims it (crew#182). |
 | `tests/test_incident_otto_guide.py` | Proves the `/guide` card names every skill and job on disk and forgets a removed one without a prose edit, and that a topic returns the skill's own text. |
 | `tests/test_incident_crew278_fallback_is_another_provider.py` | Proves `config.yaml` names a fallback provider that is a different vendor from the primary, so one vendor's outage is not Otto's outage (crew#278 CP3). |
+| `tests/test_verify_sovereign_plugin_row.py` | Proves `bin/verify-sovereign-plugin` passes on the real plugin and fails, naming the gap, on a plugin that registers less (crew#284 CP1). |
 | `tests/` | The guards. Each one is a mistake that already happened here and cannot now happen quietly. |
 | `tests/incidents/` | One test per incident, named for its row in the incident ledger. |
 | `tests/incidents/README.md` | The rule these files exist under: a post-mortem that adds no test here has not closed its class. |
