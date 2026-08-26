@@ -133,6 +133,13 @@ sys.exit(1 if bad else 0)
 PY
 row "every service is as ordered" "$?" ""
 
+# 8b. no service lives on a platform the estate has left
+# 2026-08-26: estate.yaml still probed three fly.dev hosts two days after R1.
+# The rows above were green ("stopped, as ordered") because a dead host is
+# silent. This reads the file against the ruling instead of the network.
+OUT="$("$PY" bin/check-platform.py estate.yaml 2>&1)"; RC=$?
+row "no service on a platform we left" "$RC" "$(echo "$OUT" | head -1)"
+
 # 9. the schedule exists
 JOBS="$(./bin/hermes cron list 2>/dev/null | grep -cE '^  [0-9a-f]{12} \[')"
 [ "${JOBS:-0}" -gt 0 ]; row "cron jobs installed" "$?" "${JOBS:-0} jobs"

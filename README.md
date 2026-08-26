@@ -157,7 +157,7 @@ github:
 services:
   - key: api                                  # short handle used in reports
     app: acme-api                             # the platform's app name
-    url: https://acme-api.fly.dev/health      # what gets probed
+    url: https://api.acme.example.com/health      # what gets probed
     expect: "2xx"                             # 2xx | 3xx | any-answer
     note: ""                                  # what a human should know
 
@@ -284,6 +284,7 @@ are tracked, so what you see below is the source they come from.
 | `bin/skill-drift-commit.sh` | Hourly. The agent edits its own skills, and without this a skill that quietly rewrote itself last Tuesday has no diff and no way back. |
 | `bin/sync-scripts.sh` | Copies `bin/pulse.sh` into `scripts/`, because the scheduler refuses a symlink out of `scripts/`. It diffs afterwards so the two copies cannot drift. |
 | `bin/teardown` | Stops everything firing and keeps the estate. `--all` also removes the agent and its dependencies. |
+| `bin/check-platform.py` | Refuses an estate.yaml that names a platform the estate has left (fly.dev, flyctl, kind: fly). Incident 2026-08-26: three dead Fly rows sat in the live file two days after R1 and verify called them "stopped, as ordered". |
 | `bin/verify` | The probe: one command that says whether the whole thing works, in a few seconds. `--full` also runs the requirement ledger. |
 | `bin/verify-consult` | The same probe for the consult service (§16): daemon, loopback bind, 401 without a token, a live round-trip timed cold and warm, and the token never appearing in a log. Rows that cannot apply on this machine SKIP rather than fail, so it still runs off the founder's laptop. |
 | `ci/` | The gates that run on a pull request. Each one refuses a mistake rather than reporting it. |
@@ -428,6 +429,7 @@ are tracked, so what you see below is the source they come from.
 | `tests/test_incident_claim_gate_false_done.py` | Rung 4, named for crew #63: the verification ledger held 0 events while a `DONE:` reached the founder over Telegram, so a false done cost nothing to say. Asserts the stamp fires on an unproven `DONE:` and stays away from a proven one, a doc-only one, `WORKING:`/`BLOCKED:`, and an unknown session — the gate fails open, it never blocks or bounces a reply. |
 | `tests/test_incident_crew182_phone_flow.py` | Rung 4, named for crew #182: a message from the phone must never touch a laptop session, and the model behind the flow must be a `config.yaml` choice. Drives the real gateway `_handle_message` with only the agent run stubbed and proves a laptop transcript and working tree stay byte-identical (CP1), every write lands under `HERMES_HOME` and the live gateway holds no laptop session file open (CP2), swapping `model.provider` changes nothing in the confirmation gate (CP12), and no flow module imports a vendor SDK, with the provider layer as the positive control (CP13). CI clones hermes-agent at `PINNED_VERSION` to run it. |
 | `tests/test_evidence_gate_checks_screenshots.py` | Refuses an evidence gate that reads pasted text and not the committed screenshot. Pasted text reads the same whether the command ran or not. |
+| `tests/test_incident_r1_no_fly_in_estate.py` | Both ways for `bin/check-platform.py`: a Fly URL or `kind: fly` is refused, a kubernetes estate passes. |
 | `tests/test_incident_crew182_cp7_dispatch.py` | The dispatcher drill both ways: an `agent-go` issue becomes a worktree, a branch and a run; an `icebox` issue and an `in-progress` issue are never claimed; a second tick claims nothing new. |
 | `tests/test_features_switch.py` | Refuses a feature flip that edits another block of `estate.yaml`, and an off lane that still gets jobs created. Both happened while the switch was being built. |
 | `tests/test_no_runtime_files_are_tracked.py` | Refuses a tracked file that the running agent writes. The repo and the agent's home are the same directory, so this is a live risk on every tick. |
@@ -568,8 +570,8 @@ command you can run.
   PASS  an Anthropic credential exists     auth.json (hermes auth login)
   PASS  .env is private (mode 600)         mode 600
   PASS  no secrets tracked in git
-        api     200   answering            https://acme-api.fly.dev/health
-        web     200   answering            https://acme-web.fly.dev/
+        api     200   answering            https://api.acme.example.com/health
+        web     200   answering            https://acme.example.com/
   PASS  every service answers
   PASS  cron jobs installed                5 jobs
   IDLE  the gateway is not running         start it: ./bin/hermes gateway install

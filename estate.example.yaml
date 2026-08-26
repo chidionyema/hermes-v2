@@ -18,13 +18,13 @@ github:
 services:
   - key: api                                  # short handle used in reports
     app: acme-api                             # the platform's app name
-    url: https://acme-api.fly.dev/health      # what gets probed
+    url: https://api.acme.example.com/health      # what gets probed
     expect: "2xx"                             # 2xx | 3xx | any-answer
     note: ""                                  # anything a human should know
 
   - key: web
     app: acme-web
-    url: https://acme-web.fly.dev/
+    url: https://acme.example.com/
     expect: "2xx"
     note: ""
 
@@ -43,8 +43,8 @@ hermes:
   offsite_checkout: YOURESTATE-live
 
 platform:
-  kind: fly            # fly | render | railway | heroku | none
-  cli: flyctl
+  kind: kubernetes     # kubernetes | none
+  cli: kubectl
 
 # The cheap lane and the expensive lane. Both default to the cheapest Claude.
 # Escalate one step at a time and write down why.

@@ -5,7 +5,7 @@ An agent that is stuck has two bad options: guess, or stop and wait for the
 founder. This is the third. It sends the question to a consult service running
 outside this repo, gets an answer back, and the lane carries on.
 
-  bin/consult "why does flyctl status say suspended after a deploy?"
+  bin/consult "why does kubectl rollout status hang after a deploy?"
   bin/consult --health
   bin/consult --json "..."        the whole response object, for a script
 
