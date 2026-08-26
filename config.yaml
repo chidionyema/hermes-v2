@@ -2,8 +2,9 @@ model:
   provider: anthropic
   default: claude-sonnet-5
 fallback_providers:
-  - provider: anthropic
-    model: claude-sonnet-5
+  # crew#278 CP3: a fallback on the same provider is not a fallback. OPENAI_API_KEY is in .env.
+  - provider: openai
+    model: gpt-5.4
 agent:
   max_turns: 90
   # Verify-on-stop ON even on Telegram (crew #63 A1): the claim gate joins
