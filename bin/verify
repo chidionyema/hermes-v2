@@ -289,6 +289,10 @@ PYEOF
 )"
 command -v "$RT" >/dev/null 2>&1; row "the dispatch runtime is installed" "$?" "$RT"
 
+# 12. the phone reaches the kernel: the sovereign plugin registers its commands and the
+# photo hook (crew#284 CP1). Loaded the way the gateway loads it, not grepped.
+SOV="$("$PY" bin/verify-sovereign-plugin 2>&1)"; row "the sovereign plugin registers its commands" "$?" "$SOV"
+
 # --full: the whole requirement ledger, which is slower
 if [ "${1:-}" = "--full" ]; then
   printf '\n'
