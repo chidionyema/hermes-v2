@@ -351,6 +351,9 @@ are tracked, so what you see below is the source they come from.
 | `patches/hermes-agent/BASE` | The upstream commit the six patches apply on top of. `git checkout $(cat BASE) && git am *.patch` in `hermes-agent/` reconstructs the running commit after a reinstall. |
 | `patches/hermes-agent/README.md` | What each patch fixes, and the two commands: reapplying after a reinstall, and refreshing the patch files after a new local commit. |
 | `plugins/` | Where hermes-agent looks for user plugins (`$HERMES_HOME/plugins/`). Holds only links to plugin source that lives in the repo that owns it. |
+| `plugins/guide/` | The guide plugin: `/guide` is how Otto teaches the founder what the Architect can do. |
+| `plugins/guide/plugin.yaml` | Manifest for the guide plugin, enabled by `plugins.enabled` in config.yaml. |
+| `plugins/guide/__init__.py` | Builds the `/guide` card from disk at the moment he asks: every `skills/*/SKILL.md` description, every `cron/*.jobs` line, every registered plugin command. Nothing on the card is typed by hand, so a deleted skill leaves it by itself. |
 | `plugins/sovereign` | Symlink to `idp/sovereign/otto/hermes_plugin`, the Otto plugin: `/sb-list`, `/sb-show`, `/sb-stop`, `/sb-approve`, `/sb-deny`, `/sb-steer`, each shelling out to `bin/sb --json`. Enabled by `plugins.enabled` in config.yaml. |
 | `profiles/` | One directory per lane. The profile is what gives a lane different powers from its neighbour, which is why the powers are a file and not a prompt. |
 | `profiles/architect/` | The main voice's profile — the lane this README describes. |
@@ -421,6 +424,7 @@ are tracked, so what you see below is the source they come from.
 | `templates/skills/verify-to-prod/` | The verify-to-prod skill. |
 | `templates/skills/verify-to-prod/SKILL.md.tmpl` | Prove a merged change is actually running in production, from two angles, before anything is called done. |
 | `tests/test_incident_crew182_idea_flow.py` | Proves the phone idea flow cannot write the board without the confirmation prompt, that exploratory phrasing builds nothing, and that Icebox is labelled so the dispatcher never claims it (crew#182). |
+| `tests/test_incident_otto_guide.py` | Proves the `/guide` card names every skill and job on disk and forgets a removed one without a prose edit, and that a topic returns the skill's own text. |
 | `tests/` | The guards. Each one is a mistake that already happened here and cannot now happen quietly. |
 | `tests/incidents/` | One test per incident, named for its row in the incident ledger. |
 | `tests/incidents/README.md` | The rule these files exist under: a post-mortem that adds no test here has not closed its class. |

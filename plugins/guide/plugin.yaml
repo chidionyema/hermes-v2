@@ -1,0 +1,4 @@
+name: guide
+version: 0.1.0
+description: "/guide: Otto teaches the founder what the Architect can do, built from what is on disk right now (skills, scheduled jobs, plugin commands), never from a hand-written list."
+author: "hermes-v2"
