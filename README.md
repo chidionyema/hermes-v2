@@ -426,6 +426,7 @@ are tracked, so what you see below is the source they come from.
 | `templates/skills/verify-to-prod/SKILL.md.tmpl` | Prove a merged change is actually running in production, from two angles, before anything is called done. |
 | `tests/test_incident_crew182_idea_flow.py` | Proves the phone idea flow cannot write the board without the confirmation prompt, that exploratory phrasing builds nothing, and that Icebox is labelled so the dispatcher never claims it (crew#182). |
 | `tests/test_incident_otto_guide.py` | Proves the `/guide` card names every skill and job on disk and forgets a removed one without a prose edit, and that a topic returns the skill's own text. |
+| `tests/test_incident_crew278_fallback_is_another_provider.py` | Proves `config.yaml` names a fallback provider that is a different vendor from the primary, so one vendor's outage is not Otto's outage (crew#278 CP3). |
 | `tests/` | The guards. Each one is a mistake that already happened here and cannot now happen quietly. |
 | `tests/incidents/` | One test per incident, named for its row in the incident ledger. |
 | `tests/incidents/README.md` | The rule these files exist under: a post-mortem that adds no test here has not closed its class. |
