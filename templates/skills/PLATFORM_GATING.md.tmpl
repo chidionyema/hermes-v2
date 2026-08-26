@@ -5,12 +5,12 @@ loudly at the top, not half-run and leave the estate in a state nobody expected.
 
 | skill | needs | check |
 |---|---|---|
-| estate-map | `fly`, `gh`, `curl` | `command -v fly gh curl` |
-| incident-triage | `fly`, `gh` | `command -v fly gh` |
+| estate-map | `kubectl`, `gh`, `curl` | `command -v kubectl gh curl` |
+| incident-triage | `kubectl`, `gh` | `command -v kubectl gh` |
 | pr-discipline | `git`, `gh`, repo at ~/Documents/code/{{ estate.name }} | `test -d ~/Documents/code/{{ estate.name }}/.git` |
 | screenshot-to-story | `gh`, `rg` | `command -v gh rg` |
-| verify-to-prod | `fly`, `gh`, `curl` | `command -v fly gh curl` |
-| post-mortem | `fly`, `gh` | `command -v fly gh` |
+| verify-to-prod | `kubectl`, `gh`, `curl` | `command -v kubectl gh curl` |
+| post-mortem | `kubectl`, `gh` | `command -v kubectl gh` |
 
 WATCH runs on the cheap lane and read-only. It may run estate-map,
 incident-triage, screenshot-to-story. It may not run pr-discipline,

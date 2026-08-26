@@ -88,7 +88,7 @@ if have gh; then ok "gh $(gh --version | head -1 | awk '{print $3}')"
 else warn "gh (GitHub CLI) is missing. The agent can still run; it cannot open issues or read pull requests.
         Install it later with: brew install gh   (then: gh auth login)"; fi
 
-if have flyctl; then ok "flyctl"
+if have kubectl; then ok "kubectl"
 elif have fly; then ok "fly"
 else warn "no fly CLI. Only matters if your services run on Fly.io."; fi
 
@@ -124,7 +124,7 @@ else
 
   echo
   echo "  Now the services to watch. One per line, as 'name url'."
-  echo "  Example:  api https://acme-api.fly.dev/health"
+  echo "  Example:  api https://api.acme.example.com/health"
   echo "  Blank line when done."
   SERVICES=""
   while true; do
@@ -158,8 +158,8 @@ github:
 services:
 ${SERVICES}
 platform:
-  kind: fly
-  cli: flyctl
+  kind: kubernetes
+  cli: kubectl
 
 models:
   watch: claude-haiku-4-5
