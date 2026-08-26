@@ -89,8 +89,7 @@ else warn "gh (GitHub CLI) is missing. The agent can still run; it cannot open i
         Install it later with: brew install gh   (then: gh auth login)"; fi
 
 if have kubectl; then ok "kubectl"
-elif have fly; then ok "fly"
-else warn "no fly CLI. Only matters if your services run on Fly.io."; fi
+else warn "no kubectl. Only matters if your services run on the estate cluster."; fi
 
 if [ "$MODE" = check ]; then
   say "Prerequisites only. Nothing was changed."
