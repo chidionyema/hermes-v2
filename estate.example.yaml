@@ -89,3 +89,13 @@ features:
   evolution: off            # §9   COSTS MONEY, $2-10 a night.
   bench: off                # §6b  the on-demand local lane.
   screenshot_handler: off   # §15  a Telegram photo becomes a GitHub issue.
+
+# Every UI's URL, generated from the platform catalogue and pinned in the
+# founder's chat by watch-urls (scripts/estate-urls.py, crew#282). The card
+# edits itself when a host appears or disappears; nothing is typed by hand.
+urls:
+  catalog_oci: oci://ghcr.io/YOURORG/idp/estate-catalog:latest   # the catalogue the cluster runs
+  catalog_repo: YOURORG/idp     # fallback: the file in the platform repo
+  catalog_path: catalog/catalog-info.yaml
+  include: example.com          # a URL's host must contain this to be listed
+  chat_env: TELEGRAM_HOME_CHANNEL

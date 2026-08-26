@@ -12,3 +12,4 @@
 {"name": "watch-board", "schedule": "30 7 * * *", "prompt": "Read the open board on {{ github.slug }}. List anything labelled agent-go that has not been touched in 3 days. One line each. Nothing else."}
 {"name": "sunday-review", "schedule": "0 9 * * 0", "prompt": "Run the Sunday review in RITUALS.md. Most of the job is deleting lessons that did not help. Report what you deleted, what climbed a rung, and what the week cost."}
 {"name": "sunday-proposals", "schedule": "0 10 * * 0", "prompt": "Open exactly three proposal issues on {{ github.slug }}: the three things most worth doing next week, each with the measurement that says so. Label each one proposal. Never label anything agent-go - that label is the founder tap."}
+{"name": "watch-urls", "schedule": "17 */6 * * *", "script": "estate-urls.py", "no_agent": true, "prompt": "", "deliver": "telegram"}
