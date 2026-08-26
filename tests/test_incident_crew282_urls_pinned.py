@@ -98,3 +98,11 @@ def test_incident_crew282_cron_scrubbed_env_reads_dotenv(tmp_path, monkeypatch):
     r = subprocess.run([sys.executable, str(SCRIPT), "--catalog", str(tmp_path / "catalog.yaml"), "--transport",
                         str(tmp_path / "calls.jsonl")], capture_output=True, text=True, env=env)
     assert r.returncode == 0 and r.stdout.startswith("URLS pinned"), r.stdout + r.stderr
+
+
+def test_incident_crew282_cp4_ui_without_url_fails_and_with_url_passes(tmp_path):
+    ui = CATALOG + "---\nkind: Component\nspec:\n  type: website\nmetadata:\n  name: langfuse\n"
+    r = run(tmp_path, ui, "--missing")
+    assert r.returncode == 1 and r.stdout.strip() == "1 UI(s) without a URL: langfuse", r.stdout + r.stderr
+    r = run(tmp_path, ui + "  links:\n    - url: https://langfuse.example.com/\n", "--missing")
+    assert r.returncode == 0 and r.stdout.strip() == "0 UI(s) without a URL", r.stdout + r.stderr

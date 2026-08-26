@@ -123,6 +123,24 @@ def urls(catalog_text, include):
     return out
 
 
+def missing(catalog_text, include):
+    """crew#282 CP4: every UI in the catalogue (Component, spec.type website) must
+    carry an https link on the estate's host. Returns the names that do not."""
+    import yaml
+    out = []
+    for doc in yaml.safe_load_all(catalog_text):
+        if not isinstance(doc, dict) or doc.get("kind") != "Component":
+            continue
+        if (doc.get("spec") or {}).get("type") != "website":
+            continue
+        md = doc.get("metadata") or {}
+        ok = any(str(l.get("url", "")).startswith("https://") and include in (urllib.parse.urlparse(str(l.get("url", ""))).hostname or "")
+                 for l in md.get("links") or [])
+        if not ok:
+            out.append(md.get("name") or "?")
+    return out
+
+
 def card(found):
     lines = ["[Architect] Estate URLs, from the catalogue. Pinned; this message edits itself."]
     for title in sorted(found):
@@ -231,9 +249,14 @@ def main():
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--catalog")
     ap.add_argument("--transport")
+    ap.add_argument("--missing", action="store_true", help="list catalogued UIs with no https link; exit 1 if any")
     a = ap.parse_args()
     cfg = load_config()
     text = fetch_catalog(cfg) if not a.catalog else open(a.catalog).read()
+    if a.missing:
+        gone = missing(text, cfg["include"])
+        print(f"{len(gone)} UI(s) without a URL" + (": " + ", ".join(gone) if gone else ""))
+        return 1 if gone else 0
     found = urls(text, cfg["include"])
     if not found:
         sys.exit("FAIL no https link in the catalogue matches urls.include; nothing to pin")

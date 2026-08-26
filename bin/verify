@@ -154,6 +154,12 @@ elif grep -q '^urls:' estate.yaml; then
   row "the URL card is pinned and current" 1 "nothing pinned yet: run scripts/estate-urls.py"
 fi
 
+# 8d. every UI the catalogue knows has a URL (crew#282 CP4)
+if grep -q '^urls:' estate.yaml; then
+  OUT="$("$PY" scripts/estate-urls.py --missing 2>&1)"; RC=$?
+  row "every catalogued UI has a URL" "$RC" "$(echo "$OUT" | tail -1)"
+fi
+
 # 9. the schedule exists
 JOBS="$(./bin/hermes cron list 2>/dev/null | grep -cE '^  [0-9a-f]{12} \[')"
 [ "${JOBS:-0}" -gt 0 ]; row "cron jobs installed" "$?" "${JOBS:-0} jobs"
