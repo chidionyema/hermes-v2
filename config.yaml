@@ -2,10 +2,17 @@ model:
   provider: anthropic
   default: claude-sonnet-5
 fallback_providers:
-- provider: custom
-  model: gemini
-  base_url: https://llm.mumchimp.com/v1
-  key_env: LITELLM_API_KEY
+  # crew#496 2026-08-27 14:00Z: router model `gemini` is Google direct and its
+  # prepayment credits are depleted (HTTP 429 on every turn); `gemini-or` and
+  # `deepseek` go through OpenRouter credit and answered in the same minute.
+  - provider: custom
+    model: minimax
+    base_url: https://llm.mumchimp.com/v1
+    key_env: LITELLM_API_KEY
+  - provider: custom
+    model: deepseek
+    base_url: https://llm.mumchimp.com/v1
+    key_env: LITELLM_API_KEY
 agent:
   max_turns: 90
   verify_on_stop: true
@@ -14,27 +21,30 @@ context_file_max_chars: 140000
 memory:
   memory_enabled: true
   user_profile_enabled: true
+  memory_char_limit: 5000
+  user_char_limit: 2500
+  provider: hindsight
 skills:
   skill_auto_creation: true
   skill_auto_creation_requires_pr: true
 approvals:
   smart_approvals: true
   always_ask:
-  - gh pr merge
-  - fly deploy
-  - fly scale
-  - fly machine destroy
-  - git push
-  - rm -rf
+    - gh pr merge
+    - fly deploy
+    - fly scale
+    - fly machine destroy
+    - git push
+    - rm -rf
   never_ask:
-  - gh issue list
-  - gh issue view
-  - fly status
-  - fly logs
-  - git status
-  - git diff
+    - gh issue list
+    - gh issue view
+    - fly status
+    - fly logs
+    - git status
+    - git diff
 command_allowlist:
-- execute_code
+  - execute_code
 _config_version: 38
 aux:
   model: claude-sonnet-5
@@ -45,11 +55,11 @@ limits:
 sandbox:
   image: python:3.11-slim@sha256:pinned
   mounts:
-  - $HERMES_HOME:/estate:ro
-  - $HERMES_HOME/skills:/skills:ro
+    - $HERMES_HOME:/estate:ro
+    - $HERMES_HOME/skills:/skills:ro
   env_passthrough:
-  - GITHUB_TOKEN
-  - ANTHROPIC_API_KEY
+    - GITHUB_TOKEN
+    - ANTHROPIC_API_KEY
   network:
     allowlist_file: egress-allowlist.txt
 onboarding:
@@ -62,23 +72,34 @@ platforms:
         max_commands: 12
         priority_mode: replace
         priority:
-        - sessions
-        - status
-        - steer
-        - queue
-        - stop
-        - approve
-        - deny
-        - new
-        - resume
-        - model
-        - undo
-        - help
+          - sessions
+          - status
+          - steer
+          - queue
+          - stop
+          - approve
+          - deny
+          - new
+          - resume
+          - model
+          - undo
+          - help
   a2a:
     enabled: true
     extra:
       port: 9900
 plugins:
   enabled:
-  - sovereign
-  - guide
+    - sovereign
+    - guide
+
+# crew#496 2026-08-27 14:10Z: the founder's Telegram session reached ~500k tokens
+# because compaction fired only at 50% of a 1M window and its summary model
+# (claude-sonnet-5 on the OAuth lane) timed out at 120s on every attempt, so
+# the window never shrank and every turn ended in a refusal. Cap the trigger
+# at 200k tokens so the summary call stays inside what the primary lane accepts;
+# the router models were tried as summariser and all sat on empty credit or in
+# router cooldown at 14:10Z, so the summariser stays on the main model.
+compression:
+  threshold_tokens: 200000
+  context_timeout_seconds: 300
