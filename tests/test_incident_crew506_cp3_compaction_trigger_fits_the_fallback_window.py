@@ -15,11 +15,11 @@ import yaml
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 CFG = ROOT / "config.yaml"
 MEASURED_OVERHEAD_TOKENS = 45_000  # fresh-session input per call, 2026-08-27 (see module docstring)
-FALLBACK_WINDOW_TOKENS = 204_800   # idp/platform/llm/config.yaml, minimax max_input_tokens
+FALLBACK_WINDOW_TOKENS = 204_800   # llm.mumchimp.com /model/info minimax max_input_tokens (LiteLLM model map, MiniMax-M2), 2026-08-27
 
 
 def _fallback_window() -> int:
-    """Prefer the router config when the estate checkout is present; the constant otherwise."""
+    """An explicit max_input_tokens on the minimax lane in the idp router config wins; otherwise the live-read constant."""
     router = pathlib.Path(os.environ.get("ESTATE_CODE", ROOT.parent)) / "idp" / "platform" / "llm" / "config.yaml"
     if router.is_file():
         for entry in yaml.safe_load(router.read_text()).get("model_list", []):

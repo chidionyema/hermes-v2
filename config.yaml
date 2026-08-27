@@ -103,7 +103,8 @@ plugins:
 # session_model_usage: the founder's long Telegram session ran 373k-412k input tokens per
 # call on the primary lane; a fresh session after the 14:10Z restart runs 43-45k per call,
 # which is the fixed overhead (system prompt + tool schemas + memory). The one fallback hop
-# is the router's minimax lane, window 204,800 (idp/platform/llm/config.yaml). A trigger at
+# is the router's minimax lane, window 204,800 (llm.mumchimp.com /model/info, from
+# LiteLLM's model map for MiniMax-M2; the idp config declares no override). A trigger at
 # 200k means a turn can reach 200k + 43k before compaction and no fallback can ever take
 # it: that is the refusal cascade of crew#496. 150k + 43k = 193k fits the hop with room.
 # Decision recorded on crew#506: neither an upstream issue nor a runner swap; the bound is
