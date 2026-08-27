@@ -225,10 +225,7 @@ learns is never overwritten by a template.
 | `profiles/work/MEMORY.md` | The WORK lane's own memory, seeded the same way. |
 | `scripts/pulse.sh` | The identical pulse script where the scheduler looks for it. `cron create --script pulse.sh` resolves in `scripts/`; `bin/` is where a human types it. |
 | `bin/backup-state.sh` | Nightly `sqlite3 .backup` of `state.db`. It does not use `cp`, because copying a live database gives a torn file. The off-box copy is taken by the estate's own backup engine, which already holds the credentials and verifies every copy. |
-| `deploy/fly/finish-cutover.sh` | Moves the Telegram gateway to the new app, proves it answers, and undoes itself if it does not. It handles no secrets, cannot read one, and has no flag that takes one. |
-| `deploy/fly/fly.toml` | The app's own configuration: region, volume, and the process the machine runs. |
 | `scripts/bootstrap-age-auth.sh` | Encrypts the Claude credential to a file the repo can carry. Run once, by a person, on a machine that already holds the credential. |
-| `scripts/check-age-drill.sh` | Reads the drill's verdict off the volume from outside the app, and is the half that goes red. A log line in `fly logs` that nobody greps is not an alert. |
 | `skills/PLATFORM_GATING.md` | What each skill needs before it may run. A skill whose platform is missing must fail at the top, not half-run. |
 | `skills/consult/SKILL.md` | Ask a different model when you are stuck, and treat the answer as the weakest evidence you hold. Never acts on it unchecked. |
 | `skills/estate-map/SKILL.md` | Print the current shape of the estate — apps, health, repos, open board. Run before guessing where anything lives. |
@@ -307,13 +304,8 @@ are tracked, so what you see below is the source they come from.
 | `cron/` | The scheduler's working directory. Only `.jobs` files belong to the repo; everything else in here is written while it runs and is ignored. |
 | `cron/evolution.jobs` | The nightly skill-evolution schedule. Written by hand rather than rendered, because nothing in it varies from one estate to the next. |
 | `deploy/` | Everything needed to run this estate somewhere other than the founder's laptop. Nothing in here runs locally. |
-| `deploy/fly/` | The Fly target: image, entrypoint, config, and the two scripts that keep the fallback credential honest. |
-| `deploy/fly/Dockerfile` | The image. It carries the code and no state; everything that survives a deploy is on the volume the entrypoint links in. |
 | `Dockerfile` | The hermes-agent runtime image for the Oracle OKE standby (crew#290/crew#286). Clones the pinned upstream commit itself at build time -- hermes-agent is a separate repo (gitignored here), not this repo's own source. |
 | `.github/workflows/build-agent-image.yml` | Builds and pushes the Dockerfile above to GHCR (arm64-only, matching OKE's Ampere node pool), cosign-signed, same pattern as idp's build-multiarch.yml but self-contained here since a first unproven build shouldn't add blast radius to idp's shared pipeline. |
-| `deploy/fly/age-drill.sh` | Asks whether the age-encrypted fallback still opens and still holds the token in use. One implementation, two callers: once at boot and again whenever the live credential changes. |
-| `deploy/fly/age-drill-watch.sh` | Re-runs that drill while the container is up. It is spawned by the entrypoint and nowhere else, because `AGE_PRIVATE_KEY` is a platform secret that reaches the entrypoint and is invisible to anything attached later with `fly ssh console`. |
-| `deploy/fly/entrypoint.sh` | Links the writable names into the volume before starting the gateway. `HERMES_HOME` is the repo root, so a volume mounted over that root would hide the code; it mounts at `/data` instead. |
 | `deploy/secrets/` | Ciphertext only. A cleartext credential has never been in this directory and the encryption is what makes it safe to track. |
 | `deploy/secrets/claude-credentials.json.age` | The Claude credential encrypted to a key the platform holds, so a fresh container can decrypt it at boot without an agent ever carrying it. `scripts/bootstrap-age-auth.sh` writes it. |
 | `docs/` | Written for a person to read, not for the machine to parse. |
@@ -413,12 +405,7 @@ are tracked, so what you see below is the source they come from.
 | `templates/scripts/` | The copy of a script at the path the scheduler resolves, which is not the path a human types. |
 | `templates/scripts/pulse.sh.tmpl` | The pulse script where `cron create --script` looks for it. `bin/sync-scripts.sh` keeps it identical to the one in `bin/`. |
 | `templates/bin/backup-state.sh.tmpl` | The nightly `state.db` backup, with the checkout that owns the offsite engine read from `estate.yaml` instead of written into the script. |
-| `templates/deploy/` | The deployment files that name an app, on the same rule as `templates/bin/`. |
-| `templates/deploy/fly/` | The Fly target's generated files. |
-| `templates/deploy/fly/finish-cutover.sh.tmpl` | The cutover, with the app it moves to and the app it moves from both read from `estate.yaml`. |
-| `templates/deploy/fly/fly.toml.tmpl` | The app configuration. The app name is the one value in it that cannot be shared between estates. |
 | `templates/scripts/bootstrap-age-auth.sh.tmpl` | Encrypting the Claude credential, with the target app read from `estate.yaml`. |
-| `templates/scripts/check-age-drill.sh.tmpl` | Reading the age drill's verdict, with the app to ask read from `estate.yaml`. |
 | `templates/skills/` | One directory per skill. A skill is a prompt with shell commands in it, so each is reviewed as code. |
 | `templates/skills/PLATFORM_GATING.md.tmpl` | What each skill needs before it may run. A skill whose platform is missing must fail at the top rather than half-run. |
 | `templates/skills/consult/` | The consult skill. |

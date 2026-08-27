@@ -97,7 +97,7 @@ Use source #2. `claude setup-token` mints a long-lived token for exactly this ca
 
 ```sh
 claude setup-token                                                  # interactive OAuth, prints a token
-./deploy/fly/set-claude-token.sh prospector-hermes-v2               # paste it; never echoed
+# then put it in the estate secret store as CLAUDE_CODE_OAUTH_TOKEN (idp bin/idp-vault-put); the Fly-era set-claude-token.sh is gone (R1, 2026-08-27)
 ```
 
 **Do not use the Keychain's `accessToken` for a server.** It is short-lived, and refresh needs the
@@ -124,7 +124,7 @@ entry's structure. Those refusals are correct — an agent has no business holdi
 a credential — so the move is done by a script the founder runs, which never
 prints the value.
 
-`deploy/fly/finish-cutover.sh` has two credential modes.
+The Fly-era `deploy/fly/finish-cutover.sh` (deleted 2026-08-27, R1) had two credential modes; the record stays because the refusal below is still the rule.
 
 ### `--copy-api-key` — withdrawn; it could never have worked
 
@@ -150,7 +150,7 @@ is both something an agent should not do and unnecessary.
 ### `--keychain` — the route that works
 
 ```
-./deploy/fly/finish-cutover.sh --keychain
+./deploy/fly/finish-cutover.sh --keychain      # historical; the script is gone (R1, 2026-08-27)
 ```
 
 Installs this Mac's Claude Code credential onto the new app's volume at
