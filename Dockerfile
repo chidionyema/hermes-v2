@@ -30,7 +30,17 @@ WORKDIR /app/hermes-agent
 # `messaging` extra, not a base dependency (pyproject: python-telegram-bot under [messaging]); a
 # sync without it boots a gateway that cannot open the founder's chat. `hindsight` is the memory
 # client (config.yaml memory.provider: hindsight); `otlp` is the trace exporter (LAW 50).
-RUN uv sync --frozen --no-dev --extra messaging --extra hindsight --extra otlp
+# uv sync runs as root and installs the managed CPython the fork pins under
+# $HOME/.local/share/uv/python, i.e. /root (0700). The pod runs as 10001 with a read-only root
+# filesystem, so .venv/bin/python -> /root/... was "Permission denied" at entrypoint.sh:52 and the
+# gateway crash-looped on the cluster (crew#516 CP4, image main-13-a367cbd, proved with
+# `crane export --platform linux/arm64 ... | tar -tv`). The interpreter lives in a world-readable
+# directory instead.
+ENV UV_PYTHON_INSTALL_DIR=/opt/uv/python
+RUN uv sync --frozen --no-dev --extra messaging --extra hindsight --extra otlp \
+    && chmod -R a+rX /opt/uv \
+    && test -x "$(readlink -f .venv/bin/python)" \
+    && case "$(readlink -f .venv/bin/python)" in /root/*) echo "python under /root" >&2; exit 1;; esac
 
 ENV PATH="/app/hermes-agent/.venv/bin:$PATH"
 ENV HERMES_HOME=/app
