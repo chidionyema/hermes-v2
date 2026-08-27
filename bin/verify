@@ -225,6 +225,30 @@ print(chr(10).join(plistlib.load(open(sys.argv[1],"rb"))["ProgramArguments"]))' 
   fi
 fi
 
+# 12b. is the gateway supervised by exactly one launchd label?
+# crew#284, 2026-08-27 00:4xZ: ai.hermes.gateway was retired (its plist stayed in
+# ~/Library/LaunchAgents) and a session ran `launchctl load -w` on it. Two
+# KeepAlive labels then ran the same `gateway run --replace` and killed each other
+# every ~10s for six minutes; the founder's /sb-list hit a gateway mid-restart.
+# A retired plist on disk is a loaded gun; this row fails on the file as well
+# as on the label. Retired set matches RETIRED in
+# ~/.claude/scripts/test_incident_crew13_no_job_names_hermes_home.py.
+RETIRED_LABELS="ai.hermes.gateway"
+GATEWAY_LABELS="$(launchctl list 2>/dev/null | awk '$3 ~ /gateway/ && $1 != "-" {print $3}')"
+LOADED_N="$(printf '%s\n' "$GATEWAY_LABELS" | grep -c . || true)"
+RETIRED_ON_DISK=""
+for L in $RETIRED_LABELS; do
+  [ -f "$HOME/Library/LaunchAgents/$L.plist" ] && RETIRED_ON_DISK="$RETIRED_ON_DISK $L"
+  printf '%s\n' "$GATEWAY_LABELS" | grep -qx "$L" && LOADED_N=99
+done
+if [ "$LOADED_N" = 1 ] && [ -z "$RETIRED_ON_DISK" ]; then
+  row "one launchd label runs the gateway" 0 "$GATEWAY_LABELS"
+elif [ "$LOADED_N" = 0 ]; then
+  row "one launchd label runs the gateway" 1 "no gateway label is loaded"
+else
+  row "one launchd label runs the gateway" 1 "loaded: $(printf '%s' "$GATEWAY_LABELS" | tr '\n' ' ')| retired plist on disk:${RETIRED_ON_DISK:- none}"
+fi
+
 # 13. does the agent get all of the laws, or only some of them?
 # Twice now the laws file has grown past the cap and the prompt builder has
 # quietly thrown the middle away: 2026-08-23 21:47 lost the bodies of LAW 12
