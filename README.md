@@ -327,6 +327,7 @@ are tracked, so what you see below is the source they come from.
 | `docs/evidence/pr-27/` | PR #27, the `bin/verify` row that refuses a second launchd label for the gateway (crew#284). Same rule as `pr-1/`. |
 | `docs/evidence/pr-28/` | PR #28, the URL card count fix (crew#284). Same rule as `pr-1/`. |
 | `docs/evidence/pr-29/` | PR #29, the agent pin bump to 81c86d5595 for the busy-path plugin dispatch fix (crew#284). Same rule as `pr-1/`. |
+| `docs/evidence/pr-33/` | PR #33, the fallback that names its credential (crew#496): the incident test passing on this config and failing on main's. |
 | `docs/incidents/` | What went wrong, what it cost, and the class of mistake it belonged to. Written after the platform is serving again, never during. |
 | `docs/incidents/2026-08-22-agent-as-secret-courier.md` | The incident that produced the rule that an agent never carries a secret between two systems, and the four refusals that named the class. |
 | `docs/onboarding/` | One page per feature answering what it is for, what it costs, what it touches, where it lives and how to stop it. The off switch is one command, because that is the only reason anyone trusts a thing to run unattended. |
@@ -436,6 +437,7 @@ are tracked, so what you see below is the source they come from.
 | `tests/test_incident_crew182_idea_flow.py` | Proves the phone idea flow cannot write the board without the confirmation prompt, that exploratory phrasing builds nothing, and that Icebox is labelled so the dispatcher never claims it (crew#182). |
 | `tests/test_incident_otto_guide.py` | Proves the `/guide` card names every skill and job on disk and forgets a removed one without a prose edit, and that a topic returns the skill's own text. |
 | `tests/test_incident_crew278_fallback_is_another_provider.py` | Proves `config.yaml` names a fallback provider that is a different vendor from the primary, so one vendor's outage is not Otto's outage (crew#278 CP3). |
+| `tests/test_incident_crew496_fallback_names_its_credential.py` | Proves every `fallback_providers` entry in `config.yaml` carries `base_url` and `key_env`, so a fallback can never be a name with no credential behind it; that gap turned a primary refusal into 27 minutes of silence on 2026-08-27 (crew#496). |
 | `tests/test_verify_sovereign_plugin_row.py` | Proves `bin/verify-sovereign-plugin` passes on the real plugin and fails, naming the gap, on a plugin that registers less (crew#284 CP1). |
 | `tests/test_incident_crew284_one_gateway_label.py` | Incident test: `bin/verify` row 12b fails on a second launchd label running the gateway and on a retired plist left on disk, and passes on one label. Uses a `launchctl` shim and a scratch HOME. |
 | `tests/test_incident_crew284_url_card_count.py` | Property: the link count on the pinned URL card equals the number of bullets on it, duplicates or not (crew#284). |
