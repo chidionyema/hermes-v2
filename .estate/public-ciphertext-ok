@@ -10,7 +10,7 @@ What opens it
     filename, so a clone gets the envelope and nothing that opens it.
 
 Why it is here
-    deploy/fly/entrypoint.sh decrypts to a scratch file on every boot, compares
+    the Fly-era entrypoint (deleted 2026-08-27, R1) decrypted it to a scratch file on every boot, compared
     the token against the one in use, logs one line and deletes it. Shipping the
     ciphertext inside the image is what makes that fallback testable on every
     boot rather than hoped for.

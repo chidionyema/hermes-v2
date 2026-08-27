@@ -138,10 +138,7 @@ hermes-age-key.txt
 # Generated 2026-08-23, when they were moved into templates/ so this repo stops
 # naming one particular estate (REQ-125). Each reads its app names from estate.yaml.
 bin/backup-state.sh
-deploy/fly/finish-cutover.sh
-deploy/fly/fly.toml
 scripts/bootstrap-age-auth.sh
-scripts/check-age-drill.sh
 lsp/node_modules/
 .dependencies.json
 .curator_backups/
