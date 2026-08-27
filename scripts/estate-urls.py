@@ -146,7 +146,7 @@ def card(found):
     for title in sorted(found):
         for name, u in sorted(set(found[title])):
             lines.append(f"• {title} ({name}): {u}")
-    lines.append(f"{sum(len(v) for v in found.values())} links. Missing one? Its component has no https link in the catalogue.")
+    lines.append(f"{sum(len(set(v)) for v in found.values())} links. Missing one? Its component has no https link in the catalogue.")
     return "\n".join(lines)
 
 
@@ -269,7 +269,7 @@ def main():
     except TelegramError as e:
         sys.exit(f"FAIL telegram: {e}")
     if mid:
-        print(f"URLS pinned msg={mid} n={sum(len(v) for v in found.values())}")
+        print(f"URLS pinned msg={mid} n={sum(len(set(v)) for v in found.values())}")
     return 0
 
 
