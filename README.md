@@ -325,6 +325,7 @@ are tracked, so what you see below is the source they come from.
 | `docs/evidence/pr-29/` | PR #29, the agent pin bump to 81c86d5595 for the busy-path plugin dispatch fix (crew#284). Same rule as `pr-1/`. |
 | `docs/evidence/pr-33/` | PR #33, the fallback that names its credential (crew#496): the incident test passing on this config and failing on main's. |
 | `docs/evidence/pr-35/` | PR #35, the stale and wake-blocked workflow copies. One frame of the green run. |
+| `docs/evidence/pr-41/` | PR #41, the entrypoint installing the evolution lane gated on the mounted estate (crew#524 CP2): 14 tests green, three install-cron lines. |
 | `docs/incidents/` | What went wrong, what it cost, and the class of mistake it belonged to. Written after the platform is serving again, never during. |
 | `docs/incidents/2026-08-22-agent-as-secret-courier.md` | The incident that produced the rule that an agent never carries a secret between two systems, and the four refusals that named the class. |
 | `docs/onboarding/` | One page per feature answering what it is for, what it costs, what it touches, where it lives and how to stop it. The off switch is one command, because that is the only reason anyone trusts a thing to run unattended. |
