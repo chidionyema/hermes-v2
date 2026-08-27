@@ -13,10 +13,12 @@ WORKDIR /app
 
 # hermes-agent is NousResearch's separate upstream repo, not this repo's own source
 # (it's gitignored here -- .gitignore:44,50 -- ./install fetches it fresh at the pin).
-# Mirrors exactly what ./install does: shallow-fetch the one pinned commit, no full
-# history, no host-side install script dependency inside the image build.
+# The pinned commit lives on the chidionyema/hermes-agent FORK, not upstream NousResearch
+# -- confirmed via the local checkout's `fork` remote; NousResearch/hermes-agent refused
+# the fetch with "not our ref" (real CI failure, run 33051856843). Mirrors ./install's
+# own shallow-fetch-and-checkout, against the same fork it actually uses.
 COPY PINNED_VERSION ./
-RUN git clone --quiet --no-checkout https://github.com/NousResearch/hermes-agent.git hermes-agent \
+RUN git clone --quiet --no-checkout https://github.com/chidionyema/hermes-agent.git hermes-agent \
     && cd hermes-agent \
     && git fetch --quiet --depth 1 origin "$(sed -n 2p ../PINNED_VERSION)" \
     && git checkout --quiet "$(sed -n 2p ../PINNED_VERSION)" \
