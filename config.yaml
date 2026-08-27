@@ -2,15 +2,14 @@ model:
   provider: anthropic
   default: claude-sonnet-5
 fallback_providers:
-  # crew#496 2026-08-27 14:00Z: router model `gemini` is Google direct and its
-  # prepayment credits are depleted (HTTP 429 on every turn); `gemini-or` and
-  # `deepseek` go through OpenRouter credit and answered in the same minute.
+  # crew#506 CP1 (2026-08-27): one hop, and the router owns the chain behind it. The estate
+  # router (idp#409, live 16:20Z) falls minimax -> deepseek itself and refuses an oversized
+  # turn before it leaves the estate (max_input_tokens 204800), so a second entry here only
+  # re-walked the same lanes a second time after the router had already done so: two owners
+  # of one decision, and double the retries on a bad minute. Gemini stays off this list; its
+  # prepaid credit is empty (429 on every turn, crew#496).
   - provider: custom
     model: minimax
-    base_url: https://llm.mumchimp.com/v1
-    key_env: LITELLM_API_KEY
-  - provider: custom
-    model: deepseek
     base_url: https://llm.mumchimp.com/v1
     key_env: LITELLM_API_KEY
 agent:
