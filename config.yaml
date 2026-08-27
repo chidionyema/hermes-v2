@@ -2,8 +2,10 @@ model:
   provider: anthropic
   default: claude-sonnet-5
 fallback_providers:
-  - provider: openai
-    model: gpt-5.4
+- provider: custom
+  model: gemini
+  base_url: https://llm.mumchimp.com/v1
+  key_env: LITELLM_API_KEY
 agent:
   max_turns: 90
   verify_on_stop: true
@@ -18,21 +20,21 @@ skills:
 approvals:
   smart_approvals: true
   always_ask:
-    - gh pr merge
-    - fly deploy
-    - fly scale
-    - fly machine destroy
-    - git push
-    - rm -rf
+  - gh pr merge
+  - fly deploy
+  - fly scale
+  - fly machine destroy
+  - git push
+  - rm -rf
   never_ask:
-    - gh issue list
-    - gh issue view
-    - fly status
-    - fly logs
-    - git status
-    - git diff
+  - gh issue list
+  - gh issue view
+  - fly status
+  - fly logs
+  - git status
+  - git diff
 command_allowlist:
-  - execute_code
+- execute_code
 _config_version: 38
 aux:
   model: claude-sonnet-5
@@ -43,11 +45,11 @@ limits:
 sandbox:
   image: python:3.11-slim@sha256:pinned
   mounts:
-    - $HERMES_HOME:/estate:ro
-    - $HERMES_HOME/skills:/skills:ro
+  - $HERMES_HOME:/estate:ro
+  - $HERMES_HOME/skills:/skills:ro
   env_passthrough:
-    - GITHUB_TOKEN
-    - ANTHROPIC_API_KEY
+  - GITHUB_TOKEN
+  - ANTHROPIC_API_KEY
   network:
     allowlist_file: egress-allowlist.txt
 onboarding:
@@ -60,23 +62,23 @@ platforms:
         max_commands: 12
         priority_mode: replace
         priority:
-          - sessions
-          - status
-          - steer
-          - queue
-          - stop
-          - approve
-          - deny
-          - new
-          - resume
-          - model
-          - undo
-          - help
+        - sessions
+        - status
+        - steer
+        - queue
+        - stop
+        - approve
+        - deny
+        - new
+        - resume
+        - model
+        - undo
+        - help
   a2a:
     enabled: true
     extra:
       port: 9900
 plugins:
   enabled:
-    - sovereign
-    - guide
+  - sovereign
+  - guide
