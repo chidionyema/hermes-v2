@@ -293,10 +293,12 @@ are tracked, so what you see below is the source they come from.
 | `ci/EVIDENCE_GATE_PROOF.md` | The evidence gate refusing ten dishonest pull request bodies and passing three honest ones, with the output. A gate nobody has watched refuse anything is a claim. |
 | `ci/evidence-gate.js` | Reads the pull request body and rejects a claim with no command output behind it. Placeholder blocks, and blocks that only repeat the claim, are rejected too. |
 | `.github/` | The CI this repo runs on itself. Not to be confused with `ci/`, which holds the workflows this repo installs into another one. |
-| `.github/workflows/` | Three workflows. Everything a runner can honestly answer runs here on every pull request. |
+| `.github/workflows/` | Five workflows. Everything a runner can honestly answer runs here on every pull request. |
 | `.github/workflows/gates.yml` | The three gates that mean the same thing away from the founder's laptop: every template renders from `estate.example.yaml`, `check-readme.py`, and `verify-consult`. `bin/verify` is left out on purpose — it asks about the gateway, the venv and a credential, and a runner has none of them, so it would be red for being in the wrong place. This repo is public, so the minutes are free. |
 | `.github/workflows/security-scan.yml` | The estate security gate, the same composite action every active repo runs (`chidionyema/idp/.github/actions/security-scan@main`): gitleaks over the full history, pip-audit, and npm audit at High+ on shipped dependencies only. It is installed by `idp/bin/estate-security-rollout`, so this file is the rollout's, not this repo's; edit it in idp. |
 | `.github/workflows/operating-model-gate.yml` | The estate operating-model gate, called by name from idp (`chidionyema/idp/.github/workflows/operating-model-gate.yml@main`): grades the PR body against `idp/policy/operating_model.rego` and comments every refusal. The policy lives in idp; this file is a caller, so a rule change lands here without a commit. |
+| `.github/workflows/stale.yml` | A copy of idp's `platform/github/workflows/stale.yml` (crew#504): an open pull request idle for a day is closed in the same hourly run, branch kept, with a message naming `gh pr reopen` and `Blocked-by:` as the two ways back. Issues are untouched. |
+| `.github/workflows/wake-blocked.yml` | A copy of idp's `platform/github/workflows/wake-blocked.yml` (crew#504): every hour, a pull request closed by stale whose `Blocked-by:` line now points at a merged PR is reopened. |
 | `ci/evidence-gate.yml` | The workflow that runs the gate: first the body check, then the check that a screenshot of the run is committed under `docs/evidence/pr-<n>/`. |
 | `ci/static-gates.yml` | ruff, pyright strict, pip-audit and deptry as required checks on main. A red job here is not advisory. |
 | `ci/tests/` | Tests of the gates themselves, because a gate that passes everything looks exactly like a gate that works. |
@@ -328,6 +330,7 @@ are tracked, so what you see below is the source they come from.
 | `docs/evidence/pr-28/` | PR #28, the URL card count fix (crew#284). Same rule as `pr-1/`. |
 | `docs/evidence/pr-29/` | PR #29, the agent pin bump to 81c86d5595 for the busy-path plugin dispatch fix (crew#284). Same rule as `pr-1/`. |
 | `docs/evidence/pr-33/` | PR #33, the fallback that names its credential (crew#496): the incident test passing on this config and failing on main's. |
+| `docs/evidence/pr-35/` | PR #35, the stale and wake-blocked workflow copies. One frame of the green run. |
 | `docs/incidents/` | What went wrong, what it cost, and the class of mistake it belonged to. Written after the platform is serving again, never during. |
 | `docs/incidents/2026-08-22-agent-as-secret-courier.md` | The incident that produced the rule that an agent never carries a secret between two systems, and the four refusals that named the class. |
 | `docs/onboarding/` | One page per feature answering what it is for, what it costs, what it touches, where it lives and how to stop it. The off switch is one command, because that is the only reason anyone trusts a thing to run unattended. |
