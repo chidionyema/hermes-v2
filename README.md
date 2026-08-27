@@ -324,6 +324,7 @@ are tracked, so what you see below is the source they come from.
 | `docs/evidence/pr-28/` | PR #28, the URL card count fix (crew#284). Same rule as `pr-1/`. |
 | `docs/evidence/pr-29/` | PR #29, the agent pin bump to 81c86d5595 for the busy-path plugin dispatch fix (crew#284). Same rule as `pr-1/`. |
 | `docs/evidence/pr-33/` | PR #33, the fallback that names its credential (crew#496): the incident test passing on this config and failing on main's. |
+| `docs/evidence/pr-42/` | crew#516 CP4: the gateway crash line from the cluster and the image listing that shows the venv's python under `/root`, beside the 11 green tests for the `/opt/uv/python` fix. |
 | `docs/evidence/pr-35/` | PR #35, the stale and wake-blocked workflow copies. One frame of the green run. |
 | `docs/evidence/pr-41/` | PR #41, the entrypoint installing the evolution lane gated on the mounted estate (crew#524 CP2): 14 tests green, three install-cron lines. |
 | `docs/incidents/` | What went wrong, what it cost, and the class of mistake it belonged to. Written after the platform is serving again, never during. |
