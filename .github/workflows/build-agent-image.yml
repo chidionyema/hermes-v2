@@ -10,10 +10,11 @@
 name: build-agent-image
 on:
   pull_request:
-    paths: [Dockerfile, hermes-agent/**, .github/workflows/build-agent-image.yml]
+    paths: [Dockerfile, .dockerignore, deploy/k8s/**, hermes-agent/**, .github/workflows/build-agent-image.yml]
+  # crew#516 CP4: the image carries the whole estate (config.yaml, skills/, cron/*.jobs), so every
+  # merge to main is a new image; the Flux ImagePolicy in idp picks the newest main-<run>-<sha> tag.
   push:
     branches: [main]
-    paths: [Dockerfile, hermes-agent/**, .github/workflows/build-agent-image.yml]
 permissions:
   contents: read
   packages: write
@@ -47,7 +48,9 @@ jobs:
           outputs: |
             ${{ github.event_name == 'push' && format('type=image,name={0},push=true', env.IMAGE) || 'type=cacheonly' }}
             type=docker,dest=/tmp/scan.tar
-          tags: ${{ github.event_name == 'push' && format('{0}:{1}', env.IMAGE, github.sha) || '' }}
+          tags: |
+            ${{ github.event_name == 'push' && format('{0}:{1}', env.IMAGE, github.sha) || '' }}
+            ${{ github.event_name == 'push' && format('{0}:main-{1}-{2}', env.IMAGE, github.run_number, github.sha) || '' }}
           cache-from: type=gha,scope=hermes-agent-arm64
           cache-to: type=gha,mode=max,scope=hermes-agent-arm64
       - name: no CRITICAL vulnerability ships

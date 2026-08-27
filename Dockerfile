@@ -26,17 +26,27 @@ RUN git clone --quiet --no-checkout https://github.com/chidionyema/hermes-agent.
 
 WORKDIR /app/hermes-agent
 
-# Dependency layer already present from the clone above; sync installs it.
-RUN uv sync --frozen --no-dev
+# Dependency layer already present from the clone above; sync installs it. Telegram is the
+# `messaging` extra, not a base dependency (pyproject: python-telegram-bot under [messaging]); a
+# sync without it boots a gateway that cannot open the founder's chat. `hindsight` is the memory
+# client (config.yaml memory.provider: hindsight); `otlp` is the trace exporter (LAW 50).
+RUN uv sync --frozen --no-dev --extra messaging --extra hindsight --extra otlp
 
 ENV PATH="/app/hermes-agent/.venv/bin:$PATH"
 ENV HERMES_HOME=/app
 ENV PYTHONUNBUFFERED=1
 
-# No secrets baked in — .env / config.yaml are runtime-mounted (External Secrets Operator,
-# crew#227 CP3), never COPYed into the image (LAW 21, LAW 46).
+# The estate itself -- config.yaml, SOUL.md, skills/, scripts/, bin/, templates/, cron/*.jobs --
+# rides in the image at /app/estate (crew#516 CP4). Without it the container is upstream
+# hermes-agent with no personality, no skills and no lanes: not The Architect. .dockerignore keeps
+# every state path and every credential out (LAW 21, LAW 46); deploy/k8s/entrypoint.sh copies the
+# build over the persistent HERMES_HOME volume at boot and leaves the state on it alone.
+COPY --chown=10001:10001 . /app/estate
+
+# No secrets baked in: .env values arrive as environment from a Secret the platform syncs
+# (External Secrets Operator, crew#227 CP3); auth.json is seeded once from HERMES_AUTH_JSON.
+ENV HERMES_HOME=/data
 
 EXPOSE 9900
 
-ENTRYPOINT ["python", "-m", "hermes_cli.main"]
-CMD ["gateway", "run"]
+ENTRYPOINT ["/app/estate/deploy/k8s/entrypoint.sh"]
