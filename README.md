@@ -322,6 +322,7 @@ are tracked, so what you see below is the source they come from.
 | `docs/evidence/pr-1/` | PR #1, the consult client. One frame holding every gate and one live consult: `render --check`, `check-readme`, `check-requirements §16`, `verify`, `verify-consult`, and `bin/consult` returning an answer with exit 0. The images inside are named after the moment they were captured, so they are not listed here one by one. |
 | `docs/evidence/pr-2/` | PR #2, the age-encrypted credential and its boot drill. Same rule as `pr-1/`: the images are named after the moment they were captured, so they are not listed one by one. |
 | `docs/evidence/pr-27/` | PR #27, the `bin/verify` row that refuses a second launchd label for the gateway (crew#284). Same rule as `pr-1/`. |
+| `docs/evidence/pr-28/` | PR #28, the URL card count fix (crew#284). Same rule as `pr-1/`. |
 | `docs/incidents/` | What went wrong, what it cost, and the class of mistake it belonged to. Written after the platform is serving again, never during. |
 | `docs/incidents/2026-08-22-agent-as-secret-courier.md` | The incident that produced the rule that an agent never carries a secret between two systems, and the four refusals that named the class. |
 | `docs/onboarding/` | One page per feature answering what it is for, what it costs, what it touches, where it lives and how to stop it. The off switch is one command, because that is the only reason anyone trusts a thing to run unattended. |
