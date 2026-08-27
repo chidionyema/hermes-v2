@@ -432,6 +432,7 @@ are tracked, so what you see below is the source they come from.
 | `tests/test_incident_otto_guide.py` | Proves the `/guide` card names every skill and job on disk and forgets a removed one without a prose edit, and that a topic returns the skill's own text. |
 | `tests/test_incident_crew278_fallback_is_another_provider.py` | Proves `config.yaml` names a fallback provider that is a different vendor from the primary, so one vendor's outage is not Otto's outage (crew#278 CP3). |
 | `tests/test_verify_sovereign_plugin_row.py` | Proves `bin/verify-sovereign-plugin` passes on the real plugin and fails, naming the gap, on a plugin that registers less (crew#284 CP1). |
+| `tests/test_incident_crew284_one_gateway_label.py` | Incident test: `bin/verify` row 12b fails on a second launchd label running the gateway and on a retired plist left on disk, and passes on one label. Uses a `launchctl` shim and a scratch HOME. |
 | `tests/` | The guards. Each one is a mistake that already happened here and cannot now happen quietly. |
 | `tests/incidents/` | One test per incident, named for its row in the incident ledger. |
 | `tests/incidents/README.md` | The rule these files exist under: a post-mortem that adds no test here has not closed its class. |
