@@ -22,6 +22,29 @@ def image_carries_the_estate(dockerfile_text):
         'ENTRYPOINT ["/app/estate/deploy/k8s/entrypoint.sh"]' in dockerfile_text
 
 
+def interpreter_is_readable_by_the_pod_user(dockerfile_text):
+    """The venv python must not resolve under /root: 10001 cannot traverse it (image main-13-a367cbd)."""
+    m = re.search(r'^ENV UV_PYTHON_INSTALL_DIR=(\S+)\s*$', dockerfile_text, re.M)
+    if not m or m.group(1).startswith("/root") or m.group(1).startswith("$HOME"):
+        return False
+    sync = dockerfile_text.find("RUN uv sync")
+    return 0 <= m.start() < sync and "chmod -R a+rX " + m.group(1).rsplit("/", 1)[0] in dockerfile_text
+
+
+def test_the_venv_interpreter_is_installed_where_uid_10001_can_read_it():
+    assert interpreter_is_readable_by_the_pod_user(open(DOCKERFILE).read())
+
+
+def test_a_dockerfile_that_leaves_the_interpreter_under_root_is_refused():
+    text = open(DOCKERFILE).read()
+    assert not interpreter_is_readable_by_the_pod_user(re.sub(r"^ENV UV_PYTHON_INSTALL_DIR=.*\n", "", text, flags=re.M))
+    assert not interpreter_is_readable_by_the_pod_user(text.replace("/opt/uv/python", "/root/.local/share/uv/python"))
+    # set after the sync is too late: the venv already points under /root
+    moved = re.sub(r"^ENV UV_PYTHON_INSTALL_DIR=.*\n", "", text, flags=re.M).replace(
+        'ENV PATH="/app/hermes-agent/.venv/bin:$PATH"', 'ENV UV_PYTHON_INSTALL_DIR=/opt/uv/python\nENV PATH="/app/hermes-agent/.venv/bin:$PATH"')
+    assert not interpreter_is_readable_by_the_pod_user(moved)
+
+
 def test_image_copies_this_repo_and_boots_through_the_entrypoint():
     assert image_carries_the_estate(open(DOCKERFILE).read())
 
