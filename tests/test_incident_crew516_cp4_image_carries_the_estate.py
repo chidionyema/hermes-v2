@@ -72,6 +72,27 @@ def test_entrypoint_seeds_an_empty_volume_owner_only(tmp_path):
     assert oct(os.stat(empty / "auth.json").st_mode & 0o777) == "0o600"
 
 
+def test_entrypoint_exports_file_mounted_secrets(tmp_path):
+    """Kyverno refuses envFrom on the cluster; the Secret is a directory of files, exported here."""
+    d = tmp_path / "env"
+    d.mkdir()
+    (d / "TELEGRAM_BOT_TOKEN").write_text("t0k")
+    (d / "..data").write_text("x")  # a projected-volume symlink target; not an env name
+    text = open(ENTRYPOINT).read()
+    m = re.search(r'if \[ -n "\$\{HERMES_ENV_DIR:-\}" \].*?\nfi\n', text, re.S)
+    assert m, "the env-dir export block moved"
+    r = subprocess.run(["bash", "-euo", "pipefail", "-c", m.group(0) + 'printf "%s" "$TELEGRAM_BOT_TOKEN"; env | grep -c "^\\.\\.data=" || true'],
+                       env={"PATH": os.environ["PATH"], "HERMES_ENV_DIR": str(d)}, capture_output=True, text=True)
+    assert r.returncode == 0 and r.stdout == "t0k0\n", r
+
+
+def test_image_syncs_the_messaging_extra():
+    """python-telegram-bot is an extra; a sync without it is a gateway with no Telegram."""
+    text = open(DOCKERFILE).read()
+    m = re.search(r"^RUN uv sync .*$", text, re.M)
+    assert m and "--extra messaging" in m.group(0) and "--extra hindsight" in m.group(0), m and m.group(0)
+
+
 def test_dockerignore_keeps_state_and_credentials_out():
     lines = {l.strip() for l in open(DOCKERIGNORE) if l.strip() and not l.startswith("#")}
     for must in (".env", "auth.json", "state.db", "sessions/", "memories/", "hermes-agent/", ".venv/"):

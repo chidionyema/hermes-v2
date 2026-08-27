@@ -26,8 +26,11 @@ RUN git clone --quiet --no-checkout https://github.com/chidionyema/hermes-agent.
 
 WORKDIR /app/hermes-agent
 
-# Dependency layer already present from the clone above; sync installs it.
-RUN uv sync --frozen --no-dev
+# Dependency layer already present from the clone above; sync installs it. Telegram is the
+# `messaging` extra, not a base dependency (pyproject: python-telegram-bot under [messaging]); a
+# sync without it boots a gateway that cannot open the founder's chat. `hindsight` is the memory
+# client (config.yaml memory.provider: hindsight); `otlp` is the trace exporter (LAW 50).
+RUN uv sync --frozen --no-dev --extra messaging --extra hindsight --extra otlp
 
 ENV PATH="/app/hermes-agent/.venv/bin:$PATH"
 ENV HERMES_HOME=/app

@@ -16,6 +16,16 @@ export HERMES_HOME
 VENV=${HERMES_VENV:-/app/hermes-agent/.venv}
 PY="$VENV/bin/python"
 
+# Secrets arrive as files, one per env name, never as pod env (Kyverno secrets-not-from-env-vars
+# refuses envFrom on the cluster, crew#341/crew#284). The container exports them itself.
+if [ -n "${HERMES_ENV_DIR:-}" ] && [ -d "$HERMES_ENV_DIR" ]; then
+  for f in "$HERMES_ENV_DIR"/*; do
+    [ -f "$f" ] || continue
+    n=$(basename "$f")
+    case "$n" in [A-Z_][A-Z0-9_]*) export "$n=$(cat "$f")";; esac
+  done
+fi
+
 mkdir -p "$HERMES_HOME"
 # The build over the volume. --no-preserve keeps the volume's fsGroup ownership; cp never
 # touches a path that is not in the build, and no state path is (they are gitignored).
