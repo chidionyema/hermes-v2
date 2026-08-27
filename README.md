@@ -306,6 +306,8 @@ are tracked, so what you see below is the source they come from.
 | `deploy/` | Everything needed to run this estate somewhere other than the founder's laptop. Nothing in here runs locally. |
 | `deploy/fly/` | The Fly target: image, entrypoint, config, and the two scripts that keep the fallback credential honest. |
 | `deploy/fly/Dockerfile` | The image. It carries the code and no state; everything that survives a deploy is on the volume the entrypoint links in. |
+| `Dockerfile` | The hermes-agent runtime image for the Oracle OKE standby (crew#290/crew#286). Clones the pinned upstream commit itself at build time -- hermes-agent is a separate repo (gitignored here), not this repo's own source. |
+| `.github/workflows/build-agent-image.yml` | Builds and pushes the Dockerfile above to GHCR (arm64-only, matching OKE's Ampere node pool), cosign-signed, same pattern as idp's build-multiarch.yml but self-contained here since a first unproven build shouldn't add blast radius to idp's shared pipeline. |
 | `deploy/fly/age-drill.sh` | Asks whether the age-encrypted fallback still opens and still holds the token in use. One implementation, two callers: once at boot and again whenever the live credential changes. |
 | `deploy/fly/age-drill-watch.sh` | Re-runs that drill while the container is up. It is spawned by the entrypoint and nowhere else, because `AGE_PRIVATE_KEY` is a platform secret that reaches the entrypoint and is invisible to anything attached later with `fly ssh console`. |
 | `deploy/fly/entrypoint.sh` | Links the writable names into the volume before starting the gateway. `HERMES_HOME` is the repo root, so a volume mounted over that root would hide the code; it mounts at `/data` instead. |
