@@ -695,7 +695,7 @@ memory, skills, session search, subagents, approvals, provider fallback).
 |---|---|---|
 | Hermes ships gateway/cron/memory/skills/subagents/approvals; skills auto-create after 5+ tool-call successes; Curator lifecycle | Nous docs + repo | **V** |
 | Memory: MEMORY.md/USER.md char-capped no-auto-compact; SQLite+FTS5 sessions; 8 providers, single slot; one-writer-per-home warning | Nous docs | **V** |
-| Self-evolution repo: DSPy+GEPA, $2–10/run, eval-source synthetic/sessiondb (Claude Code, Copilot, Hermes), gates incl. PR-only, Phase 1 only implemented | repo README | **V** |
+| Self-evolution repo (EXTERNAL, not deployed here — nothing in this estate runs DSPy or GEPA as of 2026-08-27; crew#513 is the first build): DSPy+GEPA, $2–10/run, eval-source synthetic/sessiondb (Claude Code, Copilot, Hermes), gates incl. PR-only, Phase 1 only implemented upstream | repo README | **V** |
 | AIDE²: private-score selection, ~9/10 rejected, 16× context cut, emergent anti-reward-hacking, broken defence layer in lineage, Level 1 not ignition | Weco article (read in full) | **V** |
 | Experience-following: error propagation from stored mistakes; deletion + selective addition; outcomes as free quality labels | ACL 2026 (Xiong et al.) | **V** (abstract-level) |
 | MNL: mistake notes admitted only on batch improvement | arXiv | **V** (abstract-level) |
