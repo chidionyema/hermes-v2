@@ -148,3 +148,17 @@ def test_the_sign_step_is_bounded_and_retried():
 
 def test_a_bare_cosign_sign_is_refused():
     assert not sign_step_is_bounded('run: |\n  cosign sign --yes img@sha\n')
+
+
+def workflow_can_mint_an_id_token(workflow_text):
+    """Keyless cosign asks GitHub for an OIDC token; the job needs `id-token: write` or every
+    main build dies at 'retrieving ID token' (runs 33101787767, 33110843638)."""
+    return bool(re.search(r'^\s+id-token:\s*write\b', workflow_text, re.M))
+
+
+def test_the_build_can_mint_an_id_token_for_keyless_signing():
+    assert workflow_can_mint_an_id_token(open(WORKFLOW).read())
+
+
+def test_a_workflow_without_id_token_write_is_refused():
+    assert not workflow_can_mint_an_id_token("permissions:\n  contents: read\n  packages: write\n")

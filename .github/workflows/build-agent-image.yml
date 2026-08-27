@@ -18,6 +18,7 @@ on:
 permissions:
   contents: read
   packages: write
+  id-token: write  # keyless cosign needs the OIDC token; without it every main build died at 'retrieving ID token' (runs 33101787767, 33110843638)
 env:
   REGISTRY: ghcr.io
   IMAGE: ghcr.io/chidionyema/hermes-agent
