@@ -129,3 +129,22 @@ def test_every_main_image_carries_a_tag_flux_can_order():
     assert "format('{0}:main-{1}-{2}', env.IMAGE, github.run_number, github.sha)" in text
     push = text.split("  push:", 1)[1].split("permissions:", 1)[0]
     assert "paths:" not in push, "the image carries the whole tree, so every merge to main is a build"
+
+
+WORKFLOW = os.path.join(os.path.dirname(DOCKERFILE), ".github", "workflows", "build-agent-image.yml")
+
+
+def sign_step_is_bounded(workflow_text):
+    """Run 33110843638: cosign sign hung 5 min until the OIDC token expired. Every sign call is
+    under `timeout` and there is a second attempt, so a Sigstore stall costs a retry, not the run."""
+    calls = re.findall(r'^\s*(.*)cosign sign --yes', workflow_text, re.M)
+    return bool(calls) and all(re.search(r'\btimeout \d+', c) for c in calls) and \
+        bool(re.search(r'for attempt in 1 2', workflow_text))
+
+
+def test_the_sign_step_is_bounded_and_retried():
+    assert sign_step_is_bounded(open(WORKFLOW).read())
+
+
+def test_a_bare_cosign_sign_is_refused():
+    assert not sign_step_is_bounded('run: |\n  cosign sign --yes img@sha\n')
