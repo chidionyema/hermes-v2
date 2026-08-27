@@ -56,5 +56,7 @@ fi
 # ticks jobs.json itself; there is no second scheduler.
 "$PY" bin/install-cron.py cron/watch.jobs --feature watch || echo "entrypoint: watch lane not installed (see above)"
 "$PY" bin/install-cron.py cron/work.jobs  --feature work  || echo "entrypoint: work lane not installed (see above)"
+# crew#524 CP2: the third lane, off unless estate.yaml (the cluster's ConfigMap) says evolution: on.
+"$PY" bin/install-cron.py cron/evolution.jobs --feature evolution || echo "entrypoint: evolution lane not installed (see above)"
 
 exec "$PY" -m hermes_cli.main gateway run "$@"
