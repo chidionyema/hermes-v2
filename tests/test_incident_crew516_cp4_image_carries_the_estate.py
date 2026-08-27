@@ -1,0 +1,85 @@
+"""crew#516 CP4 (2026-08-27): the OKE image was upstream hermes-agent alone.
+
+Incident: `Dockerfile` cloned the pinned upstream and set HERMES_HOME=/app, so a pod built from it
+had no config.yaml, no SOUL.md, no skills/, no cron lanes and nowhere writable to keep a session:
+The Architect could not move off the Mac because the image was not The Architect. Rung 4, both
+ways: the tree passes; a Dockerfile without the estate COPY, or an entrypoint that overwrites
+auth.json, fails.
+"""
+import os
+import re
+import subprocess
+
+HOME = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+DOCKERFILE = os.path.join(HOME, "Dockerfile")
+ENTRYPOINT = os.path.join(HOME, "deploy", "k8s", "entrypoint.sh")
+WORKFLOW = os.path.join(HOME, ".github", "workflows", "build-agent-image.yml")
+DOCKERIGNORE = os.path.join(HOME, ".dockerignore")
+
+
+def image_carries_the_estate(dockerfile_text):
+    return bool(re.search(r"^COPY\b.*\s\.\s+/app/estate\s*$", dockerfile_text, re.M)) and \
+        'ENTRYPOINT ["/app/estate/deploy/k8s/entrypoint.sh"]' in dockerfile_text
+
+
+def test_image_copies_this_repo_and_boots_through_the_entrypoint():
+    assert image_carries_the_estate(open(DOCKERFILE).read())
+
+
+def test_a_dockerfile_without_the_estate_is_refused():
+    stripped = re.sub(r"^COPY --chown=\S+ \. /app/estate\n", "", open(DOCKERFILE).read(), flags=re.M)
+    assert not image_carries_the_estate(stripped)
+
+
+def test_entrypoint_keeps_the_state_and_installs_both_lanes():
+    text = open(ENTRYPOINT).read()
+    assert os.access(ENTRYPOINT, os.X_OK)
+    assert "set -euo pipefail" in text
+    # build over the volume, state untouched: auth.json only when absent
+    assert '[ ! -s "$HERMES_HOME/auth.json" ]' in text
+    assert "install-cron.py cron/watch.jobs --feature watch" in text
+    assert "install-cron.py cron/work.jobs  --feature work" in text
+    assert re.search(r'^exec .*hermes_cli\.main gateway run', text, re.M)
+
+
+def _seed_block():
+    text = open(ENTRYPOINT).read()
+    m = re.search(r'if \[ ! -s "\$HERMES_HOME/auth\.json" \].*?\nfi\n', text, re.S)
+    assert m, "the auth.json seed block moved"
+    return m.group(0)
+
+
+def _run_seed(home, value):
+    return subprocess.run(["bash", "-euo", "pipefail", "-c", _seed_block()],
+                          env={"PATH": os.environ["PATH"], "HERMES_HOME": str(home), "HERMES_AUTH_JSON": value},
+                          capture_output=True, text=True)
+
+
+def test_entrypoint_never_overwrites_a_live_auth_json(tmp_path):
+    """The seed block alone: a volume that already holds auth.json keeps it byte for byte."""
+    home = tmp_path / "home"
+    home.mkdir()
+    (home / "auth.json").write_text('{"live": true}')
+    assert _run_seed(home, '{"stale": true}').returncode == 0
+    assert (home / "auth.json").read_text() == '{"live": true}'
+
+
+def test_entrypoint_seeds_an_empty_volume_owner_only(tmp_path):
+    empty = tmp_path / "empty"
+    empty.mkdir()
+    assert _run_seed(empty, '{"seed": true}').returncode == 0
+    assert (empty / "auth.json").read_text() == '{"seed": true}'
+    assert oct(os.stat(empty / "auth.json").st_mode & 0o777) == "0o600"
+
+
+def test_dockerignore_keeps_state_and_credentials_out():
+    lines = {l.strip() for l in open(DOCKERIGNORE) if l.strip() and not l.startswith("#")}
+    for must in (".env", "auth.json", "state.db", "sessions/", "memories/", "hermes-agent/", ".venv/"):
+        assert must in lines, must
+
+
+def test_every_main_image_carries_a_tag_flux_can_order():
+    text = open(WORKFLOW).read()
+    assert "format('{0}:main-{1}-{2}', env.IMAGE, github.run_number, github.sha)" in text
+    push = text.split("  push:", 1)[1].split("permissions:", 1)[0]
+    assert "paths:" not in push, "the image carries the whole tree, so every merge to main is a build"

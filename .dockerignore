@@ -1,21 +1,46 @@
-# The build context is 1.2 GB without this, and almost none of it is source.
+# The image carries the build (tracked files) and never the state or a credential.
+# Mirrors .gitignore's state and secret entries; CI builds from a clean checkout, a laptop
+# build must not smuggle the founder's sessions or tokens into a public registry.
 .git
-.venv
+.venv/
+hermes-agent/
+hermes-agent-self-evolution/
+.env
+.env.*
+!.env.example
+auth.json
+auth.lock
+state.db
+state.db-*
+kanban.db
+kanban.db-*
+verification_evidence.db
+sessions/
+sandboxes/
+memories/
+hindsight/
+cache/
+audio_cache/
+image_cache/
+backups/
+logs/
+pairing/
+pending_messages/
+terminal-sessions/
+cron/jobs.json
+cron/.jobs.lock
+gateway.pid
+gateway.lock
+gateway_state.json
+processes.json
+models_dev_cache.*
 node_modules
-audio_cache
-image_cache
-cache
 models
-backups
-logs
 *.db
 *.db-wal
 *.db-shm
 *.lock
-__pycache__
-**/__pycache__
+__pycache__/
 *.pyc
 .pytest_cache
 .ruff_cache
-auth.json
-.env
