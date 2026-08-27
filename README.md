@@ -265,6 +265,7 @@ are tracked, so what you see below is the source they come from.
 | `.estate/public-ciphertext-ok` | Records that committing age ciphertext to a public remote is deliberate, names what is committed and what opens it, and states the cost accepted: a public git object is permanent, so the credential inside is treated as rotatable. |
 | `.gitignore` | What must never be committed: the generated files, the agent's runtime state, and `.env`. Most of its lines were added after a `git add -A` swept live state into a commit. |
 | `PINNED_VERSION` | The Hermes tag and commit this estate is known to work on. `bin/verify` fails when the running agent is a different commit, so an upgrade cannot happen by accident. |
+| `CODEOWNERS` | Every top-level directory names the founder as reviewer, so a pull request touching any of them cannot merge without a review request going to him (crew#88). Generated from `git ls-tree`, one row per directory; a new directory without a row turns the crew#88 count red. |
 | `DECISIONS.md` | Rulings that outlive the pull request that caused them. A decision here is binding until a later entry overrides it, so nobody relitigates one in a review. |
 | `README.md` | This file. `bin/check-readme.py` fails the build when it stops describing what the repo ships. |
 | `SOUL.md` | The agent's base identity, read before anything else on every run. It is upstream Hermes text and is deliberately not estate-specific. |
