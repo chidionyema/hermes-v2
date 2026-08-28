@@ -302,6 +302,11 @@ if ./bin/verify; then
       ./bin/hermes auth login        # only if you skipped the API key
       ./bin/hermes gateway install
 
+  Only with a Telegram bot token of this estate's own. One token admits exactly one
+  poller: run this against a token a cluster gateway already holds and it does not
+  add a second listener, it takes the token away, and the pod that can answer goes
+  deaf while still reporting Ready (crew#516).
+
   Then watch what it costs:
 
       ./bin/cost-report.sh

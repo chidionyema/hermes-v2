@@ -164,20 +164,21 @@ fi
 JOBS="$(./bin/hermes cron list 2>/dev/null | grep -cE '^  [0-9a-f]{12} \[')"
 [ "${JOBS:-0}" -gt 0 ]; row "cron jobs installed" "$?" "${JOBS:-0} jobs"
 
-# 10. is anything actually running?
-# Ask the scheduler, not `cron list`. Reading it off cron list was wrong: with
-# no jobs installed that command prints no warning at all, and the absence of a
-# warning was reported as "the gateway is running - jobs fire on schedule".
-# `cron status` answers the question that matters, which is whether the ticker
-# is alive, not whether a process exists.
+# 10. is a gateway ticker alive ON THIS MAC? It must not be.
+# This row used to read the other way round: a live local ticker was PASS and a
+# dead one printed `start it: ./bin/hermes gateway install`. That line is how the
+# second poller kept coming back (crew#516). One bot token admits one poller, so a
+# ticker started here does not join the cluster's gateway -- it takes the token off
+# it, and the pod that can actually answer goes deaf while still reporting Ready.
+# The ticker's home is Deployment hermes-agent-gateway in namespace hermes-agent.
 CRON_STATUS="$(./bin/hermes cron status 2>&1)"
 case "$CRON_STATUS" in
   *"cron jobs will fire automatically"*)
-    row "the gateway is running" 0 "cron ticker alive" ;;
+    row "no gateway ticker on this Mac" 1 "a gateway is alive here and holds the bot token; stop it: launchctl bootout gui/$(id -u)/<label> (launchctl list | grep gateway)" ;;
   *STALLED*)
-    row "the cron ticker is stalled" 1 "gateway up, jobs not firing: ./bin/hermes gateway restart" ;;
+    row "no gateway ticker on this Mac" 1 "a half-dead gateway is still installed here; stop it: launchctl bootout gui/$(id -u)/<label> (launchctl list | grep gateway)" ;;
   *)
-    printf '  \033[33mIDLE\033[0m  %-34s %s\n' "the gateway is not running" "start it: ./bin/hermes gateway install" ;;
+    row "no gateway ticker on this Mac" 0 "the ticker runs in deploy/hermes-agent-gateway, ns hermes-agent" ;;
 esac
 
 # 11. can the agent actually reach the founder?

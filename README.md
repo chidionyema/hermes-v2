@@ -57,6 +57,12 @@ Nothing is scheduled until you say so. When you are ready:
 ./bin/hermes gateway install
 ```
 
+> Only on a **new** estate, with a Telegram bot token of its own. One token admits
+> exactly one poller, so running this against a token a cluster gateway already holds
+> does not add a second listener -- it takes the token away, and the pod that can
+> answer goes deaf while still reporting Ready (crew#516). This estate's gateway runs
+> as Deployment `hermes-agent-gateway` in namespace `hermes-agent`.
+
 ---
 
 ## What you get
@@ -503,6 +509,12 @@ After `./install`, nothing is running yet. Two commands start it:
 ./bin/hermes gateway install   # installs the background scheduler and starts it
 ```
 
+> Only on a **new** estate, with a Telegram bot token of its own. One token admits
+> exactly one poller, so running this against a token a cluster gateway already holds
+> does not add a second listener -- it takes the token away, and the pod that can
+> answer goes deaf while still reporting Ready (crew#516). This estate's gateway runs
+> as Deployment `hermes-agent-gateway` in namespace `hermes-agent`.
+
 From then on the jobs fire on their own. Day to day:
 
 | | |
@@ -595,7 +607,7 @@ command you can run.
         web     200   answering            https://acme.example.com/
   PASS  every service answers
   PASS  cron jobs installed                5 jobs
-  IDLE  the gateway is not running         start it: ./bin/hermes gateway install
+  PASS  no gateway ticker on this Mac      the ticker runs in deploy/hermes-agent-gateway, ns hermes-agent
 
   14 passed, 0 failed
 ```
@@ -636,8 +648,14 @@ as down. If you get `000`, the host does not resolve — check the URL in
 directly. Move the edit into the matching file under `templates/` and run
 `bin/render`.
 
-**Jobs never fire.** The gateway is not running. `./bin/hermes cron list` says
-so at the bottom. Start it with `./bin/hermes gateway install`.
+**Jobs never fire.** The ticker is not alive. On this estate the ticker is not on
+the laptop -- it is Deployment `hermes-agent-gateway` in namespace `hermes-agent`,
+delivered by Flux from `idp/platform/hermes-agent`. Read it with
+`bin/idp-kube -n hermes-agent logs deploy/hermes-agent-gateway`, and change what it
+runs by committing to that path. Do not start one here: one Telegram token admits
+exactly one poller, so a gateway started on this Mac does not join the cluster's --
+it takes the token off it, and the pod that can answer goes deaf while still
+reporting Ready (crew#516, 8h45m of silence).
 
 **The agent talks to the wrong estate.** You used bare `hermes` instead of
 `./bin/hermes`.

@@ -94,3 +94,52 @@ def test_no_document_hands_a_session_the_command_that_revives_it():
             if starts.search(line) and "gateway" in line:
                 offenders.append(f"{path.relative_to(ROOT)}: {line.strip()}")
     assert not offenders, "\n".join(offenders)
+
+
+# Every file a session actually walks: the docs, plus the two executables that print
+# instructions to a human. `bin/verify` is in here because row 10 printed
+# `start it: ./bin/hermes gateway install` on an IDLE row -- the verifier itself was
+# handing out the revival command while rows 12/12b were refusing it.
+WALKED = ("docs/**/*.md",)
+WALKED_FILES = ("SOUL.md", "README.md", "install", "bin/teardown", "bin/verify")
+
+# `hermes` as the program token, `gateway <verb>` as its arguments -- the same shape
+# rule second_telegram_poller refuses in claude-guards, so the two halves agree.
+CLI_START = re.compile(
+    r"(?:^|[\s;&|(`])(?:[\w./-]*/)?hermes(?:_cli(?:\.main)?)?"
+    r"(?:\s+-{1,2}[\w-]+(?:=\S+)?)*\s+gateway\s+(?:run|install|start|restart)\b"
+)
+ONE_TOKEN = ("one poller", "one telegram token", "one token")
+
+
+def _walked_paths():
+    out = []
+    for pat in WALKED:
+        out += sorted(ROOT.glob(pat))
+    out += [ROOT / f for f in WALKED_FILES]
+    return [p for p in out if p.is_file()]
+
+
+def test_a_start_command_never_stands_without_the_one_token_rule_beside_it():
+    """The first version of this incident test only knew `launchctl bootstrap`. It passed while
+    `bin/verify` row 10, `bin/teardown`, the installer and the README were all still printing
+    `./bin/hermes gateway install` -- the shape the next session was actually going to copy.
+
+    Deleting the command outright is wrong: on a NEW estate with a bot token of its own it is the
+    correct instruction. What must never happen is that it stands alone. Every place that prints
+    it has to say, within sight, that one token admits one poller."""
+    offenders = []
+    for path in _walked_paths():
+        lines = path.read_text(errors="ignore").splitlines()
+        for i, line in enumerate(lines):
+            if line.lstrip().startswith("#") or not CLI_START.search(line):
+                continue
+            # Normalised: the warning is prose and wraps, so "exactly one\n  poller" has to
+            # count, and so does a capitalised "One token" at the start of a sentence.
+            window = " ".join(" ".join(lines[max(0, i - 8): i + 9]).split()).lower()
+            if not any(k in window for k in ONE_TOKEN):
+                offenders.append(f"{path.relative_to(ROOT)}:{i + 1}: {line.strip()}")
+    assert not offenders, (
+        "a gateway-start command with no one-token warning within 8 lines:\n"
+        + "\n".join(offenders)
+    )

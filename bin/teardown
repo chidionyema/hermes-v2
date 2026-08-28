@@ -49,7 +49,7 @@ if [ "$ALL" = 1 ]; then
   echo "  Reinstall any time with: ./install"
 else
   say "The agent itself is still installed"
-  echo "    Start it again with:  ./bin/hermes gateway install"
+  echo "    Its ticker runs in the cluster, not here: deploy/hermes-agent-gateway, ns hermes-agent"
   echo "    Remove it fully with: bin/teardown --all"
 fi
 echo
