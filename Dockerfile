@@ -29,7 +29,14 @@ WORKDIR /app/hermes-agent
 # Dependency layer already present from the clone above; sync installs it. Telegram is the
 # `messaging` extra, not a base dependency (pyproject: python-telegram-bot under [messaging]); a
 # sync without it boots a gateway that cannot open the founder's chat. `hindsight` is the memory
-# client (config.yaml memory.provider: hindsight); `otlp` is the trace exporter (LAW 50).
+# client (config.yaml memory.provider: hindsight); `otlp` is the trace exporter (LAW 50);
+# `anthropic` is the SDK config.yaml model.provider names. Its absence is what made the cluster
+# gateway a green pod that serves nobody: 1/1 Ready, Telegram polling, and every DM answered
+# with `ImportError: The 'anthropic' package is required for the Anthropic provider` from
+# anthropic_adapter.py:866 (2026-08-28 06:32Z, 07:37Z, 07:39Z; run 33154124789 read it out of
+# the pod). Third instance of one mistake, so the rule replaces the list: every provider
+# config.yaml selects has its extra here, and the test derives that from config.yaml rather
+# than repeating a hand-written set that the next selection will again fall out of.
 # uv sync runs as root and installs the managed CPython the fork pins under
 # $HOME/.local/share/uv/python, i.e. /root (0700). The pod runs as 10001 with a read-only root
 # filesystem, so .venv/bin/python -> /root/... was "Permission denied" at entrypoint.sh:52 and the
@@ -37,7 +44,7 @@ WORKDIR /app/hermes-agent
 # `crane export --platform linux/arm64 ... | tar -tv`). The interpreter lives in a world-readable
 # directory instead.
 ENV UV_PYTHON_INSTALL_DIR=/opt/uv/python
-RUN uv sync --frozen --no-dev --extra messaging --extra hindsight --extra otlp \
+RUN uv sync --frozen --no-dev --extra messaging --extra hindsight --extra otlp --extra anthropic \
     && chmod -R a+rX /opt/uv \
     && test -x "$(readlink -f .venv/bin/python)" \
     && case "$(readlink -f .venv/bin/python)" in /root/*) echo "python under /root" >&2; exit 1;; esac
