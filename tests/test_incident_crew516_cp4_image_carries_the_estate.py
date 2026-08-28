@@ -10,11 +10,15 @@ import os
 import re
 import subprocess
 
+import pytest
+import yaml
+
 HOME = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DOCKERFILE = os.path.join(HOME, "Dockerfile")
 ENTRYPOINT = os.path.join(HOME, "deploy", "k8s", "entrypoint.sh")
 WORKFLOW = os.path.join(HOME, ".github", "workflows", "build-agent-image.yml")
 DOCKERIGNORE = os.path.join(HOME, ".dockerignore")
+CONFIG = os.path.join(HOME, "config.yaml")
 
 
 def image_carries_the_estate(dockerfile_text):
@@ -111,11 +115,104 @@ def test_entrypoint_exports_file_mounted_secrets(tmp_path):
     assert r.returncode == 0 and r.stdout == "t0k0\n", r
 
 
-def test_image_syncs_the_messaging_extra():
-    """python-telegram-bot is an extra; a sync without it is a gateway with no Telegram."""
+# A provider name -> the extra that ships its SDK. `None` means the call leaves through an
+# OpenAI-compatible aggregator (the estate router at llm.mumchimp.com, OpenRouter) and needs no
+# vendor SDK at all. Every name here is an extra that exists in the fork's pyproject
+# [project.optional-dependencies]; a selection this table does not know fails the test rather than
+# passing quietly, because a silent miss is how `anthropic` was absent for 15 hours.
+PROVIDER_EXTRA = {
+    "anthropic": "anthropic",
+    "bedrock": "bedrock",
+    "vertex": "vertex",
+    "mistral": "mistral",
+    "google": "google",
+    "hindsight": "hindsight",
+    "custom": None,
+    "openrouter": None,
+    "openai": None,
+    "litellm": None,
+    "local": None,
+}
+
+# A configured chat platform -> the extra that ships its client library.
+PLATFORM_EXTRA = {
+    "telegram": "messaging",
+    "discord": "messaging",
+    "slack": "messaging",
+    "matrix": "matrix",
+    "a2a": None,   # in-tree adapter
+    "cli": None,
+}
+
+
+def _providers(node):
+    """Every `provider:` selection in config.yaml, at any depth (model, aux, memory, fallbacks)."""
+    if isinstance(node, dict):
+        for k, v in node.items():
+            if k == "provider" and isinstance(v, str):
+                yield v
+            else:
+                yield from _providers(v)
+    elif isinstance(node, list):
+        for v in node:
+            yield from _providers(v)
+
+
+def required_extras(config_text):
+    """What the estate's own config.yaml obliges the image to install. Raises on a selection the
+    table does not cover: an unknown provider is an unanswerable question, never a pass."""
+    cfg = yaml.safe_load(config_text) or {}
+    needed = {"otlp"}   # LAW 50: every workload emits, whatever it is configured to talk to
+    for name in _providers(cfg):
+        if name not in PROVIDER_EXTRA:
+            raise AssertionError(
+                f"config.yaml selects provider {name!r} and PROVIDER_EXTRA does not know it: "
+                "add it with its extra, or with None if it needs no vendor SDK")
+        if PROVIDER_EXTRA[name]:
+            needed.add(PROVIDER_EXTRA[name])
+    for name in (cfg.get("platforms") or {}):
+        if name not in PLATFORM_EXTRA:
+            raise AssertionError(f"config.yaml enables platform {name!r} and PLATFORM_EXTRA does not know it")
+        if PLATFORM_EXTRA[name]:
+            needed.add(PLATFORM_EXTRA[name])
+    return needed
+
+
+def missing_extras(config_text, dockerfile_text):
+    m = re.search(r"^RUN uv sync .*$", dockerfile_text, re.M)
+    assert m, "the uv sync line moved"
+    line = m.group(0)
+    return sorted(e for e in required_extras(config_text) if f"--extra {e}" not in line)
+
+
+def test_the_image_installs_an_extra_for_every_provider_the_estate_config_selects():
+    """2026-08-28: config.yaml said `model.provider: anthropic`, the sync installed messaging,
+    hindsight and otlp, and the pod answered every Telegram DM with `ImportError: The 'anthropic'
+    package is required for the Anthropic provider` while reading 1/1 Ready (run 33154124789).
+    The list is derived here, so the next provider the founder picks cannot be forgotten."""
+    assert missing_extras(open(CONFIG).read(), open(DOCKERFILE).read()) == []
+
+
+def test_a_sync_that_drops_the_provider_sdk_is_refused():
+    """Rung 4 the other way: the exact line that was on main fails against the same config."""
     text = open(DOCKERFILE).read()
-    m = re.search(r"^RUN uv sync .*$", text, re.M)
-    assert m and "--extra messaging" in m.group(0) and "--extra hindsight" in m.group(0), m and m.group(0)
+    assert missing_extras(open(CONFIG).read(), text.replace(" --extra anthropic", "")) == ["anthropic"]
+    assert missing_extras(open(CONFIG).read(), text.replace(" --extra messaging", "")) == ["messaging"]
+    assert missing_extras(open(CONFIG).read(), text.replace(" --extra otlp", "")) == ["otlp"]
+
+
+def test_a_provider_the_table_does_not_know_fails_instead_of_passing():
+    """The mistake this file exists to stop is a quiet miss, so an unmapped selection is an error."""
+    with pytest.raises(AssertionError, match="does not know it"):
+        required_extras("model:\n  provider: some-new-vendor\n")
+    with pytest.raises(AssertionError, match="does not know it"):
+        required_extras("platforms:\n  whatsapp: {}\n")
+
+
+def test_an_aggregator_needs_no_vendor_sdk():
+    """The router at llm.mumchimp.com is OpenAI-compatible: routing through it must not demand an
+    extra, or the model-agnostic path would be the one the image cannot build."""
+    assert required_extras("model:\n  provider: custom\n  base_url: https://llm.mumchimp.com/v1\n") == {"otlp"}
 
 
 def test_dockerignore_keeps_state_and_credentials_out():
