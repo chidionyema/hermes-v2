@@ -200,53 +200,62 @@ else
   row "every job reaches the founder" 1 "delivers to nobody: $LOCAL"
 fi
 
-# 12. is launchd running the plist that is on disk?
+# 12. is launchd running the plists that are on disk?
 # launchctl runs the definition it loaded at bootstrap, not the file. Edit the
 # plist without a bootout/bootstrap and the job keeps running the old one,
 # reports last-exit 0, and does nothing you asked for. A peer found eleven jobs
-# in that state today. This compares the loaded ProgramArguments against the
-# file and fails when they have drifted apart.
-LABEL="ai.architect.gateway"
-PLIST="$HOME/Library/LaunchAgents/$LABEL.plist"
-if [ ! -f "$PLIST" ]; then
-  row "launchd runs the plist on disk" 1 "no plist at $PLIST"
-elif ! launchctl print "gui/$(id -u)/$LABEL" >/dev/null 2>&1; then
-  row "launchd runs the plist on disk" 1 "$LABEL is not loaded"
-else
+# in that state today.
+#
+# Until 2026-08-28 this compared exactly one label, and that label was the Mac
+# gateway -- which row 12b now retires, while the seven other jobs on this
+# machine were never compared at all. It reads every loaded label that has a
+# plist in ~/Library/LaunchAgents, which is the thing the incident was about.
+DRIFTED=""
+for PLIST in "$HOME"/Library/LaunchAgents/*.plist; do
+  [ -f "$PLIST" ] || continue
+  L="$(basename "$PLIST" .plist)"
+  launchctl print "gui/$(id -u)/$L" >/dev/null 2>&1 || continue
   ON_DISK="$("$PY" -c 'import plistlib,sys
-print(chr(10).join(plistlib.load(open(sys.argv[1],"rb"))["ProgramArguments"]))' "$PLIST" 2>/dev/null)"
-  LOADED="$(launchctl print "gui/$(id -u)/$LABEL" 2>/dev/null \
+print(chr(10).join(plistlib.load(open(sys.argv[1],"rb")).get("ProgramArguments",[])))' "$PLIST" 2>/dev/null)"
+  LOADED="$(launchctl print "gui/$(id -u)/$L" 2>/dev/null \
     | awk '/arguments = \{/{f=1;next} f&&/^[[:space:]]*\}/{exit} f' \
     | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
-  if [ "$ON_DISK" = "$LOADED" ]; then
-    row "launchd runs the plist on disk" 0 "loaded definition matches the file"
-  else
-    row "launchd runs the plist on disk" 1 "loaded definition has drifted from $PLIST"
-  fi
+  [ "$ON_DISK" = "$LOADED" ] || DRIFTED="$DRIFTED $L"
+done
+if [ -z "$DRIFTED" ]; then
+  row "launchd runs the plists on disk" 0 "every loaded label matches its file"
+else
+  row "launchd runs the plists on disk" 1 "loaded definition has drifted from the file:$DRIFTED"
 fi
 
-# 12b. is the gateway supervised by exactly one launchd label?
+# 12b. does this Mac run a Telegram gateway at all? It must not.
 # crew#284, 2026-08-27 00:4xZ: ai.hermes.gateway was retired (its plist stayed in
 # ~/Library/LaunchAgents) and a session ran `launchctl load -w` on it. Two
 # KeepAlive labels then ran the same `gateway run --replace` and killed each other
 # every ~10s for six minutes; the founder's /sb-list hit a gateway mid-restart.
-# A retired plist on disk is a loaded gun; this row fails on the file as well
-# as on the label. Retired set matches RETIRED in
-# ~/.claude/scripts/test_incident_crew13_no_job_names_hermes_home.py.
-RETIRED_LABELS="ai.hermes.gateway"
+#
+# crew#516, 2026-08-28: the gateway moved to the cluster (platform/hermes-agent),
+# and one token admits exactly one poller -- so a gateway on this Mac is no longer
+# a duplicate label, it is a second poller stealing the founder's bot from the pod
+# that is meant to answer him. That is what happened for 8h45m on 2026-08-27/28,
+# and re-bootstrapping the Mac plist is how it happened: this row used to FAIL
+# when the plist was ABSENT, so every session that ran bin/verify was told the
+# machine was broken and repaired it by putting the second poller back.
+#
+# So the row is inverted, and both labels are retired. Zero loaded, zero plists
+# on disk. A plist in ~/Library/LaunchAgents is a loaded gun whether or not
+# anything has loaded it.
+RETIRED_LABELS="ai.architect.gateway ai.hermes.gateway"
 GATEWAY_LABELS="$(launchctl list 2>/dev/null | awk '$3 ~ /gateway/ && $1 != "-" {print $3}')"
-LOADED_N="$(printf '%s\n' "$GATEWAY_LABELS" | grep -c . || true)"
+LOADED_LIST="$(printf '%s' "$GATEWAY_LABELS" | tr '\n' ' ' | sed 's/ *$//')"
 RETIRED_ON_DISK=""
 for L in $RETIRED_LABELS; do
   [ -f "$HOME/Library/LaunchAgents/$L.plist" ] && RETIRED_ON_DISK="$RETIRED_ON_DISK $L"
-  printf '%s\n' "$GATEWAY_LABELS" | grep -qx "$L" && LOADED_N=99
 done
-if [ "$LOADED_N" = 1 ] && [ -z "$RETIRED_ON_DISK" ]; then
-  row "one launchd label runs the gateway" 0 "$GATEWAY_LABELS"
-elif [ "$LOADED_N" = 0 ]; then
-  row "one launchd label runs the gateway" 1 "no gateway label is loaded"
+if [ -z "$LOADED_LIST" ] && [ -z "$RETIRED_ON_DISK" ]; then
+  row "the Mac does not run the gateway" 0 "no gateway label loaded, no retired plist on disk"
 else
-  row "one launchd label runs the gateway" 1 "loaded: $(printf '%s' "$GATEWAY_LABELS" | tr '\n' ' ')| retired plist on disk:${RETIRED_ON_DISK:- none}"
+  row "the Mac does not run the gateway" 1 "loaded: ${LOADED_LIST:-none} | retired plist on disk:${RETIRED_ON_DISK:- none}"
 fi
 
 # 13. does the agent get all of the laws, or only some of them?

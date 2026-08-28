@@ -27,29 +27,24 @@ It changes nothing on its own except its own logs and the queue of jobs it is du
 
 ## Where it lives
 
-The code is at `~/dev/code/hermes-v2`. It runs under launchd as `ai.architect.gateway`, defined by
-`~/Library/LaunchAgents/ai.architect.gateway.plist`. Logs are in `logs/agent.log` next to the code.
-There is an older label called `ai.hermes.gateway` from the retired estate, and it must stay
-unloaded; if you ever see both running, they will fight over the same Telegram token and one of them
-will go deaf.
+It runs in the cluster, not on your laptop: Deployment `hermes-agent-gateway` in namespace
+`hermes-agent` on OKE, delivered by Flux from `idp/platform/hermes-agent`. The bot token reaches it
+from the OCI vault through the External Secrets operator, and Reloader rolls the pod when that entry
+changes. The code is at `~/dev/code/hermes-v2` and the image is built from it by CI.
 
-## How to turn it off
+It used to run on this Mac under launchd as `ai.architect.gateway`, and that label is retired along
+with its predecessor `ai.hermes.gateway`. Neither plist belongs in `~/Library/LaunchAgents` any
+more: one Telegram token admits exactly one poller, so a gateway started here does not join the one
+in the cluster, it takes the founder's bot away from it and the cluster pod goes deaf while looking
+perfectly healthy. `./bin/verify` fails if either plist is on disk, loaded or not.
 
-```
-launchctl bootout gui/$(id -u)/ai.architect.gateway
-```
+## How to turn it off, and back on
 
-It stops immediately and stays stopped across a reboot. Nothing else on the estate depends on it
-being up, so nothing else breaks when you do this. You stop getting messages, which is the point.
-
-## How to turn it back on
-
-```
-launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/ai.architect.gateway.plist
-```
-
-Then confirm it came back with `cd ~/dev/code/hermes-v2 && ./bin/verify`, which should print
-`17 passed, 0 failed`.
+Not from here. It is a workload, so it goes up and down the way every workload on this estate does:
+a commit to `idp/platform/hermes-agent` that Flux applies within its 10-minute reconcile, or a
+break-glass run of `oke-check.yml` if it is an incident. There is deliberately no command in this
+document that starts a gateway on this Mac -- printing one is how the second poller kept coming
+back (crew#516).
 
 ## What goes wrong
 
