@@ -4,7 +4,7 @@ FROM python:3.12-slim AS base
 # Entry point matches ai.architect.gateway.plist exactly: `python -m hermes_cli.main gateway run`.
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    git curl ca-certificates \
+    git curl ca-certificates openssh-client netcat-openbsd \
     && rm -rf /var/lib/apt/lists/*
 
 RUN pip install --no-cache-dir uv==0.12.5
