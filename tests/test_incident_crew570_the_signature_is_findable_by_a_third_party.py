@@ -29,6 +29,7 @@ work with the same tool that produced it. cosign wrote a format only cosign coul
 then cosign found it, and the run went green. Every check below either pins the format
 a third party reads, or forces a non-cosign witness.
 """
+
 import pathlib
 import re
 
@@ -53,7 +54,14 @@ def _run_scripts():
                 continue
             for step in job.get("steps") or []:
                 if isinstance(step, dict) and isinstance(step.get("run"), str):
-                    out.append((wf.name, job_name, step.get("name") or "<unnamed>", step["run"]))
+                    out.append(
+                        (
+                            wf.name,
+                            job_name,
+                            step.get("name") or "<unnamed>",
+                            step["run"],
+                        )
+                    )
     return out
 
 
@@ -129,11 +137,15 @@ def test_a_non_cosign_witness_proves_the_signature_landed():
         # assignments before looking, or the check only passes on one exact spelling.
         holders = {
             m.group(1)
-            for m in re.finditer(r"^\s*([A-Za-z_][A-Za-z0-9_]*)=.*\.sig", body, flags=re.M)
+            for m in re.finditer(
+                r"^\s*([A-Za-z_][A-Za-z0-9_]*)=.*\.sig", body, flags=re.M
+            )
         }
         names = "|".join(sorted(holders)) or "\0"
         witness = re.search(
-            rf"^\s*(docker|crane|oras|curl)\b.*(\.sig|\$\{{?({names})\b)", body, flags=re.M
+            rf"^\s*(docker|crane|oras|curl)\b.*(\.sig|\$\{{?({names})\b)",
+            body,
+            flags=re.M,
         )
         assert witness, (
             f"{wf}:{job}:{step}: the `.sig` tag is named but only cosign ever looks at it. "
@@ -146,11 +158,15 @@ def test_the_cosign_version_is_pinned_by_digest():
     stays pinned to a commit sha so the next flip is a diff, not a surprise."""
     pinned = []
     for wf in WORKFLOWS:
-        for m in re.finditer(r"uses:\s*(sigstore/cosign-installer@\S+)", wf.read_text()):
+        for m in re.finditer(
+            r"uses:\s*(sigstore/cosign-installer@\S+)", wf.read_text()
+        ):
             pinned.append((wf.name, m.group(1)))
     assert pinned, "no cosign-installer step found"
     for wf, ref in pinned:
-        assert re.search(r"@[0-9a-f]{40}$", ref), f"{wf}: {ref} is not pinned to a commit sha"
+        assert re.search(r"@[0-9a-f]{40}$", ref), (
+            f"{wf}: {ref} is not pinned to a commit sha"
+        )
 
 
 def test_the_printed_repro_command_still_works():

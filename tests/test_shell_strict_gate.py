@@ -1,6 +1,7 @@
 """crew#620 CP3: bin/shell-strict must refuse every one of the four rules
 individually (shellcheck, shfmt, strict mode, trap) and must pass a clean
 file. The workflow must actually run the gate it names."""
+
 import os
 import shutil
 import subprocess
@@ -14,7 +15,9 @@ ROOT = GATE.parents[1]
 GATES_YML = ROOT / ".github" / "workflows" / "gates.yml"
 
 HAS_SHELLCHECK = shutil.which("shellcheck") is not None
-HAS_SHFMT = shutil.which("shfmt") is not None or (Path.home() / "go" / "bin" / "shfmt").exists()
+HAS_SHFMT = (
+    shutil.which("shfmt") is not None or (Path.home() / "go" / "bin" / "shfmt").exists()
+)
 
 # shfmt's default indent is a tab, not two spaces -- these fixtures use a real
 # tab (\t) inside the function bodies so a *correctly formatted* file is the
@@ -25,7 +28,7 @@ CLEAN = (
     "set -euo pipefail\n"
     "\n"
     "on_exit() {\n"
-    '\tlocal ec=$?\n'
+    "\tlocal ec=$?\n"
     '\t[ "$ec" -eq 0 ] || echo "  (exit $ec)" >&2\n'
     "}\n"
     "trap on_exit EXIT\n"
@@ -56,7 +59,9 @@ def write(root, name, text):
     return f
 
 
-@pytest.mark.skipif(not (HAS_SHELLCHECK and HAS_SHFMT), reason="shellcheck/shfmt not on this machine")
+@pytest.mark.skipif(
+    not (HAS_SHELLCHECK and HAS_SHFMT), reason="shellcheck/shfmt not on this machine"
+)
 def test_clean_file_passes(tmp_path):
     write(tmp_path, "ok.sh", CLEAN)
     r = run(tmp_path)
@@ -64,7 +69,9 @@ def test_clean_file_passes(tmp_path):
     assert r.stdout == ""
 
 
-@pytest.mark.skipif(not (HAS_SHELLCHECK and HAS_SHFMT), reason="shellcheck/shfmt not on this machine")
+@pytest.mark.skipif(
+    not (HAS_SHELLCHECK and HAS_SHFMT), reason="shellcheck/shfmt not on this machine"
+)
 def test_missing_strict_mode_is_refused(tmp_path):
     text = CLEAN.replace("set -euo pipefail\n", "")
     write(tmp_path, "nostrict.sh", text)
@@ -73,9 +80,11 @@ def test_missing_strict_mode_is_refused(tmp_path):
     assert "nostrict.sh: missing set -euo pipefail" in r.stdout, r.stdout
 
 
-@pytest.mark.skipif(not (HAS_SHELLCHECK and HAS_SHFMT), reason="shellcheck/shfmt not on this machine")
+@pytest.mark.skipif(
+    not (HAS_SHELLCHECK and HAS_SHFMT), reason="shellcheck/shfmt not on this machine"
+)
 def test_missing_trap_is_refused(tmp_path):
-    text = "#!/usr/bin/env bash\nset -euo pipefail\n\necho \"hello\"\n"
+    text = '#!/usr/bin/env bash\nset -euo pipefail\n\necho "hello"\n'
     write(tmp_path, "notrap.sh", text)
     r = run(tmp_path)
     assert r.returncode == 1
@@ -99,7 +108,7 @@ def test_shellcheck_warning_is_refused(tmp_path):
 def test_shfmt_diff_is_refused(tmp_path):
     # Same file, but the function body uses 4 spaces instead of the tab shfmt
     # wants -- shellcheck stays clean, only formatting is wrong.
-    text = CLEAN.replace('\tlocal ec=$?\n', '    local ec=$?\n').replace(
+    text = CLEAN.replace("\tlocal ec=$?\n", "    local ec=$?\n").replace(
         '\t[ "$ec" -eq 0 ]', '    [ "$ec" -eq 0 ]'
     )
     write(tmp_path, "fmt.sh", text)
@@ -108,7 +117,9 @@ def test_shfmt_diff_is_refused(tmp_path):
     assert "fmt.sh: shfmt -d is not clean" in r.stdout, r.stdout
 
 
-@pytest.mark.skipif(not (HAS_SHELLCHECK and HAS_SHFMT), reason="shellcheck/shfmt not on this machine")
+@pytest.mark.skipif(
+    not (HAS_SHELLCHECK and HAS_SHFMT), reason="shellcheck/shfmt not on this machine"
+)
 def test_verify_and_verify_consult_are_exempt_from_dash_e_only(tmp_path):
     """The exemption is by exact relative path, not a blanket free pass: it waives
     only rule 3's -e half, and only for these two names (bin/verify,
@@ -120,7 +131,9 @@ def test_verify_and_verify_consult_are_exempt_from_dash_e_only(tmp_path):
     assert r.returncode == 0, r.stdout
 
 
-@pytest.mark.skipif(not (HAS_SHELLCHECK and HAS_SHFMT), reason="shellcheck/shfmt not on this machine")
+@pytest.mark.skipif(
+    not (HAS_SHELLCHECK and HAS_SHFMT), reason="shellcheck/shfmt not on this machine"
+)
 def test_a_different_file_without_dash_e_is_not_exempt(tmp_path):
     """Same set -uo pipefail body, different path -- the exemption is by name,
     not by content, so this one must still be refused."""

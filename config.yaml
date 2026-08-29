@@ -1,6 +1,10 @@
 model:
-  provider: anthropic
-  default: claude-sonnet-5
+  # crew#568 Phase 5: the primary model is the router's claude lane on a router key, never a
+  # vendor key (LAW 34). The router owns the vendor credential and the spend ledger.
+  provider: custom
+  default: claude
+  base_url: https://llm.mumchimp.com/v1
+  key_env: LITELLM_API_KEY
 fallback_providers:
   # crew#506 CP1 (2026-08-27): one hop, and the router owns the chain behind it. The estate
   # router (idp#409, live 16:20Z) falls minimax -> deepseek itself and refuses an oversized
@@ -46,8 +50,10 @@ command_allowlist:
   - execute_code
 _config_version: 38
 aux:
-  model: claude-sonnet-5
-  provider: anthropic
+  model: claude-fast
+  provider: custom
+  base_url: https://llm.mumchimp.com/v1
+  key_env: LITELLM_API_KEY
 limits:
   max_cost_usd_per_task: 5
   budget_hard_stop: true
