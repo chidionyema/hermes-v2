@@ -2,6 +2,11 @@
 # Append one tool call to the audit log outside the estate.
 # Usage: bin/audit-append.sh <profile> <tool> <one-line summary>
 set -euo pipefail
+on_exit() {
+	local ec=$?
+	[ "$ec" -eq 0 ] || echo "  (exit $ec)" >&2
+}
+trap on_exit EXIT
 # Derived from this script's own location, never from a path typed twice. The
 # hardcoded $HOME/Documents/code here was stale from the day DECISIONS.md ruled
 # that every repo lives under ~/dev/code, and it disagreed with the requirement
@@ -15,7 +20,7 @@ mkdir -p "$DIR"
 # and a raised securelevel, which this machine does not run. What it does buy is
 # that a truncation or an in-place edit fails loudly instead of succeeding.
 if [ ! -e "$LOG" ]; then
-  : > "$LOG"
-  chflags uappnd "$LOG" 2>/dev/null || true
+	: >"$LOG"
+	chflags uappnd "$LOG" 2>/dev/null || true
 fi
-printf '%s\t%s\t%s\t%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "${1:-?}" "${2:-?}" "${3:-}" >> "$LOG"
+printf '%s\t%s\t%s\t%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "${1:-?}" "${2:-?}" "${3:-}" >>"$LOG"

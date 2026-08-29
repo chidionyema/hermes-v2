@@ -78,3 +78,26 @@ jobs:
       # runner, and SKIP is a result. Everything else must pass.
       - name: crew incident tests
         run: python -m pytest -q -rs tests/test_incident_crew182_phone_flow.py
+
+  # crew#620 CP3: strict shell practice, estate-wide, immediate effect. Every
+  # *.sh/*.bash file (or a file whose first line is an sh/bash shebang) must
+  # pass shellcheck -S warning, be shfmt -d clean, carry set -euo pipefail
+  # (or the documented bin/verify / bin/verify-consult exemption) and a trap.
+  # ubuntu-latest ships shellcheck already; shfmt does not, so it is pulled
+  # from the pinned GitHub release binary below, retried against a flaky
+  # network rather than failing the whole gate on one dropped connection.
+  shell-strict:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: install shfmt v3.10.0 (pinned, matches what was verified locally)
+        run: |
+          curl --retry 5 --retry-connrefused -fsSL \
+            -o /usr/local/bin/shfmt \
+            https://github.com/mvdan/sh/releases/download/v3.10.0/shfmt_v3.10.0_linux_amd64
+          chmod +x /usr/local/bin/shfmt
+          shfmt --version
+
+      - name: shell-strict (shellcheck, shfmt, strict mode, trap)
+        run: python3 bin/shell-strict .
