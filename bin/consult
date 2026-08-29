@@ -1,32 +1,32 @@
 #!/usr/bin/env python3
-"""Ask a different model a question, from inside a lane, without waking anyone.
+"""Ask another model a question, from inside a lane, without waking anyone.
 
 An agent that is stuck has two bad options: guess, or stop and wait for the
-founder. This is the third. It sends the question to a consult service running
-outside this repo, gets an answer back, and the lane carries on.
+founder. This is the third. It sends the question to the estate's model router
+(one endpoint, every lane behind it, crew#568) and the lane carries on.
 
   bin/consult "why does kubectl rollout status hang after a deploy?"
   bin/consult --health
   bin/consult --json "..."        the whole response object, for a script
+  bin/consult --context "<text>" --agent <name> "..."
 
   exit 0   answered; the answer is on stdout
   exit 3   no consult available -- this is normal, take the fallback path
   exit 1   the question was malformed
 
-EXIT 3 IS NOT AN ERROR. The service runs on the founder's laptop and the laptop
-sleeps. A lane that treats an unavailable consult as a failure will page a
-person over a convenience. When you get 3, do what §16 says: write the question
-into the issue as a comment and carry on with what you can still do.
+EXIT 3 IS NOT AN ERROR. The router lives in the estate and the laptop may be
+off the network. A lane that treats an unavailable consult as a failure will
+page a person over a convenience. When you get 3, do what §16 says: write the
+question into the issue as a comment and carry on with what you can still do.
 
-CONFIGURATION. Three environment variables, none required:
+CONFIGURATION. Environment only, none required:
 
-  CONSULT_URL         default http://127.0.0.1:8765
-  CONSULT_TOKEN       the bearer token; overrides the file below
-  CONSULT_TOKEN_FILE  default ~/.claude/consult-token, mode 600
-
-Nothing in this repo depends on the consult service existing. Unset the URL and
-every call here returns 3, which is the same path a sleeping laptop takes.
+  LITELLM_BASE_URL   default https://llm.mumchimp.com/v1
+  LITELLM_API_KEY    else the file ~/.config/prospector/secrets.d/LITELLM_API_KEY
+  CONSULT_LANE       default minimax (a row of the router's model list)
+  CONSULT_TIMEOUT    seconds, default 120
 """
+
 import json
 import os
 import sys
@@ -34,79 +34,115 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
-URL = os.environ.get("CONSULT_URL", "http://127.0.0.1:8765").rstrip("/")
-TIMEOUT = int(os.environ.get("CONSULT_TIMEOUT", "180"))
+BASE = os.environ.get("LITELLM_BASE_URL", "https://llm.mumchimp.com/v1").rstrip("/")
+LANE = os.environ.get("CONSULT_LANE", "minimax")
+TIMEOUT = int(os.environ.get("CONSULT_TIMEOUT", "120"))
 UNAVAILABLE = 3
 
 
-def token():
-    t = os.environ.get("CONSULT_TOKEN")
-    if t:
-        return t.strip()
-    p = Path(os.environ.get("CONSULT_TOKEN_FILE",
-                            Path.home() / ".claude" / "consult-token"))
+def key() -> str:
+    k = os.environ.get("LITELLM_API_KEY", "").strip()
+    if k:
+        return k
     try:
-        return p.read_text().strip()
+        return (
+            (Path.home() / ".config/prospector/secrets.d/LITELLM_API_KEY")
+            .read_text()
+            .strip()
+        )
     except OSError:
         return ""
 
 
-def call(path, payload=None, timeout=TIMEOUT):
-    """Return (ok, object). Never raises, never blocks past the timeout."""
-    tok = token()
-    if not tok:
-        return False, {"error": "no consult token; set CONSULT_TOKEN or "
-                                "CONSULT_TOKEN_FILE"}
+def call(
+    path: str, payload: dict | None = None, timeout: int = TIMEOUT
+) -> tuple[bool, dict]:
+    """Return (ok, object). Never raises, never blocks past the timeout, never prints the key."""
+    k = key()
+    if not k:
+        return False, {"error": "no LITELLM_API_KEY in the environment or secrets.d"}
     data = json.dumps(payload).encode() if payload is not None else None
-    req = urllib.request.Request(
-        f"{URL}{path}", data=data,
-        headers={"Authorization": f"Bearer {tok}",
-                 "Content-Type": "application/json"},
-        method="POST" if data else "GET")
+    url = (
+        f"{BASE}{path}"
+        if path.startswith("/chat")
+        else f"{BASE.rsplit('/v1', 1)[0]}{path}"
+    )
+    req = urllib.request.Request(  # noqa: S310 - https only, base is fixed
+        url,
+        data=data,
+        headers={"Authorization": f"Bearer {k}", "Content-Type": "application/json"},
+        method="POST" if data else "GET",
+    )
     try:
-        with urllib.request.urlopen(req, timeout=timeout) as r:
-            return True, json.loads(r.read() or b"{}")
+        with urllib.request.urlopen(req, timeout=timeout) as r:  # noqa: S310
+            body = r.read() or b"{}"
+            return True, json.loads(body) if body.strip().startswith(b"{") else {
+                "text": body.decode()
+            }
     except urllib.error.HTTPError as e:
         try:
             return False, json.loads(e.read() or b"{}")
-        except Exception:
+        except Exception:  # noqa: BLE001
             return False, {"error": f"HTTP {e.code}"}
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         return False, {"error": f"{type(e).__name__}: {e}"}
 
 
-def main(argv):
+def take(argv: list[str], flag: str, default: str) -> str:
+    if flag not in argv:
+        return default
+    i = argv.index(flag)
+    value = argv[i + 1] if i + 1 < len(argv) else default
+    del argv[i : i + 2]
+    return value
+
+
+def main(argv: list[str]) -> int:
     want_json = "--json" in argv
     argv = [a for a in argv if a != "--json"]
-
     if "--health" in argv:
-        ok, body = call("/health", timeout=15)
-        print(json.dumps(body, indent=2))
-        return 0 if ok and body.get("status") == "ok" else UNAVAILABLE
-
-    ctx = ""
-    if "--context" in argv:
-        i = argv.index("--context")
-        ctx = argv[i + 1] if i + 1 < len(argv) else ""
-        del argv[i:i + 2]
-    agent = os.environ.get("HERMES_PROFILE") or "hermes"
-    if "--agent" in argv:
-        i = argv.index("--agent")
-        agent = argv[i + 1] if i + 1 < len(argv) else agent
-        del argv[i:i + 2]
-
+        ok, body = call("/health/liveliness", timeout=15)
+        print(
+            json.dumps(
+                {
+                    "status": "ok" if ok else "unavailable",
+                    "router": BASE,
+                    "lane": LANE,
+                    **body,
+                },
+                indent=2,
+            )
+        )
+        return 0 if ok else UNAVAILABLE
+    ctx = take(argv, "--context", "")
+    agent = take(argv, "--agent", os.environ.get("HERMES_PROFILE") or "hermes")
     question = " ".join(a for a in argv if not a.startswith("--")).strip()
     if not question:
         print(__doc__, file=sys.stderr)
         return 1
-
-    ok, body = call("/consult", {"question": question, "context": ctx,
-                                 "agent": agent, "timeout": TIMEOUT})
+    prompt = (
+        f"You are consulted by the agent '{agent}'.\n"
+        + (f"Context:\n{ctx}\n\n" if ctx else "")
+        + f"Question: {question}"
+    )
+    ok, body = call(
+        "/chat/completions",
+        {
+            "model": LANE,
+            "max_tokens": 2000,
+            "messages": [{"role": "user", "content": prompt}],
+        },
+    )
+    answer = (
+        ((body.get("choices") or [{}])[0].get("message") or {}).get("content", "")
+        if ok
+        else ""
+    )
     if want_json:
         print(json.dumps(body, indent=2))
-    if ok and body.get("status") == "success":
+    if ok and answer.strip():
         if not want_json:
-            print(body.get("answer", "").strip())
+            print(answer.strip())
         return 0
     if not want_json:
         print(f"consult unavailable: {body.get('error') or body}", file=sys.stderr)

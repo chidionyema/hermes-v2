@@ -18,11 +18,14 @@ def _cfg():
 
 def test_incident_crew278_fallback_is_a_different_provider():
     cfg = _cfg()
-    primary = cfg["model"]["provider"]
+    # crew#568 Phase 5: primary and fallback are both the estate router (provider `custom`), so
+    # "a different provider" is a different router lane; the router owns the vendor behind each
+    # lane and falls minimax -> deepseek itself. What must never come back: the same lane twice.
+    primary = (cfg["model"]["provider"], cfg["model"].get("default"))
     fallbacks = cfg.get("fallback_providers") or []
     assert fallbacks, "no fallback provider at all"
-    assert any(f.get("provider") != primary for f in fallbacks), (
-        f"every fallback is on {primary!r}, the same vendor as the primary")
+    assert any((f.get("provider"), f.get("model")) != primary for f in fallbacks), (
+        f"every fallback is {primary!r}, the same lane as the primary")
 
 
 def test_the_guard_refuses_the_measured_config():
