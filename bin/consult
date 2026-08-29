@@ -8,7 +8,6 @@ founder. This is the third. It sends the question to the estate's model router
   bin/consult "why does kubectl rollout status hang after a deploy?"
   bin/consult --health
   bin/consult --json "..."        the whole response object, for a script
-  bin/consult --context "<text>" --agent <name> "..."
 
   exit 0   answered; the answer is on stdout
   exit 3   no consult available -- this is normal, take the fallback path
@@ -62,23 +61,16 @@ def call(
     if not k:
         return False, {"error": "no LITELLM_API_KEY in the environment or secrets.d"}
     data = json.dumps(payload).encode() if payload is not None else None
-    url = (
-        f"{BASE}{path}"
-        if path.startswith("/chat")
-        else f"{BASE.rsplit('/v1', 1)[0]}{path}"
-    )
+    base = BASE if path.startswith("/chat") else BASE.rsplit("/v1", 1)[0]
     req = urllib.request.Request(  # noqa: S310 - https only, base is fixed
-        url,
+        f"{base}{path}",
         data=data,
         headers={"Authorization": f"Bearer {k}", "Content-Type": "application/json"},
         method="POST" if data else "GET",
     )
     try:
         with urllib.request.urlopen(req, timeout=timeout) as r:  # noqa: S310
-            body = r.read() or b"{}"
-            return True, json.loads(body) if body.strip().startswith(b"{") else {
-                "text": body.decode()
-            }
+            return True, json.loads(r.read() or b"{}")
     except urllib.error.HTTPError as e:
         try:
             return False, json.loads(e.read() or b"{}")
@@ -88,49 +80,23 @@ def call(
         return False, {"error": f"{type(e).__name__}: {e}"}
 
 
-def take(argv: list[str], flag: str, default: str) -> str:
-    if flag not in argv:
-        return default
-    i = argv.index(flag)
-    value = argv[i + 1] if i + 1 < len(argv) else default
-    del argv[i : i + 2]
-    return value
-
-
 def main(argv: list[str]) -> int:
     want_json = "--json" in argv
     argv = [a for a in argv if a != "--json"]
     if "--health" in argv:
-        ok, body = call("/health/liveliness", timeout=15)
-        print(
-            json.dumps(
-                {
-                    "status": "ok" if ok else "unavailable",
-                    "router": BASE,
-                    "lane": LANE,
-                    **body,
-                },
-                indent=2,
-            )
-        )
+        ok, _ = call("/health/liveliness", timeout=15)
+        print(f"consult: {'ok' if ok else 'unavailable'} ({BASE}, lane={LANE})")
         return 0 if ok else UNAVAILABLE
-    ctx = take(argv, "--context", "")
-    agent = take(argv, "--agent", os.environ.get("HERMES_PROFILE") or "hermes")
     question = " ".join(a for a in argv if not a.startswith("--")).strip()
     if not question:
         print(__doc__, file=sys.stderr)
         return 1
-    prompt = (
-        f"You are consulted by the agent '{agent}'.\n"
-        + (f"Context:\n{ctx}\n\n" if ctx else "")
-        + f"Question: {question}"
-    )
     ok, body = call(
         "/chat/completions",
         {
             "model": LANE,
             "max_tokens": 2000,
-            "messages": [{"role": "user", "content": prompt}],
+            "messages": [{"role": "user", "content": question}],
         },
     )
     answer = (
