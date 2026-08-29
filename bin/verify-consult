@@ -16,9 +16,14 @@
 # The one thing SKIP may never cover is a security row. If the token file is
 # readable by the world, that is a FAIL wherever it is found.
 set -uo pipefail
+on_exit() {
+	local ec=$?
+	[ "$ec" -eq 0 ] || echo "  (exit $ec)" >&2
+}
+trap on_exit EXIT
 
 H="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-cd "$H"
+cd "$H" || exit 1
 
 URL="${CONSULT_URL:-http://127.0.0.1:8765}"
 TOKEN_FILE="${CONSULT_TOKEN_FILE:-$HOME/.claude/consult-token}"
@@ -27,15 +32,27 @@ JSONL="${CONSULT_LOG:-$HOME/.claude/logs/consult.jsonl}"
 LABEL="${CONSULT_LAUNCHD_LABEL:-ai.estate.consultd}"
 MARKER="VERIFY_$$"
 
-PASS=0; FAIL=0; SKIP=0
-row() {  # row <name> <exit-code> <detail>
-  if [ "$2" = 0 ]; then PASS=$((PASS+1)); printf '  \033[32mPASS\033[0m  %-34s %s\n' "$1" "${3:-}"
-  else               FAIL=$((FAIL+1)); printf '  \033[31mFAIL\033[0m  %-34s %s\n' "$1" "${3:-}"; fi
+PASS=0
+FAIL=0
+SKIP=0
+row() { # row <name> <exit-code> <detail>
+	if [ "$2" = 0 ]; then
+		PASS=$((PASS + 1))
+		printf '  \033[32mPASS\033[0m  %-34s %s\n' "$1" "${3:-}"
+	else
+		FAIL=$((FAIL + 1))
+		printf '  \033[31mFAIL\033[0m  %-34s %s\n' "$1" "${3:-}"
+	fi
 }
-skip() { SKIP=$((SKIP+1)); printf '  \033[33mSKIP\033[0m  %-34s %s\n' "$1" "${2:-}"; }
+skip() {
+	SKIP=$((SKIP + 1))
+	printf '  \033[33mSKIP\033[0m  %-34s %s\n' "$1" "${2:-}"
+}
 
-PY=python3; [ -x .venv/bin/python ] && PY=.venv/bin/python
-TOKEN=""; [ -f "$TOKEN_FILE" ] && TOKEN="$(cat "$TOKEN_FILE" 2>/dev/null)"
+PY=python3
+[ -x .venv/bin/python ] && PY=.venv/bin/python
+TOKEN=""
+[ -f "$TOKEN_FILE" ] && TOKEN="$(cat "$TOKEN_FILE" 2>/dev/null)"
 auth() { [ -n "$TOKEN" ] && printf 'Authorization: Bearer %s' "$TOKEN" || printf 'X-No-Token: 1'; }
 
 printf '\n\033[1mVerifying consult\033[0m  %s\n\n' "$URL"
@@ -51,10 +68,14 @@ row "client exists and parses" "$?" "bin/consult"
 # which is the closest thing to a service that will never answer.
 S=$SECONDS
 CONSULT_URL=http://127.0.0.1:9 CONSULT_TOKEN=x CONSULT_TIMEOUT=5 \
-  timeout 20 ./bin/consult --health >/dev/null 2>&1
-rc=$?; el=$((SECONDS-S))
-[ "$rc" = 3 ] && [ "$el" -lt 10 ]
-row "no service -> exit 3, no hang" "$?" "exit=$rc in ${el}s"
+	timeout 20 ./bin/consult --health >/dev/null 2>&1
+rc=$?
+el=$((SECONDS - S))
+rc2=0
+# rc2 is set on the very next line, before anything else can change it
+# shellcheck disable=SC2319
+{ [ "$rc" = 3 ] && [ "$el" -lt 10 ]; } || rc2=$?
+row "no service -> exit 3, no hang" "$rc2" "exit=$rc in ${el}s"
 
 # A credential must not be readable into a question even by accident.
 # Written the long way on purpose. `! grep -q ...` reads as "no match", but it
@@ -64,17 +85,20 @@ row "no service -> exit 3, no hang" "$?" "exit=$rc in ${el}s"
 # clean file and only 1 counts. A check that cannot run FAILs (LAW 21); it
 # never skips, because a skipped credential row looks the same as a safe one.
 if ! command -v grep >/dev/null 2>&1; then
-  row "client cannot read a credential" 1 "grep is missing, the check could not run"
+	row "client cannot read a credential" 1 "grep is missing, the check could not run"
 else
-  grep -nE 'ANTHROPIC_API_KEY|GITHUB_TOKEN|TELEGRAM_BOT_TOKEN|OPENAI_API_KEY|GEMINI_API_KEY' \
-    bin/consult >/dev/null 2>&1
-  grc=$?
-  # The matching line is never printed. It would name a variable, and the rule
-  # is that naming is fine, but a harness that prints file contents next to the
-  # word "credential" is one bad regex away from printing a value.
-  [ "$grc" = 1 ]
-  row "client cannot read a credential" "$?" \
-    "$([ "$grc" = 1 ] && echo 'no env secret is referenced' || echo "grep exit $grc")"
+	grep -nE 'ANTHROPIC_API_KEY|GITHUB_TOKEN|TELEGRAM_BOT_TOKEN|OPENAI_API_KEY|GEMINI_API_KEY' \
+		bin/consult >/dev/null 2>&1
+	grc=$?
+	# The matching line is never printed. It would name a variable, and the rule
+	# is that naming is fine, but a harness that prints file contents next to the
+	# word "credential" is one bad regex away from printing a value.
+	rc=0
+	# rc is set on the very next line, before anything else can change it
+	# shellcheck disable=SC2319
+	[ "$grc" = 1 ] || rc=$?
+	row "client cannot read a credential" "$rc" \
+		"$([ "$grc" = 1 ] && echo 'no env secret is referenced' || echo "grep exit $grc")"
 fi
 
 # ---------------------------------------------------------------- the daemon
@@ -85,56 +109,62 @@ fi
 # service cannot leak its credential.
 DAEMON_UP=0
 if ! command -v launchctl >/dev/null 2>&1; then
-  skip "daemon under launchd" "no launchctl on this machine"
+	skip "daemon under launchd" "no launchctl on this machine"
 elif launchctl print "gui/$(id -u)/$LABEL" 2>/dev/null | grep -q 'state = running'; then
-  DAEMON_UP=1
-  row "daemon under launchd" 0 "$LABEL running"
+	DAEMON_UP=1
+	row "daemon under launchd" 0 "$LABEL running"
 else
-  row "daemon under launchd" 1 "$LABEL is not running"
+	row "daemon under launchd" 1 "$LABEL is not running"
 fi
 
 if ! command -v lsof >/dev/null 2>&1; then
-  skip "port bound to loopback only" "no lsof"
+	skip "port bound to loopback only" "no lsof"
 else
-  BOUND="$(lsof -nP -iTCP:8765 -sTCP:LISTEN 2>/dev/null | awk 'NR>1{print $9}' | sort -u | tr '\n' ' ')"
-  if [ -z "$BOUND" ]; then
-    skip "port bound to loopback only" "nothing listening on 8765"
-  else
-    # A bind on *:8765 would put the founder's second opinion on the
-    # coffee-shop wifi. Loopback is the whole security model, so a wide bind
-    # is a FAIL and never a SKIP, on any machine that has the service.
-    ! printf '%s' "$BOUND" | grep -q '\*:'
-    row "port bound to loopback only" "$?" "$BOUND"
-  fi
+	BOUND="$(lsof -nP -iTCP:8765 -sTCP:LISTEN 2>/dev/null | awk 'NR>1{print $9}' | sort -u | tr '\n' ' ')"
+	if [ -z "$BOUND" ]; then
+		skip "port bound to loopback only" "nothing listening on 8765"
+	else
+		# A bind on *:8765 would put the founder's second opinion on the
+		# coffee-shop wifi. Loopback is the whole security model, so a wide bind
+		# is a FAIL and never a SKIP, on any machine that has the service.
+		! printf '%s' "$BOUND" | grep -q '\*:'
+		row "port bound to loopback only" "$?" "$BOUND"
+	fi
 fi
 
 # ------------------------------------------------------------------ security
 # These rows run whenever the file or the log exists, on any machine.
 
 if [ -f "$TOKEN_FILE" ]; then
-  MODE="$(stat -f '%Lp' "$TOKEN_FILE" 2>/dev/null || stat -c '%a' "$TOKEN_FILE" 2>/dev/null)"
-  [ "$MODE" = 600 ]
-  row "token file is 0600" "$?" "mode $MODE"
+	MODE="$(stat -f '%Lp' "$TOKEN_FILE" 2>/dev/null || stat -c '%a' "$TOKEN_FILE" 2>/dev/null)"
+	rc=0
+	# rc is set on the very next line, before anything else can change it
+	# shellcheck disable=SC2319
+	[ "$MODE" = 600 ] || rc=$?
+	row "token file is 0600" "$rc" "mode $MODE"
 elif [ "$DAEMON_UP" = 1 ]; then
-  # The daemon is up and its credential is gone: it cannot be authenticating
-  # anyone, so this is a real fault and not absence.
-  row "token file is 0600" 1 "$TOKEN_FILE is missing while $LABEL runs"
+	# The daemon is up and its credential is gone: it cannot be authenticating
+	# anyone, so this is a real fault and not absence.
+	row "token file is 0600" 1 "$TOKEN_FILE is missing while $LABEL runs"
 else
-  skip "token file is 0600" "no consult on this machine"
+	skip "token file is 0600" "no consult on this machine"
 fi
 
 # The token value itself, not the word "token". Greping for the word finds
 # every log line that mentions authentication and proves nothing. This looks
 # for the actual secret, and prints only whether it was there.
 if [ -z "$TOKEN" ]; then
-  skip "bearer token never logged" "no token file to check for"
+	skip "bearer token never logged" "no token file to check for"
 else
-  LEAK=0
-  for f in "$LOG" "$JSONL"; do
-    [ -f "$f" ] && grep -Fq "$TOKEN" "$f" 2>/dev/null && LEAK=1
-  done
-  [ "$LEAK" = 0 ]
-  row "bearer token never logged" "$?" "checked daemon log and jsonl"
+	LEAK=0
+	for f in "$LOG" "$JSONL"; do
+		[ -f "$f" ] && grep -Fq "$TOKEN" "$f" 2>/dev/null && LEAK=1
+	done
+	rc=0
+	# rc is set on the very next line, before anything else can change it
+	# shellcheck disable=SC2319
+	[ "$LEAK" = 0 ] || rc=$?
+	row "bearer token never logged" "$rc" "checked daemon log and jsonl"
 fi
 
 # ---------------------------------------------------------------- the service
@@ -143,50 +173,58 @@ fi
 
 HEALTH="$(curl -s --max-time 5 -H "$(auth)" "$URL/health" 2>/dev/null)"
 if [ -z "$HEALTH" ]; then
-  skip "service reachable" "$URL did not answer; later rows skipped"
-  skip "unauthenticated request refused" ""
-  skip "a backend is live" ""
-  skip "unready backend skipped, not hung" ""
-  skip "consult round-trip, cold" ""
-  skip "consult round-trip, warm" ""
+	skip "service reachable" "$URL did not answer; later rows skipped"
+	skip "unauthenticated request refused" ""
+	skip "a backend is live" ""
+	skip "unready backend skipped, not hung" ""
+	skip "consult round-trip, cold" ""
+	skip "consult round-trip, warm" ""
 else
-  CODE="$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 "$URL/health" 2>/dev/null)"
-  [ "$CODE" = 401 ]
-  row "unauthenticated request refused" "$?" "no token -> HTTP $CODE"
+	CODE="$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 "$URL/health" 2>/dev/null)"
+	rc=0
+	# rc is set on the very next line, before anything else can change it
+	# shellcheck disable=SC2319
+	[ "$CODE" = 401 ] || rc=$?
+	row "unauthenticated request refused" "$rc" "no token -> HTTP $CODE"
 
-  printf '%s' "$HEALTH" | "$PY" -c 'import json,sys; sys.exit(0 if json.load(sys.stdin)["status"]=="ok" else 1)' 2>/dev/null
-  row "service reachable" "$?" "$(printf '%s' "$HEALTH" | "$PY" -c 'import json,sys; h=json.load(sys.stdin); print("status",h["status"],"cascade",",".join(h["cascade"]))' 2>/dev/null)"
+	printf '%s' "$HEALTH" | "$PY" -c 'import json,sys; sys.exit(0 if json.load(sys.stdin)["status"]=="ok" else 1)' 2>/dev/null
+	row "service reachable" "$?" "$(printf '%s' "$HEALTH" | "$PY" -c 'import json,sys; h=json.load(sys.stdin); print("status",h["status"],"cascade",",".join(h["cascade"]))' 2>/dev/null)"
 
-  LIVE="$(printf '%s' "$HEALTH" | "$PY" -c 'import json,sys; print(",".join(json.load(sys.stdin)["live"]))' 2>/dev/null)"
-  [ -n "$LIVE" ] && [ "$LIVE" != none ]
-  row "a backend is live" "$?" "${LIVE:-none}"
+	LIVE="$(printf '%s' "$HEALTH" | "$PY" -c 'import json,sys; print(",".join(json.load(sys.stdin)["live"]))' 2>/dev/null)"
+	rc=0
+	# rc is set on the very next line, before anything else can change it
+	# shellcheck disable=SC2319
+	{ [ -n "$LIVE" ] && [ "$LIVE" != none ]; } || rc=$?
+	row "a backend is live" "$rc" "${LIVE:-none}"
 
-  # A backend that is not configured must be reported and stepped over. The
-  # cascade used to spend a full time cap on one of those before moving on.
-  NOTREADY="$(printf '%s' "$HEALTH" | "$PY" -c 'import json,sys; h=json.load(sys.stdin); print(",".join(n for n,v in h["backends"].items() if not v["ready"]) or "-")' 2>/dev/null)"
-  printf '%s' "$HEALTH" | "$PY" -c 'import json,sys; h=json.load(sys.stdin); sys.exit(0 if all(n in h["live"] or not v["ready"] or n=="none" for n,v in h["backends"].items()) else 1)' 2>/dev/null
-  row "unready backend skipped, not hung" "$?" "unready: $NOTREADY"
+	# A backend that is not configured must be reported and stepped over. The
+	# cascade used to spend a full time cap on one of those before moving on.
+	NOTREADY="$(printf '%s' "$HEALTH" | "$PY" -c 'import json,sys; h=json.load(sys.stdin); print(",".join(n for n,v in h["backends"].items() if not v["ready"]) or "-")' 2>/dev/null)"
+	printf '%s' "$HEALTH" | "$PY" -c 'import json,sys; h=json.load(sys.stdin); sys.exit(0 if all(n in h["live"] or not v["ready"] or n=="none" for n,v in h["backends"].items()) else 1)' 2>/dev/null
+	row "unready backend skipped, not hung" "$?" "unready: $NOTREADY"
 
-  # The whole point of the thing: a question in, an answer out, quickly.
-  #
-  # Timed twice, because one number here is a lie. A local model is unloaded
-  # after a few minutes idle, so the first call pays for reading gigabytes off
-  # disk. Measured 2026-08-22: 32s cold, then 6s, 2s, 2s, with /api/ps showing
-  # the load and its expiry. A single row would either fail every morning or
-  # be loosened until it could never fail at all. Cold catches a service that
-  # is wedged; warm catches one that is genuinely slow.
-  S=$SECONDS
-  REPLY="$(CONSULT_TIMEOUT=90 ./bin/consult "Reply with exactly $MARKER and nothing else." --agent verify 2>/dev/null)"
-  rc=$?; cold=$((SECONDS-S))
-  [ "$rc" = 0 ] && printf '%s' "$REPLY" | grep -q "$MARKER" && [ "$cold" -lt 60 ]
-  row "consult round-trip, cold" "$?" "${cold}s, answer matched"
+	# The whole point of the thing: a question in, an answer out, quickly.
+	#
+	# Timed twice, because one number here is a lie. A local model is unloaded
+	# after a few minutes idle, so the first call pays for reading gigabytes off
+	# disk. Measured 2026-08-22: 32s cold, then 6s, 2s, 2s, with /api/ps showing
+	# the load and its expiry. A single row would either fail every morning or
+	# be loosened until it could never fail at all. Cold catches a service that
+	# is wedged; warm catches one that is genuinely slow.
+	S=$SECONDS
+	REPLY="$(CONSULT_TIMEOUT=90 ./bin/consult "Reply with exactly $MARKER and nothing else." --agent verify 2>/dev/null)"
+	rc=$?
+	cold=$((SECONDS - S))
+	[ "$rc" = 0 ] && printf '%s' "$REPLY" | grep -q "$MARKER" && [ "$cold" -lt 60 ]
+	row "consult round-trip, cold" "$?" "${cold}s, answer matched"
 
-  S=$SECONDS
-  REPLY="$(CONSULT_TIMEOUT=90 ./bin/consult "Reply with exactly ${MARKER}B and nothing else." --agent verify 2>/dev/null)"
-  rc=$?; warm=$((SECONDS-S))
-  BACKEND="$(./bin/consult --health 2>/dev/null | "$PY" -c 'import json,sys; l=json.load(sys.stdin)["last_consult"]; print(l["backend"] if l else "?")' 2>/dev/null)"
-  [ "$rc" = 0 ] && printf '%s' "$REPLY" | grep -q "$MARKER" && [ "$warm" -lt 20 ]
-  row "consult round-trip, warm" "$?" "${warm}s via ${BACKEND:-?}"
+	S=$SECONDS
+	REPLY="$(CONSULT_TIMEOUT=90 ./bin/consult "Reply with exactly ${MARKER}B and nothing else." --agent verify 2>/dev/null)"
+	rc=$?
+	warm=$((SECONDS - S))
+	BACKEND="$(./bin/consult --health 2>/dev/null | "$PY" -c 'import json,sys; l=json.load(sys.stdin)["last_consult"]; print(l["backend"] if l else "?")' 2>/dev/null)"
+	[ "$rc" = 0 ] && printf '%s' "$REPLY" | grep -q "$MARKER" && [ "$warm" -lt 20 ]
+	row "consult round-trip, warm" "$?" "${warm}s via ${BACKEND:-?}"
 fi
 
 # ----------------------------------------------------------------- evidence
@@ -194,15 +232,15 @@ fi
 
 EV="$HOME/.claude/scripts/pr-evidence.py"
 PR="${CONSULT_EVIDENCE_PR:-}"
-[ -z "$PR" ] && PR="$(git rev-parse --abbrev-ref HEAD 2>/dev/null | grep -q . && \
-  gh pr view --json number -q .number 2>/dev/null)"
+[ -z "$PR" ] && PR="$(git rev-parse --abbrev-ref HEAD 2>/dev/null | grep -q . &&
+	gh pr view --json number -q .number 2>/dev/null)"
 if [ ! -x "$EV" ]; then
-  skip "pull request carries evidence" "pr-evidence.py not installed"
+	skip "pull request carries evidence" "pr-evidence.py not installed"
 elif [ -z "$PR" ]; then
-  skip "pull request carries evidence" "no open pull request for this branch"
+	skip "pull request carries evidence" "no open pull request for this branch"
 else
-  "$EV" check --pr "$PR" >/dev/null 2>&1
-  row "pull request carries evidence" "$?" "PR #$PR"
+	"$EV" check --pr "$PR" >/dev/null 2>&1
+	row "pull request carries evidence" "$?" "PR #$PR"
 fi
 
 printf '\n  \033[1m%d passed, %d failed, %d skipped\033[0m\n\n' "$PASS" "$FAIL" "$SKIP"

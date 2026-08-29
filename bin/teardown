@@ -6,31 +6,36 @@
 #
 # Your secrets are never deleted. If you want .env gone, delete it yourself,
 # on purpose, having read it.
-set -uo pipefail
+set -euo pipefail
+on_exit() {
+	local ec=$?
+	[ "$ec" -eq 0 ] || echo "  (exit $ec)" >&2
+}
+trap on_exit EXIT
 
 H="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-cd "$H"
+cd "$H" || exit 1
 export HERMES_HOME="$H"
 
 ALL=0
 [ "${1:-}" = "--all" ] && ALL=1
 
-say()  { printf '\n\033[1m%s\033[0m\n' "$*"; }
-ok()   { printf '  \033[32mok\033[0m    %s\n' "$*"; }
+say() { printf '\n\033[1m%s\033[0m\n' "$*"; }
+ok() { printf '  \033[32mok\033[0m    %s\n' "$*"; }
 skip() { printf '  \033[90m--\033[0m    %s\n' "$*"; }
 
 say "Stopping the schedule"
 if [ -x .venv/bin/hermes ]; then
-  if ./bin/hermes cron list 2>&1 | grep -q "Gateway is not running"; then
-    skip "the gateway was not running"
-  else
-    ./bin/hermes gateway uninstall >/dev/null 2>&1 && ok "gateway uninstalled" \
-      || skip "gateway uninstall did not report success; check bin/hermes gateway status"
-  fi
-  JOBS="$(./bin/hermes cron list 2>/dev/null | grep -cE '^  [0-9a-f]{12} \[')"
-  ok "${JOBS:-0} cron jobs left in place (they cannot fire with the gateway off)"
+	if ./bin/hermes cron list 2>&1 | grep -q "Gateway is not running"; then
+		skip "the gateway was not running"
+	else
+		./bin/hermes gateway uninstall >/dev/null 2>&1 && ok "gateway uninstalled" ||
+			skip "gateway uninstall did not report success; check bin/hermes gateway status"
+	fi
+	JOBS="$(./bin/hermes cron list 2>/dev/null | grep -cE '^  [0-9a-f]{12} \[')"
+	ok "${JOBS:-0} cron jobs left in place (they cannot fire with the gateway off)"
 else
-  skip "no agent installed"
+	skip "no agent installed"
 fi
 
 say "What stays"
@@ -41,15 +46,18 @@ echo "    estate-evals/     what it learned"
 echo "    backups/          anything it saved"
 
 if [ "$ALL" = 1 ]; then
-  say "Removing the agent and its dependencies"
-  for d in .venv hermes-agent hermes-agent-self-evolution cache skills/.hub; do
-    if [ -e "$d" ]; then rm -rf "$d"; ok "removed $d"; else skip "$d was not there"; fi
-  done
-  echo
-  echo "  Reinstall any time with: ./install"
+	say "Removing the agent and its dependencies"
+	for d in .venv hermes-agent hermes-agent-self-evolution cache skills/.hub; do
+		if [ -e "$d" ]; then
+			rm -rf "$d"
+			ok "removed $d"
+		else skip "$d was not there"; fi
+	done
+	echo
+	echo "  Reinstall any time with: ./install"
 else
-  say "The agent itself is still installed"
-  echo "    Start it again with:  ./bin/hermes gateway install"
-  echo "    Remove it fully with: bin/teardown --all"
+	say "The agent itself is still installed"
+	echo "    Start it again with:  ./bin/hermes gateway install"
+	echo "    Remove it fully with: bin/teardown --all"
 fi
 echo

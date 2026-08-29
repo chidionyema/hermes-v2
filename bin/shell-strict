@@ -1,0 +1,139 @@
+#!/usr/bin/env python3
+"""crew#620 CP3: strict shell practice, estate-wide, immediate effect.
+
+Every shell file in this repo -- *.sh, *.bash, or a file whose first line is
+an sh/bash shebang, excluding vendored dirs -- must:
+
+  1. pass `shellcheck -S warning`
+  2. be `shfmt -d` clean
+  3. contain `set -euo pipefail` (or `set -eu` + `set -o pipefail`)
+  4. contain a `trap`
+
+Exit 0 with nothing printed when every file is clean. Otherwise print one
+`shell-strict: <file>: <reason>` line per red and exit 1.
+
+The two-file exemption below is deliberate, not an oversight: bin/verify and
+bin/verify-consult are pass/fail report harnesses whose entire contract is
+"run every check, print every row, never stop at the first FAIL" (see their
+own header comments). Tested empirically (crew#620 CP3, 2026-08-29): bash
+`set -e` DOES abort on a bare `[ ... ]`, on a failing `case`, and on
+`x="$(cmd)"` -- turning it on here would silently truncate the report at the
+first FAIL instead of finishing it, which is a worse outage than the rule it
+would satisfy. Both files still carry `set -uo pipefail` (unset-variable and
+pipe-failure protection) and a trap.
+"""
+from __future__ import annotations
+
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+
+EXCLUDE_DIRS = {
+    "node_modules",
+    ".venv",
+    "venv",
+    ".git",
+    ".tox",
+    "dist",
+    "build",
+    "hermes-agent",
+    "hermes-agent-self-evolution",
+}
+
+# See module docstring: these two are report harnesses that must keep running
+# past a FAIL, so -e would break their reason for existing. `set -uo pipefail`
+# is still required of them; only rule 3's `-e` half is waived, by name, here.
+NO_DASH_E_EXEMPT = {"bin/verify", "bin/verify-consult"}
+
+
+def is_shell_file(path: Path) -> bool:
+    if path.suffix in (".sh", ".bash"):
+        return True
+    if path.suffix == ".tmpl":
+        return False  # template source, not runnable shell (placeholder syntax)
+    try:
+        with path.open("rb") as fh:
+            first = fh.readline(128)
+    except OSError:
+        return False
+    return first.startswith(b"#!") and (b"sh" in first)
+
+
+def find_shell_files(root: Path) -> list[Path]:
+    out = []
+    for path in root.rglob("*"):
+        if not path.is_file():
+            continue
+        if any(part in EXCLUDE_DIRS for part in path.parts):
+            continue
+        if is_shell_file(path):
+            out.append(path)
+    return sorted(out)
+
+
+def has_strict_mode(text: str, rel: str) -> bool:
+    lines = text.splitlines()
+    has_euo = any(line.strip() == "set -euo pipefail" for line in lines)
+    has_eu = any(line.strip() in ("set -eu", "set -ue") for line in lines)
+    has_pipefail = any(line.strip() == "set -o pipefail" for line in lines)
+    if has_euo:
+        return True
+    if has_eu and has_pipefail:
+        return True
+    if rel in NO_DASH_E_EXEMPT:
+        return any(line.strip() == "set -uo pipefail" for line in lines)
+    return False
+
+
+def has_trap(text: str) -> bool:
+    return any(line.strip().startswith("trap ") or line.strip() == "trap" for line in text.splitlines())
+
+
+def check_file(path: Path, root: Path) -> list[str]:
+    rel = str(path.relative_to(root))
+    reasons = []
+    text = path.read_text(encoding="utf-8", errors="replace")
+
+    sc = subprocess.run(
+        ["shellcheck", "-S", "warning", str(path)],
+        capture_output=True,
+        text=True,
+    )
+    if sc.returncode != 0:
+        first = next((ln for ln in sc.stdout.splitlines() if ln.strip()), sc.stdout[:120])
+        reasons.append(f"shellcheck -S warning is not clean ({first.strip()})")
+
+    shfmt = shutil.which("shfmt")
+    if shfmt is None:
+        reasons.append("shfmt not found on PATH (export PATH=$PATH:$HOME/go/bin)")
+    else:
+        fmt = subprocess.run([shfmt, "-d", str(path)], capture_output=True, text=True)
+        if fmt.stdout.strip() or fmt.returncode not in (0, 1) and fmt.stderr.strip():
+            reasons.append("shfmt -d is not clean (run: shfmt -w " + rel + ")")
+        elif fmt.returncode not in (0, 1):
+            reasons.append(f"shfmt error: {fmt.stderr.strip()[:120]}")
+
+    if not has_strict_mode(text, rel):
+        reasons.append("missing set -euo pipefail (or set -eu + set -o pipefail)")
+
+    if not has_trap(text):
+        reasons.append("missing a trap")
+
+    return reasons
+
+
+def main(argv: list[str]) -> int:
+    root = Path(argv[1]).resolve() if len(argv) > 1 else Path.cwd()
+    files = find_shell_files(root)
+    red = 0
+    for path in files:
+        rel = str(path.relative_to(root))
+        for reason in check_file(path, root):
+            print(f"shell-strict: {rel}: {reason}")
+            red += 1
+    return 1 if red else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))
