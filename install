@@ -8,6 +8,11 @@
 #
 # Safe to run twice. Every step checks whether it is already done.
 set -euo pipefail
+on_exit() {
+	local ec=$?
+	[ "$ec" -eq 0 ] || echo "  (exit $ec)" >&2
+}
+trap on_exit EXIT
 
 H="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$H"
@@ -24,23 +29,38 @@ MODE=install
 ESTATE_SRC=""
 SKIP_DEPS=0
 while [ $# -gt 0 ]; do
-  case "$1" in
-    --check) MODE=check ;;
-    --estate) ESTATE_SRC="$2"; shift ;;
-    --skip-deps) SKIP_DEPS=1 ;;
-    -h|--help) sed -n '2,10p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
-    *) echo "install: unknown argument '$1'. Try --help." >&2; exit 2 ;;
-  esac
-  shift
+	case "$1" in
+	--check) MODE=check ;;
+	--estate)
+		ESTATE_SRC="$2"
+		shift
+		;;
+	--skip-deps) SKIP_DEPS=1 ;;
+	-h | --help)
+		sed -n '2,10p' "$0" | sed 's/^# \{0,1\}//'
+		exit 0
+		;;
+	*)
+		echo "install: unknown argument '$1'. Try --help." >&2
+		exit 2
+		;;
+	esac
+	shift
 done
 
 step=0
-say()  { printf '\n\033[1m%s\033[0m\n' "$*"; }
-ok()   { printf '  \033[32mok\033[0m    %s\n' "$*"; }
+say() { printf '\n\033[1m%s\033[0m\n' "$*"; }
+ok() { printf '  \033[32mok\033[0m    %s\n' "$*"; }
 skip() { printf '  \033[90m--\033[0m    %s\n' "$*"; }
 warn() { printf '  \033[33mwarn\033[0m  %s\n' "$*"; }
-die()  { printf '\n  \033[31mstopped\033[0m  %s\n\n' "$*" >&2; exit 1; }
-next() { step=$((step+1)); say "$step. $*"; }
+die() {
+	printf '\n  \033[31mstopped\033[0m  %s\n\n' "$*" >&2
+	exit 1
+}
+next() {
+	step=$((step + 1))
+	say "$step. $*"
+}
 
 # ---------------------------------------------------------------- prerequisites
 
@@ -50,27 +70,31 @@ have() { command -v "$1" >/dev/null 2>&1; }
 
 # Pick an interpreter the agent will actually install under. `python3` on this
 # machine may be newer than the ceiling; several versions usually sit beside it.
-ver_of()  { "$1" -c 'import sys;print("%d.%d"%sys.version_info[:2])' 2>/dev/null; }
-in_range() {  # in_range <x.y>
-  [ -n "$1" ] || return 1
-  [ "$(printf '%s\n%s\n' "$PYTHON_MIN" "$1" | sort -V | head -1)" = "$PYTHON_MIN" ] || return 1
-  [ "$1" = "$PYTHON_MAX_EXCL" ] && return 1
-  [ "$(printf '%s\n%s\n' "$PYTHON_MAX_EXCL" "$1" | sort -V | head -1)" = "$1" ]
+ver_of() { "$1" -c 'import sys;print("%d.%d"%sys.version_info[:2])' 2>/dev/null; }
+in_range() { # in_range <x.y>
+	[ -n "$1" ] || return 1
+	[ "$(printf '%s\n%s\n' "$PYTHON_MIN" "$1" | sort -V | head -1)" = "$PYTHON_MIN" ] || return 1
+	[ "$1" = "$PYTHON_MAX_EXCL" ] && return 1
+	[ "$(printf '%s\n%s\n' "$PYTHON_MAX_EXCL" "$1" | sort -V | head -1)" = "$1" ]
 }
 
 PY_BIN=""
 for cand in python3 python3.13 python3.12 python3.11; do
-  have "$cand" || continue
-  v="$(ver_of "$cand")"
-  if in_range "$v"; then PY_BIN="$cand"; PY_VER="$v"; break; fi
+	have "$cand" || continue
+	v="$(ver_of "$cand")"
+	if in_range "$v"; then
+		PY_BIN="$cand"
+		PY_VER="$v"
+		break
+	fi
 done
 
 if [ -z "$PY_BIN" ]; then
-  FOUND=""
-  for cand in python3 python3.14 python3.13 python3.12 python3.11; do
-    have "$cand" && FOUND="$FOUND  $cand $(ver_of "$cand")"
-  done
-  die "no python between $PYTHON_MIN and $PYTHON_MAX_EXCL (exclusive), which is what the agent requires.
+	FOUND=""
+	for cand in python3 python3.14 python3.13 python3.12 python3.11; do
+		have "$cand" && FOUND="$FOUND  $cand $(ver_of "$cand")"
+	done
+	die "no python between $PYTHON_MIN and $PYTHON_MAX_EXCL (exclusive), which is what the agent requires.
         found:$FOUND
         macOS:  brew install python@3.13
         Ubuntu: sudo apt install python3.13 python3.13-venv"
@@ -78,23 +102,26 @@ fi
 ok "$PY_BIN $PY_VER"
 [ "$PY_BIN" = python3 ] || warn "python3 here is $(ver_of python3), which the agent refuses. Using $PY_BIN instead."
 
-have git  || die "git is not installed."
+have git || die "git is not installed."
 ok "git $(git --version | awk '{print $3}')"
 
 have curl || die "curl is not installed."
 ok "curl"
 
-if have gh; then ok "gh $(gh --version | head -1 | awk '{print $3}')"
+if have gh; then
+	ok "gh $(gh --version | head -1 | awk '{print $3}')"
 else warn "gh (GitHub CLI) is missing. The agent can still run; it cannot open issues or read pull requests.
         Install it later with: brew install gh   (then: gh auth login)"; fi
 
-if have kubectl; then ok "kubectl"
-elif have fly; then ok "fly"
+if have kubectl; then
+	ok "kubectl"
+elif have fly; then
+	ok "fly"
 else warn "no fly CLI. Only matters if your services run on Fly.io."; fi
 
 if [ "$MODE" = check ]; then
-  say "Prerequisites only. Nothing was changed."
-  exit 0
+	say "Prerequisites only. Nothing was changed."
+	exit 0
 fi
 
 # ------------------------------------------------------------------- estate.yaml
@@ -102,49 +129,52 @@ fi
 next "Describing your estate"
 
 if [ -n "$ESTATE_SRC" ]; then
-  [ -f "$ESTATE_SRC" ] || die "no such file: $ESTATE_SRC"
-  cp "$ESTATE_SRC" estate.yaml
-  ok "estate.yaml copied from $ESTATE_SRC"
+	[ -f "$ESTATE_SRC" ] || die "no such file: $ESTATE_SRC"
+	cp "$ESTATE_SRC" estate.yaml
+	ok "estate.yaml copied from $ESTATE_SRC"
 elif [ -f estate.yaml ]; then
-  skip "estate.yaml already exists. Delete it and re-run to start over."
+	skip "estate.yaml already exists. Delete it and re-run to start over."
 else
-  if [ ! -t 0 ]; then
-    die "estate.yaml does not exist and there is nobody to ask.
+	if [ ! -t 0 ]; then
+		die "estate.yaml does not exist and there is nobody to ask.
           Pass one with:  ./install --estate my-estate.yaml
           A template is in estate.example.yaml"
-  fi
-  echo "  Five questions. Press enter to accept the default in brackets."
-  echo
-  read -r -p "  A short name for this estate [my-estate]: " E_NAME
-  E_NAME="${E_NAME:-my-estate}"
-  read -r -p "  GitHub owner (user or org): " E_OWNER
-  [ -n "$E_OWNER" ] || die "GitHub owner cannot be empty. The agent needs somewhere to open issues."
-  read -r -p "  GitHub repo it works on: " E_REPO
-  [ -n "$E_REPO" ] || die "GitHub repo cannot be empty."
+	fi
+	echo "  Five questions. Press enter to accept the default in brackets."
+	echo
+	read -r -p "  A short name for this estate [my-estate]: " E_NAME
+	E_NAME="${E_NAME:-my-estate}"
+	read -r -p "  GitHub owner (user or org): " E_OWNER
+	[ -n "$E_OWNER" ] || die "GitHub owner cannot be empty. The agent needs somewhere to open issues."
+	read -r -p "  GitHub repo it works on: " E_REPO
+	[ -n "$E_REPO" ] || die "GitHub repo cannot be empty."
 
-  echo
-  echo "  Now the services to watch. One per line, as 'name url'."
-  echo "  Example:  api https://api.acme.example.com/health"
-  echo "  Blank line when done."
-  SERVICES=""
-  while true; do
-    read -r -p "  service: " LINE || break
-    [ -z "$LINE" ] && break
-    S_KEY="$(echo "$LINE" | awk '{print $1}')"
-    S_URL="$(echo "$LINE" | awk '{print $2}')"
-    if [ -z "$S_URL" ]; then echo "    need a name AND a url, e.g. 'api https://...'"; continue; fi
-    S_APP="$(echo "$S_URL" | sed -E 's#https?://##; s#/.*##; s#\..*##')"
-    SERVICES="${SERVICES}  - key: ${S_KEY}
+	echo
+	echo "  Now the services to watch. One per line, as 'name url'."
+	echo "  Example:  api https://api.acme.example.com/health"
+	echo "  Blank line when done."
+	SERVICES=""
+	while true; do
+		read -r -p "  service: " LINE || break
+		[ -z "$LINE" ] && break
+		S_KEY="$(echo "$LINE" | awk '{print $1}')"
+		S_URL="$(echo "$LINE" | awk '{print $2}')"
+		if [ -z "$S_URL" ]; then
+			echo "    need a name AND a url, e.g. 'api https://...'"
+			continue
+		fi
+		S_APP="$(echo "$S_URL" | sed -E 's#https?://##; s#/.*##; s#\..*##')"
+		SERVICES="${SERVICES}  - key: ${S_KEY}
     app: ${S_APP}
     url: ${S_URL}
     expect: \"any-answer\"
     note: \"\"
 
 "
-  done
-  [ -n "$SERVICES" ] || die "No services given, so the pulse would watch nothing."
+	done
+	[ -n "$SERVICES" ] || die "No services given, so the pulse would watch nothing."
 
-  cat > estate.yaml <<YAML
+	cat >estate.yaml <<YAML
 # This machine's estate. Written by ./install on $(date -u +%Y-%m-%d).
 # Edit it, then run: bin/render && bin/verify
 
@@ -169,7 +199,7 @@ limits:
   max_cost_usd_per_task: 5
   budget_hard_stop: true
 YAML
-  ok "estate.yaml written"
+	ok "estate.yaml written"
 fi
 
 # --------------------------------------------------------------------------- .env
@@ -184,27 +214,30 @@ next "Giving it a way to talk to a model"
 #
 # Neither is checked here beyond existing. bin/verify does the checking.
 if [ -f .env ]; then
-  skip ".env already exists, leaving it alone"
+	skip ".env already exists, leaving it alone"
 else
-  if [ -f .env.example ]; then cp .env.example .env
-  else printf 'ANTHROPIC_API_KEY=\nGITHUB_TOKEN=\n' > .env; fi
-  chmod 600 .env
-  KEY="${ANTHROPIC_API_KEY:-}"
-  if [ -z "$KEY" ] && [ -t 0 ]; then
-    echo "  An API key from https://console.anthropic.com/settings/keys,"
-    echo "  or press enter to use your Claude Code login instead."
-    read -r -s -p "  ANTHROPIC_API_KEY (hidden, enter to skip): " KEY
-    echo
-  fi
-  if [ -n "$KEY" ]; then
-    tmp="$(mktemp)"; sed "s|^ANTHROPIC_API_KEY=.*|ANTHROPIC_API_KEY=${KEY}|" .env > "$tmp"; mv "$tmp" .env
-    chmod 600 .env
-    ok ".env written, mode 600"
-  else
-    ok ".env written, mode 600, no API key in it"
-    echo "        You will log in with your Claude Code account instead:"
-    echo "        ./bin/hermes auth login"
-  fi
+	if [ -f .env.example ]; then
+		cp .env.example .env
+	else printf 'ANTHROPIC_API_KEY=\nGITHUB_TOKEN=\n' >.env; fi
+	chmod 600 .env
+	KEY="${ANTHROPIC_API_KEY:-}"
+	if [ -z "$KEY" ] && [ -t 0 ]; then
+		echo "  An API key from https://console.anthropic.com/settings/keys,"
+		echo "  or press enter to use your Claude Code login instead."
+		read -r -s -p "  ANTHROPIC_API_KEY (hidden, enter to skip): " KEY
+		echo
+	fi
+	if [ -n "$KEY" ]; then
+		tmp="$(mktemp)"
+		sed "s|^ANTHROPIC_API_KEY=.*|ANTHROPIC_API_KEY=${KEY}|" .env >"$tmp"
+		mv "$tmp" .env
+		chmod 600 .env
+		ok ".env written, mode 600"
+	else
+		ok ".env written, mode 600, no API key in it"
+		echo "        You will log in with your Claude Code account instead:"
+		echo "        ./bin/hermes auth login"
+	fi
 fi
 
 # ------------------------------------------------------------------------- agent
@@ -215,36 +248,36 @@ PIN_TAG="$(sed -n 1p PINNED_VERSION)"
 PIN_SHA="$(sed -n 2p PINNED_VERSION)"
 
 if [ "$SKIP_DEPS" = 1 ]; then
-  skip "--skip-deps given"
+	skip "--skip-deps given"
 elif [ -x .venv/bin/hermes ]; then
-  skip "already installed at .venv/bin/hermes"
+	skip "already installed at .venv/bin/hermes"
 else
-  # One commit, not the whole history. Measured 2026-08-22 on this machine:
-  # a full clone is 946MB and 312s; fetching just the pinned commit is 254MB
-  # and 12s. The pin is a sha, so there is nothing in the rest of the history
-  # this install could ever use.
-  if [ ! -d hermes-agent/.git ]; then
-    echo "  fetching the agent at $PIN_TAG, one commit only (about 250MB)"
-    mkdir -p hermes-agent
-    git -C hermes-agent init --quiet
-    git -C hermes-agent remote add origin "$AGENT_REPO" 2>/dev/null || true
-  fi
-  if ! git -C hermes-agent cat-file -e "$PIN_SHA^{commit}" 2>/dev/null; then
-    git -C hermes-agent fetch --quiet --depth 1 origin "$PIN_SHA"
-  fi
-  git -C hermes-agent checkout --quiet "$PIN_SHA"
-  ok "hermes-agent at $PIN_TAG ($(git -C hermes-agent rev-parse --short HEAD))"
+	# One commit, not the whole history. Measured 2026-08-22 on this machine:
+	# a full clone is 946MB and 312s; fetching just the pinned commit is 254MB
+	# and 12s. The pin is a sha, so there is nothing in the rest of the history
+	# this install could ever use.
+	if [ ! -d hermes-agent/.git ]; then
+		echo "  fetching the agent at $PIN_TAG, one commit only (about 250MB)"
+		mkdir -p hermes-agent
+		git -C hermes-agent init --quiet
+		git -C hermes-agent remote add origin "$AGENT_REPO" 2>/dev/null || true
+	fi
+	if ! git -C hermes-agent cat-file -e "$PIN_SHA^{commit}" 2>/dev/null; then
+		git -C hermes-agent fetch --quiet --depth 1 origin "$PIN_SHA"
+	fi
+	git -C hermes-agent checkout --quiet "$PIN_SHA"
+	ok "hermes-agent at $PIN_TAG ($(git -C hermes-agent rev-parse --short HEAD))"
 
-  "$PY_BIN" -m venv .venv
-  ./.venv/bin/pip install --quiet --upgrade pip
-  echo "  installing dependencies, a minute or two"
-  ./.venv/bin/pip install --quiet -e hermes-agent
-  ./.venv/bin/pip install --quiet pyyaml
-  # The repo ships its own tests - the evidence gate, the incident guards, the
-  # spec links. Without pytest in the venv none of them can run, so a clone
-  # carried tests nobody could execute. Found 2026-08-22.
-  ./.venv/bin/pip install --quiet pytest
-  ok "$(./bin/hermes --version 2>/dev/null | grep -o 'Hermes Agent v[0-9.]*' | head -1)"
+	"$PY_BIN" -m venv .venv
+	./.venv/bin/pip install --quiet --upgrade pip
+	echo "  installing dependencies, a minute or two"
+	./.venv/bin/pip install --quiet -e hermes-agent
+	./.venv/bin/pip install --quiet pyyaml
+	# The repo ships its own tests - the evidence gate, the incident guards, the
+	# spec links. Without pytest in the venv none of them can run, so a clone
+	# carried tests nobody could execute. Found 2026-08-22.
+	./.venv/bin/pip install --quiet pytest
+	ok "$(./bin/hermes --version 2>/dev/null | grep -o 'Hermes Agent v[0-9.]*' | head -1)"
 fi
 
 # ------------------------------------------------------------------------ render
@@ -258,8 +291,8 @@ bash bin/sync-scripts.sh >/dev/null 2>&1 || true
 # The lesson log starts as a copy of the shipped examples. They are six real
 # incidents from building this, and they are worth reading before your own.
 if [ ! -f estate-evals/incidents.jsonl ]; then
-  cp estate-evals/incidents.example.jsonl estate-evals/incidents.jsonl
-  ok "estate-evals/incidents.jsonl seeded with $(grep -c . estate-evals/incidents.example.jsonl) example lessons"
+	cp estate-evals/incidents.example.jsonl estate-evals/incidents.jsonl
+	ok "estate-evals/incidents.jsonl seeded with $(grep -c . estate-evals/incidents.example.jsonl) example lessons"
 fi
 ok "templates rendered"
 
@@ -268,24 +301,25 @@ ok "templates rendered"
 next "Installing profiles, skills and the schedule"
 
 if [ -x .venv/bin/hermes ]; then
-  if ./bin/hermes profile list 2>/dev/null | grep -q watch; then
-    skip "profiles already installed"
-  else
-    warn "profiles not installed yet. Run: bin/hermes profile create watch"
-  fi
-  # Every lane is built. estate.yaml decides which of them gets a schedule, and
-  # a lane that is off gets no jobs at all, so it cannot fire. `bin/features`
-  # prints the current state and changes it.
-  "$PY_BIN" bin/install-cron.py cron/watch.jobs     --feature watch     || true
-  "$PY_BIN" bin/install-cron.py cron/work.jobs      --feature work      || true
-  "$PY_BIN" bin/install-cron.py cron/evolution.jobs --feature evolution || true
-  JOBS="$(./bin/hermes cron list 2>/dev/null | grep -cE '^  [0-9a-f]{12} \[' || true)"
-  if [ "${JOBS:-0}" -gt 0 ]; then ok "$JOBS jobs on the schedule"
-  else warn "no cron jobs. bin/install-cron.py cron/watch.jobs says why."; fi
-  echo
-  "$PY_BIN" bin/features
+	if ./bin/hermes profile list 2>/dev/null | grep -q watch; then
+		skip "profiles already installed"
+	else
+		warn "profiles not installed yet. Run: bin/hermes profile create watch"
+	fi
+	# Every lane is built. estate.yaml decides which of them gets a schedule, and
+	# a lane that is off gets no jobs at all, so it cannot fire. `bin/features`
+	# prints the current state and changes it.
+	"$PY_BIN" bin/install-cron.py cron/watch.jobs --feature watch || true
+	"$PY_BIN" bin/install-cron.py cron/work.jobs --feature work || true
+	"$PY_BIN" bin/install-cron.py cron/evolution.jobs --feature evolution || true
+	JOBS="$(./bin/hermes cron list 2>/dev/null | grep -cE '^  [0-9a-f]{12} \[' || true)"
+	if [ "${JOBS:-0}" -gt 0 ]; then
+		ok "$JOBS jobs on the schedule"
+	else warn "no cron jobs. bin/install-cron.py cron/watch.jobs says why."; fi
+	echo
+	"$PY_BIN" bin/features
 else
-  skip "agent not installed, nothing to configure"
+	skip "agent not installed, nothing to configure"
 fi
 
 # ------------------------------------------------------------------------ verify
@@ -293,7 +327,7 @@ fi
 next "Proving it works"
 
 if ./bin/verify; then
-  cat <<EOF
+	cat <<EOF
 
   Setup is done and proven.
 
@@ -308,12 +342,12 @@ if ./bin/verify; then
 
 EOF
 else
-  cat <<EOF
+	cat <<EOF
 
   Setup finished but the proof failed. The lines marked FAIL above say what.
   Fix those, then run ./bin/verify again. Nothing is scheduled, so nothing is
   running badly in the meantime.
 
 EOF
-  exit 1
+	exit 1
 fi

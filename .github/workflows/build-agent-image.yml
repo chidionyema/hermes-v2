@@ -72,11 +72,36 @@ jobs:
           # Sigstore stalled for 5 min on run 33110843638 until the OIDC token expired
           # (crew#516). A bounded attempt and one retry beat a hang that ends in expired_token.
           for attempt in 1 2; do
-            timeout 120 cosign sign --yes "${{ env.IMAGE }}@$digest" && break
+            # `--new-bundle-format=false` IS WHY A THIRD PARTY CAN FIND THIS.
+            # cosign-installer v4.1.2 installs cosign v3.0.6, which flipped
+            # `--new-bundle-format` to default true (cmd/cosign/cli/options/sign.go:155).
+            # That mode writes a Sigstore bundle v0.3 OCI *referrer*; GHCR answers
+            # /v2/.../referrers/ with 404, so it lands on the referrers tag fallback
+            # `sha256-<hex>` with no suffix. Measured on ghcr.io/chidionyema/hermes-agent
+            # 2026-08-28: 16 tags, 3 bare `sha256-<hex>`, ZERO ending `.sig`. Kyverno reads
+            # the legacy `.sig` tag, so admission would refuse this image as unsigned.
+            # `--use-signing-config` must go with it: its help says it needs the new format.
+            timeout 120 cosign sign --yes --new-bundle-format=false --use-signing-config=false "${{ env.IMAGE }}@$digest" && break
             [ "$attempt" = 2 ] && { echo "cosign sign failed twice" >&2; exit 1; }
             echo "cosign sign attempt $attempt failed; retrying" >&2; sleep 15
           done
           cosign verify "${{ env.IMAGE }}@$digest" \
+            --new-bundle-format=false \
             --certificate-identity-regexp "^https://github.com/${{ github.repository }}/" \
             --certificate-oidc-issuer https://token.actions.githubusercontent.com
           echo "signed and verified ${{ env.IMAGE }}@$digest"
+
+          # AND PROVE IT WITH SOMETHING THAT IS NOT COSIGN.
+          # Both commands above are cosign, so a storage format only cosign can find still
+          # prints a full green `Verification for ...` block -- which is exactly what every
+          # run before this commit did while Kyverno saw nothing. docker is not cosign, and
+          # this fails the job when the tag every other verifier looks for is absent.
+          sigtag="sha256-${digest#sha256:}.sig"
+          docker buildx imagetools inspect "${{ env.IMAGE }}:$sigtag" > /dev/null
+          echo "third party can find it: ${{ env.IMAGE }}:$sigtag"
+          echo
+          echo "anyone can repeat that with:"
+          echo "  cosign verify ${{ env.IMAGE }}@$digest \\"
+          echo "    --new-bundle-format=false \\"
+          echo "    --certificate-identity-regexp '^https://github.com/${{ github.repository }}/' \\"
+          echo "    --certificate-oidc-issuer https://token.actions.githubusercontent.com"

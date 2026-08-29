@@ -11,6 +11,11 @@
 # keeps the one key file at 0600, and answers a real question when the router
 # is reachable. Unreachable is a SKIP (exit 3 is the documented normal state).
 set -uo pipefail
+on_exit() {
+	local ec=$?
+	[ "$ec" -eq 0 ] || echo "  (exit $ec)" >&2
+}
+trap on_exit EXIT
 H="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$H" || exit 1
 KEY_FILE="${LITELLM_KEY_FILE:-$HOME/.config/prospector/secrets.d/LITELLM_API_KEY}"
@@ -18,15 +23,15 @@ PASS=0
 FAIL=0
 SKIP=0
 row() { if [ "$2" = 0 ]; then
-  PASS=$((PASS + 1))
-  printf '  \033[32mPASS\033[0m  %-34s %s\n' "$1" "${3:-}"
+	PASS=$((PASS + 1))
+	printf '  \033[32mPASS\033[0m  %-34s %s\n' "$1" "${3:-}"
 else
-  FAIL=$((FAIL + 1))
-  printf '  \033[31mFAIL\033[0m  %-34s %s\n' "$1" "${3:-}"
+	FAIL=$((FAIL + 1))
+	printf '  \033[31mFAIL\033[0m  %-34s %s\n' "$1" "${3:-}"
 fi; }
 skip() {
-  SKIP=$((SKIP + 1))
-  printf '  \033[33mSKIP\033[0m  %-34s %s\n' "$1" "${2:-}"
+	SKIP=$((SKIP + 1))
+	printf '  \033[33mSKIP\033[0m  %-34s %s\n' "$1" "${2:-}"
 }
 PY=python3
 [ -x .venv/bin/python ] && PY=.venv/bin/python
@@ -45,38 +50,38 @@ row "no router -> exit 3, no hang" "$?" "exit=$rc in ${el}s"
 
 # grep exits 1 for a clean file and only 1 counts; a check that cannot run FAILs (LAW 21).
 if ! command -v grep >/dev/null 2>&1; then
-  row "client names no vendor credential" 1 "grep is missing, the check could not run"
+	row "client names no vendor credential" 1 "grep is missing, the check could not run"
 else
-  grep -nE 'ANTHROPIC_API_KEY|OPENAI_API_KEY|GEMINI_API_KEY|MINIMAX_API_KEY|DEEPSEEK_API_KEY|OPENROUTER_API_KEY|GROQ_API_KEY|api\.(anthropic|minimax|deepseek|groq)\.|openrouter\.ai' bin/consult >/dev/null 2>&1
-  grc=$?
-  ok=1
-  [ "$grc" = 1 ] && ok=0
-  row "client names no vendor credential" "$ok" "$([ "$grc" = 1 ] && echo 'only LITELLM_* is referenced' || echo "grep exit $grc")"
+	grep -nE 'ANTHROPIC_API_KEY|OPENAI_API_KEY|GEMINI_API_KEY|MINIMAX_API_KEY|DEEPSEEK_API_KEY|OPENROUTER_API_KEY|GROQ_API_KEY|api\.(anthropic|minimax|deepseek|groq)\.|openrouter\.ai' bin/consult >/dev/null 2>&1
+	grc=$?
+	ok=1
+	[ "$grc" = 1 ] && ok=0
+	row "client names no vendor credential" "$ok" "$([ "$grc" = 1 ] && echo 'only LITELLM_* is referenced' || echo "grep exit $grc")"
 fi
 
 if [ -f "$KEY_FILE" ]; then
-  MODE="$(stat -f '%Lp' "$KEY_FILE" 2>/dev/null || stat -c '%a' "$KEY_FILE" 2>/dev/null)"
-  [ "$MODE" = 600 ]
-  row "router key file is 0600" "$?" "mode $MODE"
+	MODE="$(stat -f '%Lp' "$KEY_FILE" 2>/dev/null || stat -c '%a' "$KEY_FILE" 2>/dev/null)"
+	[ "$MODE" = 600 ]
+	row "router key file is 0600" "$?" "mode $MODE"
 else
-  skip "router key file is 0600" "no key on this machine"
+	skip "router key file is 0600" "no key on this machine"
 fi
 
 if ./bin/consult --health >/dev/null 2>&1; then
-  row "router reachable" 0 "health ok"
-  # Timed twice: the first call may pay a cold lane, the second is the number that matters.
-  for pass in cold warm; do
-    S=$SECONDS
-    OUT="$(CONSULT_TIMEOUT=90 ./bin/consult "Reply with the single word pong." 2>/dev/null)"
-    rc=$?
-    el=$((SECONDS - S))
-    [ "$rc" = 0 ] && printf '%s' "$OUT" | grep -qi pong
-    row "consult round-trip, $pass" "$?" "exit=$rc in ${el}s"
-  done
+	row "router reachable" 0 "health ok"
+	# Timed twice: the first call may pay a cold lane, the second is the number that matters.
+	for pass in cold warm; do
+		S=$SECONDS
+		OUT="$(CONSULT_TIMEOUT=90 ./bin/consult "Reply with the single word pong." 2>/dev/null)"
+		rc=$?
+		el=$((SECONDS - S))
+		[ "$rc" = 0 ] && printf '%s' "$OUT" | grep -qi pong
+		row "consult round-trip, $pass" "$?" "exit=$rc in ${el}s"
+	done
 else
-  skip "router reachable" "router did not answer; round-trip rows skipped"
-  skip "consult round-trip, cold" ""
-  skip "consult round-trip, warm" ""
+	skip "router reachable" "router did not answer; round-trip rows skipped"
+	skip "consult round-trip, cold" ""
+	skip "consult round-trip, warm" ""
 fi
 
 printf '\n  %d pass, %d fail, %d skip\n\n' "$PASS" "$FAIL" "$SKIP"

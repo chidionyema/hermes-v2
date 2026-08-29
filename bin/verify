@@ -6,18 +6,30 @@
 #
 # Every line is a command and its real output. Nothing here is an assertion.
 set -uo pipefail
+on_exit() {
+	local ec=$?
+	[ "$ec" -eq 0 ] || echo "  (exit $ec)" >&2
+}
+trap on_exit EXIT
 
 H="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-cd "$H"
+cd "$H" || exit 1
 export HERMES_HOME="$H"
 
-PASS=0; FAIL=0
-row() {  # row <name> <exit-code> <detail>
-  if [ "$2" = 0 ]; then PASS=$((PASS+1)); printf '  \033[32mPASS\033[0m  %-34s %s\n' "$1" "${3:-}"
-  else               FAIL=$((FAIL+1)); printf '  \033[31mFAIL\033[0m  %-34s %s\n' "$1" "${3:-}"; fi
+PASS=0
+FAIL=0
+row() { # row <name> <exit-code> <detail>
+	if [ "$2" = 0 ]; then
+		PASS=$((PASS + 1))
+		printf '  \033[32mPASS\033[0m  %-34s %s\n' "$1" "${3:-}"
+	else
+		FAIL=$((FAIL + 1))
+		printf '  \033[31mFAIL\033[0m  %-34s %s\n' "$1" "${3:-}"
+	fi
 }
 
-PY=python3; [ -x .venv/bin/python ] && PY=.venv/bin/python
+PY=python3
+[ -x .venv/bin/python ] && PY=.venv/bin/python
 
 printf '\n\033[1mVerifying %s\033[0m\n\n' "$H"
 
@@ -30,8 +42,10 @@ print(d['estate']['name'], len(d['services']))
 row "estate.yaml describes an estate" "$?" "$D"
 
 # 2. no generated file has drifted from its template
-RAW="$("$PY" bin/render --check 2>&1)"; RC=$?
-if [ $RC = 0 ]; then OUT="$(echo "$RAW" | grep -o '[0-9]* checked')"
+RAW="$("$PY" bin/render --check 2>&1)"
+RC=$?
+if [ $RC = 0 ]; then
+	OUT="$(echo "$RAW" | grep -o '[0-9]* checked')"
 else OUT="$(echo "$RAW" | sed -n '2,4p' | tr -s ' \n' ' ')"; fi
 row "generated files match templates" "$RC" "$OUT"
 
@@ -39,19 +53,27 @@ row "generated files match templates" "$RC" "$OUT"
 # anything failing, which is the same failure mode as a health check that
 # watches nothing. This checks the two parts a machine can know: the list of
 # generated files, and every cron job's name and schedule.
-RAW="$("$PY" bin/check-readme.py 2>&1)"; RC=$?
+RAW="$("$PY" bin/check-readme.py 2>&1)"
+RC=$?
 OUT="$(printf '%s' "$RAW" | head -2 | tail -1 | sed 's/^ *//')"
 [ "$RC" = 0 ] && OUT="$(printf '%s' "$RAW" | sed -n 's/^PASS README describes.*(\(.*\))$/\1/p')"
 row "README describes what ships" "$RC" "$OUT"
 
 # 3. the agent runs, and it is the pinned build
 V="$(./bin/hermes --version 2>/dev/null | grep -o 'Hermes Agent v[0-9.]*' | head -1)"
-[ -n "$V" ]; row "the agent runs" "$?" "$V"
+rc=0
+# rc is set on the very next line, before anything else can change it
+# shellcheck disable=SC2319
+[ -n "$V" ] || rc=$?
+row "the agent runs" "$rc" "$V"
 
 SHA_WANT="$(sed -n 2p PINNED_VERSION)"
 SHA_HAVE="$(git -C hermes-agent rev-parse HEAD 2>/dev/null)"
-[ "$SHA_WANT" = "$SHA_HAVE" ]
-row "agent is the pinned commit" "$?" "${SHA_HAVE:0:10} (want ${SHA_WANT:0:10})"
+rc=0
+# rc is set on the very next line, before anything else can change it
+# shellcheck disable=SC2319
+[ "$SHA_WANT" = "$SHA_HAVE" ] || rc=$?
+row "agent is the pinned commit" "$rc" "${SHA_HAVE:0:10} (want ${SHA_WANT:0:10})"
 
 # 3b. the python bound install enforces still matches what the agent demands.
 #     These drift silently: the agent bumps its ceiling, install keeps picking
@@ -60,15 +82,21 @@ WANT="$(grep -m1 '^requires-python' hermes-agent/pyproject.toml 2>/dev/null | tr
 HAVE_MIN="$(grep -m1 '^PYTHON_MIN=' install | cut -d'"' -f2)"
 HAVE_MAX="$(grep -m1 '^PYTHON_MAX_EXCL=' install | cut -d'"' -f2)"
 case "$WANT" in
-  *">=$HAVE_MIN,<$HAVE_MAX"*) RC=0 ;;
-  "")                         RC=0; WANT="agent not installed, nothing to compare" ;;
-  *)                          RC=1 ;;
+*">=$HAVE_MIN,<$HAVE_MAX"*) RC=0 ;;
+"")
+	RC=0
+	WANT="agent not installed, nothing to compare"
+	;;
+*) RC=1 ;;
 esac
 row "install and agent agree on python" "$RC" "install: >=$HAVE_MIN,<$HAVE_MAX  agent: ${WANT#requires-python=}"
 
 VENV_V="$(.venv/bin/python -c 'import sys;print("%d.%d"%sys.version_info[:2])' 2>/dev/null)"
-[ -n "$VENV_V" ]
-row "the venv python is in range" "$?" "${VENV_V:-no venv}"
+rc=0
+# rc is set on the very next line, before anything else can change it
+# shellcheck disable=SC2319
+[ -n "$VENV_V" ] || rc=$?
+row "the venv python is in range" "$rc" "${VENV_V:-no venv}"
 
 # 4. it points at this home, not some other estate
 HOME_SEEN="$(./bin/hermes --version 2>/dev/null | sed -n 's/^Install directory: //p')"
@@ -84,7 +112,7 @@ row "every model has a price" "$?" "$OUT"
 CRED=""
 if [ -f .env ] && grep -q '^ANTHROPIC_API_KEY=.\+' .env; then CRED=".env"; fi
 if [ -z "$CRED" ] && [ -f auth.json ]; then
-  "$PY" -c "
+	"$PY" -c "
 import json,sys
 p=json.load(open('auth.json')).get('credential_pool',{})
 sys.exit(0 if p.get('anthropic') else 1)" 2>/dev/null && CRED="auth.json (hermes auth login)"
@@ -92,15 +120,19 @@ fi
 # Neither route configured is not a failure on a fresh install. It is the one
 # step left, and it is stated rather than hidden, the same as the gateway row.
 if [ -n "$CRED" ]; then
-  row "an Anthropic credential exists" 0 "$CRED"
+	row "an Anthropic credential exists" 0 "$CRED"
 else
-  printf '  \033[33mTODO\033[0m  %-34s %s\n' "no model credential yet" \
-    "./bin/hermes auth login, or put a key in .env"
+	printf '  \033[33mTODO\033[0m  %-34s %s\n' "no model credential yet" \
+		"./bin/hermes auth login, or put a key in .env"
 fi
 
 if [ -f .env ]; then
-  MODE="$(stat -f '%Lp' .env 2>/dev/null || stat -c '%a' .env 2>/dev/null)"
-  [ "$MODE" = 600 ]; row ".env is private (mode 600)" "$?" "mode $MODE"
+	MODE="$(stat -f '%Lp' .env 2>/dev/null || stat -c '%a' .env 2>/dev/null)"
+	rc=0
+	# rc is set on the very next line, before anything else can change it
+	# shellcheck disable=SC2319
+	[ "$MODE" = 600 ] || rc=$?
+	row ".env is private (mode 600)" "$rc" "mode $MODE"
 fi
 
 # 7. no secret is tracked in git
@@ -137,7 +169,8 @@ row "every service is as ordered" "$?" ""
 # 2026-08-26: estate.yaml still probed three fly.dev hosts two days after R1.
 # The rows above were green ("stopped, as ordered") because a dead host is
 # silent. This reads the file against the ruling instead of the network.
-OUT="$("$PY" bin/check-platform.py estate.yaml 2>&1)"; RC=$?
+OUT="$("$PY" bin/check-platform.py estate.yaml 2>&1)"
+RC=$?
 row "no service on a platform we left" "$RC" "$(echo "$OUT" | head -1)"
 
 # 8c. the URL card on his phone is the current one
@@ -145,24 +178,32 @@ row "no service on a platform we left" "$RC" "$(echo "$OUT" | head -1)"
 # pinned message id and the hash of what was pinned; this rebuilds the card
 # from the catalogue and fails when the pin is missing or behind.
 if [ -f state/urls-pin.json ] && grep -q '^urls:' estate.yaml; then
-  WANT="$(printf '%s' "$("$PY" scripts/estate-urls.py --dry-run 2>/dev/null)" | shasum -a 256 | cut -c1-64)"  # the card is hashed without its trailing newline
-  HAVE="$("$PY" -c 'import json;print(json.load(open("state/urls-pin.json"))["hash"])' 2>/dev/null)"
-  N="$("$PY" -c 'import json;print(json.load(open("state/urls-pin.json"))["n"])' 2>/dev/null)"
-  [ -n "$WANT" ] && [ "$WANT" = "$HAVE" ]
-  row "the URL card is pinned and current" "$?" "$N links, pinned msg $("$PY" -c 'import json;print(json.load(open("state/urls-pin.json"))["message_id"])' 2>/dev/null)"
+	WANT="$(printf '%s' "$("$PY" scripts/estate-urls.py --dry-run 2>/dev/null)" | shasum -a 256 | cut -c1-64)" # the card is hashed without its trailing newline
+	HAVE="$("$PY" -c 'import json;print(json.load(open("state/urls-pin.json"))["hash"])' 2>/dev/null)"
+	N="$("$PY" -c 'import json;print(json.load(open("state/urls-pin.json"))["n"])' 2>/dev/null)"
+	rc=0
+	# rc is set on the very next line, before anything else can change it
+	# shellcheck disable=SC2319
+	[ -n "$WANT" ] && [ "$WANT" = "$HAVE" ] || rc=$?
+	row "the URL card is pinned and current" "$rc" "$N links, pinned msg $("$PY" -c 'import json;print(json.load(open("state/urls-pin.json"))["message_id"])' 2>/dev/null)"
 elif grep -q '^urls:' estate.yaml; then
-  row "the URL card is pinned and current" 1 "nothing pinned yet: run scripts/estate-urls.py"
+	row "the URL card is pinned and current" 1 "nothing pinned yet: run scripts/estate-urls.py"
 fi
 
 # 8d. every UI the catalogue knows has a URL (crew#282 CP4)
 if grep -q '^urls:' estate.yaml; then
-  OUT="$("$PY" scripts/estate-urls.py --missing 2>&1)"; RC=$?
-  row "every catalogued UI has a URL" "$RC" "$(echo "$OUT" | tail -1)"
+	OUT="$("$PY" scripts/estate-urls.py --missing 2>&1)"
+	RC=$?
+	row "every catalogued UI has a URL" "$RC" "$(echo "$OUT" | tail -1)"
 fi
 
 # 9. the schedule exists
 JOBS="$(./bin/hermes cron list 2>/dev/null | grep -cE '^  [0-9a-f]{12} \[')"
-[ "${JOBS:-0}" -gt 0 ]; row "cron jobs installed" "$?" "${JOBS:-0} jobs"
+rc=0
+# rc is set on the very next line, before anything else can change it
+# shellcheck disable=SC2319
+[ "${JOBS:-0}" -gt 0 ] || rc=$?
+row "cron jobs installed" "$rc" "${JOBS:-0} jobs"
 
 # 10. is anything actually running?
 # Ask the scheduler, not `cron list`. Reading it off cron list was wrong: with
@@ -172,12 +213,15 @@ JOBS="$(./bin/hermes cron list 2>/dev/null | grep -cE '^  [0-9a-f]{12} \[')"
 # is alive, not whether a process exists.
 CRON_STATUS="$(./bin/hermes cron status 2>&1)"
 case "$CRON_STATUS" in
-  *"cron jobs will fire automatically"*)
-    row "the gateway is running" 0 "cron ticker alive" ;;
-  *STALLED*)
-    row "the cron ticker is stalled" 1 "gateway up, jobs not firing: ./bin/hermes gateway restart" ;;
-  *)
-    printf '  \033[33mIDLE\033[0m  %-34s %s\n' "the gateway is not running" "start it: ./bin/hermes gateway install" ;;
+*"cron jobs will fire automatically"*)
+	row "the gateway is running" 0 "cron ticker alive"
+	;;
+*STALLED*)
+	row "the cron ticker is stalled" 1 "gateway up, jobs not firing: ./bin/hermes gateway restart"
+	;;
+*)
+	printf '  \033[33mIDLE\033[0m  %-34s %s\n' "the gateway is not running" "start it: ./bin/hermes gateway install"
+	;;
 esac
 
 # 11. can the agent actually reach the founder?
@@ -185,7 +229,8 @@ esac
 # reaches his phone. Every job shipped with deliver=local, which writes a file
 # in cron/output/ and tells nobody -- a scheduler talking to itself. This row
 # fails if any job goes back to local.
-LOCAL="$("$PY" - <<'PYEOF'
+LOCAL="$(
+	"$PY" - <<'PYEOF'
 import json
 d = json.load(open('cron/jobs.json'))
 jobs = d if isinstance(d, list) else d.get('jobs', d)
@@ -195,9 +240,9 @@ print(','.join(bad) if bad else '')
 PYEOF
 )"
 if [ -z "$LOCAL" ]; then
-  row "every job reaches the founder" 0 "all jobs deliver off-machine"
+	row "every job reaches the founder" 0 "all jobs deliver off-machine"
 else
-  row "every job reaches the founder" 1 "delivers to nobody: $LOCAL"
+	row "every job reaches the founder" 1 "delivers to nobody: $LOCAL"
 fi
 
 # 12. is launchd running the plists that are on disk?
@@ -212,20 +257,20 @@ fi
 # plist in ~/Library/LaunchAgents, which is the thing the incident was about.
 DRIFTED=""
 for PLIST in "$HOME"/Library/LaunchAgents/*.plist; do
-  [ -f "$PLIST" ] || continue
-  L="$(basename "$PLIST" .plist)"
-  launchctl print "gui/$(id -u)/$L" >/dev/null 2>&1 || continue
-  ON_DISK="$("$PY" -c 'import plistlib,sys
+	[ -f "$PLIST" ] || continue
+	L="$(basename "$PLIST" .plist)"
+	launchctl print "gui/$(id -u)/$L" >/dev/null 2>&1 || continue
+	ON_DISK="$("$PY" -c 'import plistlib,sys
 print(chr(10).join(plistlib.load(open(sys.argv[1],"rb")).get("ProgramArguments",[])))' "$PLIST" 2>/dev/null)"
-  LOADED="$(launchctl print "gui/$(id -u)/$L" 2>/dev/null \
-    | awk '/arguments = \{/{f=1;next} f&&/^[[:space:]]*\}/{exit} f' \
-    | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
-  [ "$ON_DISK" = "$LOADED" ] || DRIFTED="$DRIFTED $L"
+	LOADED="$(launchctl print "gui/$(id -u)/$L" 2>/dev/null |
+		awk '/arguments = \{/{f=1;next} f&&/^[[:space:]]*\}/{exit} f' |
+		sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
+	[ "$ON_DISK" = "$LOADED" ] || DRIFTED="$DRIFTED $L"
 done
 if [ -z "$DRIFTED" ]; then
-  row "launchd runs the plists on disk" 0 "every loaded label matches its file"
+	row "launchd runs the plists on disk" 0 "every loaded label matches its file"
 else
-  row "launchd runs the plists on disk" 1 "loaded definition has drifted from the file:$DRIFTED"
+	row "launchd runs the plists on disk" 1 "loaded definition has drifted from the file:$DRIFTED"
 fi
 
 # 12b. does this Mac run a Telegram gateway at all? It must not.
@@ -250,12 +295,12 @@ GATEWAY_LABELS="$(launchctl list 2>/dev/null | awk '$3 ~ /gateway/ && $1 != "-" 
 LOADED_LIST="$(printf '%s' "$GATEWAY_LABELS" | tr '\n' ' ' | sed 's/ *$//')"
 RETIRED_ON_DISK=""
 for L in $RETIRED_LABELS; do
-  [ -f "$HOME/Library/LaunchAgents/$L.plist" ] && RETIRED_ON_DISK="$RETIRED_ON_DISK $L"
+	[ -f "$HOME/Library/LaunchAgents/$L.plist" ] && RETIRED_ON_DISK="$RETIRED_ON_DISK $L"
 done
 if [ -z "$LOADED_LIST" ] && [ -z "$RETIRED_ON_DISK" ]; then
-  row "the Mac does not run the gateway" 0 "no gateway label loaded, no retired plist on disk"
+	row "the Mac does not run the gateway" 0 "no gateway label loaded, no retired plist on disk"
 else
-  row "the Mac does not run the gateway" 1 "loaded: ${LOADED_LIST:-none} | retired plist on disk:${RETIRED_ON_DISK:- none}"
+	row "the Mac does not run the gateway" 1 "loaded: ${LOADED_LIST:-none} | retired plist on disk:${RETIRED_ON_DISK:- none}"
 fi
 
 # 13. does the agent get all of the laws, or only some of them?
@@ -270,7 +315,8 @@ fi
 # and fails if a single character was dropped, which is the artifact and not a
 # proxy for it. When it goes red the fix is to raise context_file_max_chars in
 # config.yaml until this passes -- the detail line says by how much.
-LAWS="$("$PY" - <<'PYEOF' 2>&1
+LAWS="$(
+	"$PY" - <<'PYEOF' 2>&1
 import logging
 import sys
 sys.path.insert(0, "hermes-agent")
@@ -306,30 +352,35 @@ print(
 )
 raise SystemExit(1)
 PYEOF
-)"; RC=$?
+)"
+RC=$?
 row "the agent gets every law" "$RC" "$LAWS"
 
 # 9. dispatch (crew#182 CP7): the drill proves both ways in one run - an
 # agent-go issue is claimed into a worktree, branch and run; icebox never is.
 # Then the runtime the config names must actually be on this machine, or a
 # claimed issue would sit with no session behind it.
-OUT="$("$PY" -m pytest tests/test_incident_crew182_cp7_dispatch.py -q 2>&1 | tail -1)"; RC=$?
+OUT="$("$PY" -m pytest tests/test_incident_crew182_cp7_dispatch.py -q 2>&1 | tail -1)"
+RC=$?
 row "dispatch claims agent-go and never icebox" "$RC" "$OUT"
-RT="$("$PY" - <<'PYEOF'
+RT="$(
+	"$PY" - <<'PYEOF'
 import yaml; e = yaml.safe_load(open("estate.yaml")) or {}
 d = e.get("dispatch") or {}; print(((d.get("runtimes") or {}).get(d.get("runtime", "claude")) or [d.get("runtime", "claude")])[0])
 PYEOF
 )"
-command -v "$RT" >/dev/null 2>&1; row "the dispatch runtime is installed" "$?" "$RT"
+command -v "$RT" >/dev/null 2>&1
+row "the dispatch runtime is installed" "$?" "$RT"
 
 # 12. the phone reaches the kernel: the sovereign plugin registers its commands and the
 # photo hook (crew#284 CP1). Loaded the way the gateway loads it, not grepped.
-SOV="$("$PY" bin/verify-sovereign-plugin 2>&1)"; row "the sovereign plugin registers its commands" "$?" "$SOV"
+SOV="$("$PY" bin/verify-sovereign-plugin 2>&1)"
+row "the sovereign plugin registers its commands" "$?" "$SOV"
 
 # --full: the whole requirement ledger, which is slower
 if [ "${1:-}" = "--full" ]; then
-  printf '\n'
-  "$PY" bin/check-requirements.py 2>&1 | grep -E '^(PASS [0-9]+|TIMED OUT)' | sed 's/^/  /'
+	printf '\n'
+	"$PY" bin/check-requirements.py 2>&1 | grep -E '^(PASS [0-9]+|TIMED OUT)' | sed 's/^/  /'
 fi
 
 printf '\n  %d passed, %d failed\n\n' "$PASS" "$FAIL"

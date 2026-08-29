@@ -3,6 +3,11 @@
 # Without HERMES_HOME set, the agent defaults to ~/.hermes -- the OLD estate.
 # hermes_constants.py:59 -> Path.home() / ".hermes"
 set -euo pipefail
+on_exit() {
+	local ec=$?
+	[ "$ec" -eq 0 ] || echo "  (exit $ec)" >&2
+}
+trap on_exit EXIT
 H="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 unset PYTHONPATH PYTHONHOME
 export HERMES_HOME="$H"
