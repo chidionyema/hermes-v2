@@ -32,9 +32,16 @@ if [ -n "${HERMES_ENV_DIR:-}" ] && [ -d "$HERMES_ENV_DIR" ]; then
 fi
 
 mkdir -p "$HERMES_HOME"
-# The build over the volume. --no-preserve keeps the volume's fsGroup ownership; cp never
-# touches a path that is not in the build, and no state path is (they are gitignored).
-cp -R --no-preserve=ownership,mode "$BUILD"/. "$HERMES_HOME"/
+# The build over the volume. --no-preserve=ownership keeps the volume's fsGroup ownership; cp never
+# touches a path that is not in the build, and no state path is (they are gitignored). Mode IS
+# preserved: `--no-preserve=mode` wrote bin/hermes as 0644 and install-cron died with
+# "PermissionError: [Errno 13] Permission denied: '/data/bin/hermes'" on every boot, so no cron
+# lane was ever installed on the cluster (oke-check run 33272111128, architect-doctor, crew#561).
+cp -R --no-preserve=ownership "$BUILD"/. "$HERMES_HOME"/
+test -x "$HERMES_HOME/bin/hermes" || {
+	echo "entrypoint: $HERMES_HOME/bin/hermes is not executable after the copy" >&2
+	exit 1
+}
 # bin/hermes execs $HERMES_HOME/.venv/bin/hermes; the venv lives with the upstream checkout.
 ln -sfn "$VENV" "$HERMES_HOME/.venv"
 
