@@ -109,6 +109,12 @@ plugins:
   enabled:
     - sovereign
     - guide
+    # crew#717 wave 1 (founder 2026-08-30 "i need otto sorted once and for all"): every Otto
+    # turn is a trace in the estate's Langfuse (LAW 50). Keys arrive in the pod's env dir as
+    # LANGFUSE_PUBLIC_KEY / LANGFUSE_SECRET_KEY (idp platform/hermes-agent/langfuse-key.yaml);
+    # LANGFUSE_BASE_URL points at the in-cluster service. No key, no crash: the plugin gates
+    # itself on credentials at runtime.
+    - observability/langfuse
 
 # crew#496 2026-08-27 14:10Z: the founder's Telegram session reached ~500k tokens
 # because compaction fired only at 50% of a 1M window and its summary model
