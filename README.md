@@ -256,6 +256,8 @@ are tracked, so what you see below is the source they come from.
 
 | path | why it exists |
 |---|---|
+| `.claude/` | Session hooks for an agent working on this repo. Kept in the repo, not the machine, so a session on any computer or cloud runner starts with the same fences. |
+| `.claude/settings.json` | One SessionStart hook: if the estate guards are not in `$HOME/.claude`, clone them from the claude-estate repo. A present checkout is left alone. Set `ESTATE_REPO` to point at a fork. |
 | `.dockerignore` | Keeps the Docker build context to source. Without it the context is 1.2 GB, almost none of which the image needs, and every deploy pays for it. |
 | `.env.example` | Every credential the agent can use, each with an empty value and a line saying what it unlocks. `./install` copies it to `.env`, which is mode 600 and never tracked. |
 | `.estate/` | Standing decisions about this repository that a machine has to be able to find. One file per decision, and deleting the file withdraws the decision. |
