@@ -16,6 +16,15 @@ fallback_providers:
     model: minimax
     base_url: https://llm.mumchimp.com/v1
     key_env: LITELLM_API_KEY
+# crew#561 CP3: estate state through the estate MCP, the one query path every session uses
+# (idp platform/mcp). The key arrives in the pod's env dir as ESTATE_MCP_KEY (idp
+# platform/hermes-agent/mcp-key.yaml); hermes_cli.mcp_config resolves the placeholder before
+# connecting. One catalogue, one door; no second copy of the estate inside the agent.
+mcp_servers:
+  estate:
+    url: https://mcp.mumchimp.com/estate/mcp
+    headers:
+      Authorization: "Bearer ${ESTATE_MCP_KEY}"
 agent:
   max_turns: 90
   verify_on_stop: true
