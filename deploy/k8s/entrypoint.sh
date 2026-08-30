@@ -40,7 +40,11 @@ mkdir -p "$HERMES_HOME"
 # --preserve=mode is explicit because cp leaves an EXISTING destination file's mode alone unless
 # told to preserve: the volume already held bin/hermes at 0644 from the boots above, so the first
 # image with the test below crash-looped on every boot (oke-check run 33281380053, 2026-08-29).
-cp -R --no-preserve=ownership --preserve=mode "$BUILD"/. "$HERMES_HOME"/
+# The sources are the build's children, never "$BUILD"/. : with --preserve=mode cp also chmods the
+# destination directory itself, and $HERMES_HOME is the volume's mount root, owned by root, so a
+# non-root container gets "cp: preserving permissions for '/data/.': Operation not permitted" and
+# exit 1 on every boot (oke-check run 33283974599, 2026-08-30, image main-38).
+find "$BUILD" -mindepth 1 -maxdepth 1 -exec cp -R --no-preserve=ownership --preserve=mode -t "$HERMES_HOME" {} +
 test -x "$HERMES_HOME/bin/hermes" || {
 	echo "entrypoint: $HERMES_HOME/bin/hermes is not executable after the copy" >&2
 	exit 1

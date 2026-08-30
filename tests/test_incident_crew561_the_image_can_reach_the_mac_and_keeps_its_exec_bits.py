@@ -19,13 +19,19 @@ DOCKERFILE = ROOT / "Dockerfile"
 
 def test_the_build_copy_keeps_the_exec_bit():
     text = ENTRYPOINT.read_text()
-    cp_lines = [ln for ln in text.splitlines() if ln.startswith("cp ")]
+    cp_lines = [ln for ln in text.splitlines() if re.search(r"(^|\s)cp -R ", ln)]
     assert cp_lines, "no cp line in the entrypoint"
     assert all(
         "no-preserve=ownership,mode" not in ln and "no-preserve=mode" not in ln
         for ln in cp_lines
     )
-    assert re.search(r"(?m)^cp -R --no-preserve=ownership --preserve=mode ", text)
+    assert re.search(
+        r"(?m)^find \"\$BUILD\" -mindepth 1 -maxdepth 1 -exec cp -R --no-preserve=ownership --preserve=mode -t \"\$HERMES_HOME\" \{\} \+",
+        text,
+    )
+    # never "$BUILD"/. as the source: that makes cp chmod the mount root (run 33283974599)
+    code = [ln for ln in text.splitlines() if not ln.lstrip().startswith("#")]
+    assert all('"$BUILD"/.' not in ln for ln in code)
     assert 'test -x "$HERMES_HOME/bin/hermes"' in text
 
 
@@ -69,4 +75,56 @@ def test_preserve_mode_restores_the_exec_bit_on_a_file_the_volume_already_holds(
         [cp, "-R", "--no-preserve=ownership", "--preserve=mode", f"{src}/.", f"{dst}/"],
         check=True,
     )
+    assert (dst / "bin" / "hermes").stat().st_mode & 0o111
+
+
+def test_copying_the_children_never_chmods_the_destination_root(tmp_path):
+    """2026-08-30, image main-38 (oke-check run 33283974599): `cp -R --preserve=mode src/. dst/`
+    also applies src's mode to dst itself; dst is the PVC mount root owned by root, and the
+    non-root container died with "preserving permissions for '/data/.': Operation not permitted".
+    Copying src's children leaves dst's own mode alone, so there is nothing to refuse."""
+    import shutil
+    import subprocess
+
+    cp = shutil.which("gcp") or shutil.which("cp")
+    if b"GNU" not in subprocess.run([cp, "--version"], capture_output=True).stdout:
+        import pytest
+
+        pytest.skip("needs GNU cp (brew install coreutils)")
+    src = tmp_path / "build"
+    (src / "bin").mkdir(parents=True)
+    (src / "bin" / "hermes").write_text("#!/bin/sh\n")
+    (src / "bin" / "hermes").chmod(0o755)
+    src.chmod(0o700)
+    dst = tmp_path / "data"
+    dst.mkdir()
+    dst.chmod(0o755)
+    whole = subprocess.run(
+        [cp, "-R", "--preserve=mode", f"{src}/.", f"{dst}/"], capture_output=True
+    )
+    assert whole.returncode == 0 and (dst.stat().st_mode & 0o777) == 0o700, (
+        "the class: cp chmods dst"
+    )
+    dst.chmod(0o755)
+    children = subprocess.run(
+        [
+            "find",
+            str(src),
+            "-mindepth",
+            "1",
+            "-maxdepth",
+            "1",
+            "-exec",
+            cp,
+            "-R",
+            "--preserve=mode",
+            "-t",
+            str(dst),
+            "{}",
+            "+",
+        ],
+        capture_output=True,
+    )
+    assert children.returncode == 0, children.stderr
+    assert (dst.stat().st_mode & 0o777) == 0o755
     assert (dst / "bin" / "hermes").stat().st_mode & 0o111
