@@ -277,6 +277,7 @@ are tracked, so what you see below is the source they come from.
 | `bin/check-requirements.py` | Runs the `acceptance_cmd` of all 133 requirement rows and writes the result to `logs/requirements-status.json`. A row closes on exit 0, never on anyone asserting it. |
 | `bin/consult` | Asks a second model a question from inside a lane. Exit 3 when there is none, which is the normal state of a sleeping laptop and never an error. |
 | `bin/cost-report.sh` | What the agent has actually spent, read out of the usage ledger rather than estimated. |
+| `bin/estate-state-at-start.py` | The mandated read of estate state at boot (crew#561, founder 2026-08-30 "Otto need to be mandated also else may forget"). Calls `get_estate_state` on the estate MCP once from the entrypoint and logs one line, `estate-state: READ <generated_at>` or `estate-state: BLIND <reason>`; the otto-parity drill grades that line. Exit 0 always, receipt only, never a copy of the document. |
 | `bin/curator-report.sh` | Weekly. Asks the skill curator what it makes of the skills and writes it to `logs/curator/REPORT.md`. It changes nothing; the report is an input to the Sunday review. |
 | `bin/features` | The on/off switch. Reads and writes the `features:` block in `estate.yaml`, and `--check` gives the scheduler an exit code so an off lane gets no jobs. |
 | `bin/hermes` | The wrapper you must always use. Bare `hermes` defaults to `~/.hermes`, which is a different estate; this sets `HERMES_HOME` to this directory. |
