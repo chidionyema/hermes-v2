@@ -73,6 +73,13 @@ onboarding:
 platforms:
   telegram:
     extra:
+      # Founder 2026-08-30 01:2xZ: "my /summary game had a rich interface, now reduced to commands".
+      # The card (hermes-agent gateway/summary_card.py) is built from collapsible <details> blocks and
+      # tables that only Telegram's rich message endpoint (Bot API 10.1) renders; upstream made that
+      # endpoint opt-in with default off (hermes-agent 6183e8ce1b, 2026-06-21) and this file never
+      # opted in, so every pin since v2026.8.19 sent the card flat. Pinned by
+      # tests/test_incident_founder_summary_card_is_rich.py.
+      rich_messages: true
       command_menu:
         max_commands: 12
         priority_mode: replace
