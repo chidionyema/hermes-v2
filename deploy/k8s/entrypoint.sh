@@ -73,6 +73,11 @@ elif [ ! -s estate.yaml ]; then
 fi
 "$PY" bin/render
 
+# crew#561: the mandated read of estate state at start. One log line, READ or BLIND, graded by
+# the otto-parity drill (estate-state-read-at-start). Never fatal: a blind door is a red row,
+# not a dead gateway.
+"$PY" bin/estate-state-at-start.py || echo "estate-state: BLIND script exited $?"
+
 # The two lanes the Mac ticked (cron/watch.jobs, cron/work.jobs). install-cron is idempotent
 # and `--feature` keeps a lane that is off in estate.yaml genuinely inert. The gateway process
 # ticks jobs.json itself; there is no second scheduler.

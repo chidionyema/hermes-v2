@@ -65,7 +65,7 @@ def test_entrypoint_keeps_the_state_and_installs_both_lanes():
     # build over the volume, state untouched: auth.json only when absent
     assert '[ ! -s "$HERMES_HOME/auth.json" ]' in text
     assert "install-cron.py cron/watch.jobs --feature watch" in text
-    assert "install-cron.py cron/work.jobs  --feature work" in text
+    assert "install-cron.py cron/work.jobs --feature work" in text
     # crew#524 CP2: the third lane is installed the same way and gated on evolution: on in the estate
     assert "install-cron.py cron/evolution.jobs --feature evolution" in text
     assert re.search(r'^exec .*hermes_cli\.main gateway run', text, re.M)
