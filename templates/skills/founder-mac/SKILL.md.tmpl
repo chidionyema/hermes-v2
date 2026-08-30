@@ -1,0 +1,54 @@
+---
+name: founder-mac
+description: Run a command on the founder's Mac from the cluster. Use when he asks for anything that lives on his machine - a file, a local checkout, a running app, a log, brew, his logged-in CLIs - instead of saying you have no access.
+---
+
+# founder-mac
+
+You are not on the founder's Mac. You are in a pod on the cluster, and the Mac is one hop away
+over the tailnet. The bridge is a single command, already on your PATH:
+
+```bash
+mac-run hostname
+```
+
+`mac-run` is ssh with the key and the route pre-wired (idp `platform/hermes-agent/mac-run.yaml`,
+crew#516 CP5 / crew#561). Everything after `mac-run` runs on the Mac, as the founder's user, in
+his login environment. Quote it as you would for ssh.
+
+## Prove the door before you use it
+
+```bash
+mac-run 'hostname && whoami && uptime'
+```
+
+- Exit 0 and a hostname: the Mac is reachable. Carry on.
+- Exit 2 `mac-run: no key`: the key has not synced from the vault yet. Say exactly that; it is a
+  platform fault, not "no access".
+- Exit 255 or a timeout: the Mac is asleep, off the tailnet, or sshd is off. Say which you can
+  tell, and do not retry more than twice.
+
+## What you do there
+
+```bash
+mac-run 'ls ~/dev/code'                          # his checkouts
+mac-run 'cd ~/dev/code/idp && git log --oneline -3'
+mac-run 'tail -50 ~/Library/Logs/some.log'
+mac-run 'gh auth status'                         # his logged-in CLIs: gh, oci, kubectl, brew
+mac-run 'pmset -g batt'
+```
+
+Read first, write on his word. A `git push`, an `rm`, a `brew install` or a `kubectl apply` on the
+Mac is his call (`approvals.always_ask` in config.yaml), and you say what you are about to run
+before you run it.
+
+## GitHub does not need the Mac
+
+`gh` is installed in the pod and reads `GITHUB_TOKEN` from your environment; `gh repo list
+chidionyema`, `gh issue list -R chidionyema/crew` and `gh pr view` work here directly. Go through the
+Mac only for what is on the Mac.
+
+## Never say "I have no access"
+
+Run `mac-run hostname` and `gh auth status`, and report what they returned. An error string is an
+answer; a guess is not.

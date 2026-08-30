@@ -34,16 +34,12 @@ approvals:
   smart_approvals: true
   always_ask:
     - gh pr merge
-    - fly deploy
-    - fly scale
-    - fly machine destroy
     - git push
     - rm -rf
   never_ask:
     - gh issue list
     - gh issue view
-    - fly status
-    - fly logs
+    - git log
     - git status
     - git diff
 command_allowlist:

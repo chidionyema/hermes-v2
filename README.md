@@ -228,6 +228,7 @@ learns is never overwritten by a template.
 | `scripts/bootstrap-age-auth.sh` | Encrypts the Claude credential to a file the repo can carry. Run once, by a person, on a machine that already holds the credential. |
 | `skills/PLATFORM_GATING.md` | What each skill needs before it may run. A skill whose platform is missing must fail at the top, not half-run. |
 | `skills/consult/SKILL.md` | Ask a different model when you are stuck, and treat the answer as the weakest evidence you hold. Never acts on it unchecked. |
+| `skills/founder-mac/SKILL.md` | Run a command on the founder's Mac from the cluster through `mac-run`; prove the door, then use it, instead of saying there is no access. |
 | `skills/estate-map/SKILL.md` | Print the current shape of the estate — apps, health, repos, open board. Run before guessing where anything lives. |
 | `skills/incident-triage/SKILL.md` | Turn a red platform into one GitHub issue with real evidence in it. Never fixes anything. |
 | `skills/phone-idea-flow/SKILL.md` | Rendered from `templates/skills/phone-idea-flow/SKILL.md.tmpl`: the phone idea flow with this estate's board repo filled in. |
@@ -418,6 +419,8 @@ are tracked, so what you see below is the source they come from.
 | `templates/skills/PLATFORM_GATING.md.tmpl` | What each skill needs before it may run. A skill whose platform is missing must fail at the top rather than half-run. |
 | `templates/skills/consult/` | The consult skill. |
 | `templates/skills/consult/SKILL.md.tmpl` | When a lane may ask a different model, what it must never send, and why exit 3 is a normal answer rather than a fault. |
+| `templates/skills/founder-mac/` | The founder-mac skill. |
+| `templates/skills/founder-mac/SKILL.md.tmpl` | Run a command on the founder's Mac from the cluster through `mac-run`, and `gh` in the pod for GitHub. |
 | `templates/skills/estate-map/` | The estate-map skill. |
 | `templates/skills/estate-map/SKILL.md.tmpl` | Print the current shape of the estate — apps, health, repos, open board — which is what you run instead of guessing where something lives. |
 | `templates/skills/incident-triage/` | The incident-triage skill. |
@@ -452,6 +455,7 @@ are tracked, so what you see below is the source they come from.
 | `tests/test_evidence_gate_checks_screenshots.py` | Refuses an evidence gate that reads pasted text and not the committed screenshot. Pasted text reads the same whether the command ran or not. |
 | `tests/test_incident_crew516_cp4_image_carries_the_estate.py` | Both ways: the image COPYs this repo to `/app/estate` and boots through `deploy/k8s/entrypoint.sh`; the entrypoint never overwrites a live `auth.json` (run for real against a temp volume); `.dockerignore` keeps state and credentials out; every main image carries a `main-<run>-<sha>` tag Flux can order. |
 | `tests/test_incident_crew561_the_image_can_reach_the_mac_and_keeps_its_exec_bits.py` | crew#561: the entrypoint copies the build without `--no-preserve=mode` and refuses to boot when `bin/hermes` is not executable (the 58-restart crash of oke-check run 33272111128); the Dockerfile installs `openssh-client` and `netcat-openbsd` so idp's mac-run can reach the founder's Mac. |
+| `tests/test_incident_crew561_pod_has_gh_and_knows_the_mac.py` | crew#561: the image installs `gh`, the founder-mac skill names `mac-run`, and no skill or approval row names a fly command (R1) — the two reasons Otto said he had no access to GitHub or the Mac. |
 | `tests/test_incident_crew570_the_signature_is_findable_by_a_third_party.py` | cosign v3 stores signatures as OCI referrers, and GHCR serves no referrers API -- so `hermes-agent` had 16 tags and zero `.sig`, and the run went green because cosign was verifying its own output. Every `cosign sign`/`verify` in `.github/workflows` must carry `--new-bundle-format=false`, and a witness that is NOT cosign must resolve the legacy `.sig` tag in the same step. |
 | `tests/test_incident_r1_no_fly_in_estate.py` | Both ways for `bin/check-platform.py`: a Fly URL or `kind: fly` is refused, a kubernetes estate passes. |
 | `tests/test_shell_strict_gate.py` | `bin/shell-strict` both ways: a clean file passes; each of the four rules refuses on its own with its reason; the `bin/verify`/`bin/verify-consult` exemption is by exact path, not by content, so a same-shaped file elsewhere is still refused; the `shell-strict` job is named in `.github/workflows/gates.yml`. |
