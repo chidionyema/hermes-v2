@@ -37,10 +37,14 @@ mkdir -p "$HERMES_HOME"
 # preserved: `--no-preserve=mode` wrote bin/hermes as 0644 and install-cron died with
 # "PermissionError: [Errno 13] Permission denied: '/data/bin/hermes'" on every boot, so no cron
 # lane was ever installed on the cluster (oke-check run 33272111128, architect-doctor, crew#561).
-# --preserve=mode is explicit because cp leaves an EXISTING destination file's mode alone unless
-# told to preserve: the volume already held bin/hermes at 0644 from the boots above, so the first
-# image with the test below crash-looped on every boot (oke-check run 33281380053, 2026-08-29).
-cp -R --no-preserve=ownership --preserve=mode "$BUILD"/. "$HERMES_HOME"/
+# cp leaves an EXISTING destination file's mode alone, and the volume already held bin/hermes at
+# 0644 from the boots above, so the first image with the test below crash-looped on every boot
+# (oke-check run 33281380053, 2026-08-29). `--preserve=mode` was the next try and crash-looped too:
+# copying "$BUILD"/. onto the volume root chmods /data itself, which the pod does not own
+# ("cp: preserving permissions for '/data/.': Operation not permitted", oke-check run 33283974599,
+# 2026-08-30). So: copy without touching modes, then set the exec bit on bin/ ourselves.
+cp -R --no-preserve=ownership "$BUILD"/. "$HERMES_HOME"/
+chmod -R a+X,u+x "$HERMES_HOME/bin"
 test -x "$HERMES_HOME/bin/hermes" || {
 	echo "entrypoint: $HERMES_HOME/bin/hermes is not executable after the copy" >&2
 	exit 1
