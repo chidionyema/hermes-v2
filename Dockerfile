@@ -9,6 +9,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 RUN pip install --no-cache-dir uv==0.12.5
 
+# crew#561: every estate skill (estate-map, incident-triage, pr-discipline, phone-idea-flow) tells
+# the agent to run `gh`, and the pod had no `gh` -- so Otto told the founder he had "no access to
+# GitHub" while GITHUB_TOKEN sat in his env (gh reads GH_TOKEN/GITHUB_TOKEN, no login step).
+# Pinned release binary, arch-aware: the image builds on ubuntu-24.04-arm, the cluster runs arm64.
+ARG GH_VERSION=2.98.0
+RUN arch="$(dpkg --print-architecture)" \
+    && curl --retry 5 -fsSL "https://github.com/cli/cli/releases/download/v${GH_VERSION}/gh_${GH_VERSION}_linux_${arch}.tar.gz" \
+       | tar -xz -C /usr/local --strip-components=1 "gh_${GH_VERSION}_linux_${arch}/bin/gh" \
+    && gh --version
+
 WORKDIR /app
 
 # hermes-agent is NousResearch's separate upstream repo, not this repo's own source

@@ -64,6 +64,7 @@ profiles/work/MEMORY.md
 scripts/pulse.sh
 skills/PLATFORM_GATING.md
 skills/estate-map/SKILL.md
+skills/founder-mac/SKILL.md
 skills/incident-triage/SKILL.md
 skills/post-mortem/SKILL.md
 skills/pr-discipline/SKILL.md
@@ -81,6 +82,7 @@ cron/.fire-*.lock
 skills/.bundled_manifest
 skills/*/
 !skills/estate-map/
+!skills/founder-mac/
 !skills/incident-triage/
 !skills/post-mortem/
 !skills/pr-discipline/
