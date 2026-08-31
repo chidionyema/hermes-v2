@@ -2,12 +2,16 @@
 
 "Deterministic" here means: the same suite result always serializes to the
 same JSON bytes (sorted keys, fixed separators, no locale-dependent float
-formatting) and therefore always hashes to the same sha256. The wall-clock
-``generated_at`` field is metadata only, excluded from the hashed content,
-so re-running an unchanged suite twice produces two reports whose
-``content_sha256`` is identical even though their timestamps differ -- that
-identity is exactly what the regression gate (``otto.evals.gate``) and the
-"report is proof, not narration" requirement need.
+formatting) and therefore always hashes to the same sha256. Every wall-clock
+field -- the top-level ``generated_at`` timestamp AND each case's
+``elapsed_s`` runtime -- is metadata, excluded from the hashed content, so
+re-running an unchanged suite twice produces two reports whose
+``content_sha256`` is identical even though real time elapsed differently
+between the two runs. The fields still appear in the report on disk for a
+human or a latency dashboard to read; they are only invisible to the hash.
+That identity is exactly what the regression gate (``otto.evals.gate``) and
+the "report is proof, not narration" requirement need: two runs of the same
+candidate must be provably the same artefact, not merely close.
 
 The report path is never hardcoded (LAW 46): callers pass a path explicitly,
 or the CLI reads it from the ``OTTO_EVAL_REPORT_PATH`` environment variable.
@@ -76,8 +80,27 @@ def _suite_report_to_content(suite_report: SuiteReport) -> dict[str, Any]:
     }
 
 
+# Per-case fields that measure real wall-clock time. These stay in the report
+# for humans and dashboards but are stripped before hashing -- a field whose
+# value depends on how fast the machine happened to be that second must never
+# make two logically-identical runs hash differently.
+WALL_CLOCK_CASE_FIELDS = ("elapsed_s",)
+
+
+def _redact_wall_clock(content: dict[str, Any]) -> dict[str, Any]:
+    redacted = dict(content)
+    redacted["cases"] = [
+        {k: v for k, v in case.items() if k not in WALL_CLOCK_CASE_FIELDS}
+        for case in content["cases"]
+    ]
+    return redacted
+
+
 def content_sha256(content: dict[str, Any]) -> str:
-    return hashlib.sha256(_canonical_json(content).encode("utf-8")).hexdigest()
+    """Hash the content, with all wall-clock fields (see WALL_CLOCK_CASE_FIELDS) redacted first."""
+    return hashlib.sha256(
+        _canonical_json(_redact_wall_clock(content)).encode("utf-8")
+    ).hexdigest()
 
 
 def build_report_dict(

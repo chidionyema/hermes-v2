@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import dataclasses
 import json
 
 import pytest
@@ -13,7 +14,7 @@ from otto.evals.report import (
     resolve_report_path,
     write_report,
 )
-from otto.evals.runner import run_cases
+from otto.evals.runner import SuiteReport, run_cases
 from otto.tests.cp0.fixtures.fake_agents import agent_pass
 
 CASE = EvalCase(
@@ -32,6 +33,47 @@ def test_report_is_deterministic_given_same_content():
     r2 = build_report_dict(suite_report, generated_at="2099-12-31T23:59:59Z")
     # different wall-clock timestamps must not change the content hash
     assert r1["content_sha256"] == r2["content_sha256"]
+
+
+def test_content_sha256_identical_across_two_real_runs_of_same_suite(tmp_path):
+    """Regression test for the defect an independent verifier found: elapsed_s (real
+    wall-clock per-case runtime) was leaking into the hashed content, so two back-to-back
+    runs of the identical suite produced two different content_sha256 values (observed
+    19993296... vs 65b1e8b9...). Two genuinely separate invocations of run_cases -- not
+    the same object reused -- must hash identically.
+    """
+    suite_report_1 = run_cases(agent_pass, [CASE], suite="core")
+    suite_report_2 = run_cases(agent_pass, [CASE], suite="core")
+    assert suite_report_1 is not suite_report_2  # two real runs, not one measured twice
+
+    report_1 = write_report(suite_report_1, tmp_path / "run1.json")
+    report_2 = write_report(suite_report_2, tmp_path / "run2.json")
+
+    assert report_1["content_sha256"] == report_2["content_sha256"]
+    # elapsed_s still appears in the report for a human/dashboard -- it is excluded from
+    # the hash, not deleted from the artefact.
+    assert "elapsed_s" in report_1["cases"][0]
+    assert "elapsed_s" in report_2["cases"][0]
+
+
+def test_content_sha256_unaffected_by_elapsed_s_by_construction():
+    """Deterministic companion to the real-run test above: force elapsed_s to differ and
+    prove the hash still matches, so this does not depend on timing jitter to catch a
+    regression.
+    """
+    suite_report = run_cases(agent_pass, [CASE], suite="core")
+    slow_case = dataclasses.replace(
+        suite_report.cases[0], elapsed_s=suite_report.cases[0].elapsed_s + 999.0
+    )
+    slow_suite_report = SuiteReport(suite=suite_report.suite, cases=(slow_case,))
+
+    fast_report = build_report_dict(suite_report, generated_at="2026-01-01T00:00:00Z")
+    slow_report = build_report_dict(
+        slow_suite_report, generated_at="2026-01-01T00:00:00Z"
+    )
+
+    assert fast_report["cases"][0]["elapsed_s"] != slow_report["cases"][0]["elapsed_s"]
+    assert fast_report["content_sha256"] == slow_report["content_sha256"]
 
 
 def test_write_then_read_round_trips(tmp_path):
