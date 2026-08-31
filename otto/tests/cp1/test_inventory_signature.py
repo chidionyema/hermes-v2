@@ -74,3 +74,27 @@ def test_a_previous_inventory_signed_by_a_different_key_is_refused(
     )
 
     assert exit_code != 0
+
+
+def test_no_previous_flag_at_all_is_a_genuine_first_run(
+    tmp_path: Path, key_path: Path
+) -> None:
+    exit_code = inventory_mod.inventory_cli(key_path=key_path, previous_path=None)
+
+    assert exit_code == 0
+
+
+def test_an_explicit_previous_path_that_does_not_exist_is_refused(
+    tmp_path: Path, key_path: Path
+) -> None:
+    # A silent-green sibling of the tampered-signature defect: a typo'd or
+    # never-downloaded --previous must not be treated the same as "no
+    # --previous at all" (a genuine first run) — that would print a clean
+    # diff for a comparison that never actually happened.
+    missing_path = tmp_path / "does-not-exist.json"
+
+    exit_code = inventory_mod.inventory_cli(
+        key_path=key_path, previous_path=missing_path
+    )
+
+    assert exit_code != 0, "an explicit --previous that is missing must be refused"

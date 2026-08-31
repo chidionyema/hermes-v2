@@ -214,7 +214,20 @@ def inventory_cli(
     print(f"signature_valid: {ok}")
 
     prev = None
-    if previous_path is not None and previous_path.exists():
+    if previous_path is not None:
+        # An explicit --previous that does not exist is a caller error
+        # (a typo'd path, a CI artifact that failed to download), not a
+        # first run — first run is the no-flag path. Silently treating a
+        # missing file the same as "nothing to diff against" is the same
+        # silent-green shape as the unverified-signature defect above:
+        # it prints a clean diff for a check that never actually ran.
+        if not previous_path.exists():
+            print(
+                f"error: --previous {previous_path} does not exist — refusing "
+                "(omit --previous entirely for a genuine first run)",
+                file=sys.stderr,
+            )
+            return 1
         prev_signed = json.loads(previous_path.read_text())
         # Fail closed: an unverifiable --previous is refused rather than
         # silently diffed against. Diffing a tampered artifact would print

@@ -39,7 +39,7 @@ from nats.js.api import (
     StorageType,
     StreamConfig,
 )
-from nats.js.errors import APIError
+from nats.js.errors import APIError, NotFoundError
 
 from otto.spine import subjects
 
@@ -147,7 +147,17 @@ class Bus:
         """A durable pull consumer, explicit-ack. This is the work-queue
         shape (each message goes to exactly one puller of a given durable
         name, redelivered until acked) without the stream itself losing
-        history — see the retention note in the module docstring."""
+        history — see the retention note in the module docstring.
+
+        nats-py's own `pull_subscribe` does NOT raise when a durable of
+        this name already exists with different semantics — it silently
+        binds to whatever is already there (confirmed live against
+        nats-py 2.15.0; an earlier version of this method guarded that
+        case inside an `except APIError`, which is dead code because no
+        exception is ever raised). The check has to happen BEFORE
+        binding: fetch the existing consumer's config first, compare the
+        fields that change delivery *semantics*, and refuse the mismatch
+        outright — never call `pull_subscribe` at all in that case."""
         cfg = ConsumerConfig(
             durable_name=durable,
             deliver_policy=DeliverPolicy.ALL if deliver_all else DeliverPolicy.NEW,
@@ -155,20 +165,11 @@ class Bus:
             filter_subject=filter_subject,
         )
         try:
-            return await self.js.pull_subscribe(
-                filter_subject, durable=durable, stream=stream, config=cfg
-            )
-        except APIError:
-            # A durable of this name already exists. Adopting it silently
-            # is how the slow-consumer scenario's redelivery bug happened
-            # (a caller asking for DeliverPolicy.NEW got an existing
-            # DeliverPolicy.ALL consumer instead, with no error). Verify
-            # the fields that change delivery *semantics* actually match
-            # what this caller asked for before reusing it; a mismatch is
-            # a bug in the caller (two different durable names collided,
-            # or a real config change was never migrated) and must raise,
-            # never be papered over.
             info = await self.js.consumer_info(stream, durable)
+        except NotFoundError:
+            info = None
+
+        if info is not None:
             existing = info.config
             mismatches = {
                 field: (getattr(existing, field), wanted)
@@ -183,10 +184,11 @@ class Bus:
                 raise RuntimeError(
                     f"durable consumer {durable!r} on stream {stream!r} already "
                     f"exists with incompatible config: {mismatches}"
-                ) from None
-            return await self.js.pull_subscribe(
-                filter_subject, durable=durable, stream=stream
-            )
+                )
+
+        return await self.js.pull_subscribe(
+            filter_subject, durable=durable, stream=stream, config=cfg
+        )
 
     async def read_all(self, *, stream: str, filter_subject: str) -> list[Msg]:
         """Ordered, ephemeral, read-only sweep of everything currently on a
