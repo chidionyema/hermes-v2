@@ -1,0 +1,162 @@
+"""Step definitions for ``features/cp5_network_and_contract.feature``.
+
+The founder's explicit network-failure word: slow provider, 5xx flap,
+egress denied — each covered, each fail-closed. Plus contract refusal and
+the P1 never-self-certified guarantee.
+"""
+
+from __future__ import annotations
+
+import json
+
+from pytest_bdd import given, scenarios, then, when
+
+from otto.router import OutcomeState, RouterTask, VerificationStatus
+from otto.tests.cp5.conftest import (
+    ScriptedClient,
+    always_timeout,
+    contract_json,
+    egress_denied,
+)
+
+scenarios("../features/cp5_network_and_contract.feature")
+
+
+@given("a task routed to the bulk lane")
+def bulk_task(ctx: dict) -> None:
+    ctx["task"] = RouterTask(input="summarise these logs", source="cron")
+
+
+@given("a provider that never answers inside the timeout")
+def slow_provider(ctx: dict) -> None:
+    ctx["client"] = always_timeout()
+
+
+@given("a provider whose egress is denied by network policy")
+def denied_provider(ctx: dict) -> None:
+    ctx["client"] = egress_denied()
+
+
+@given("a provider that answers with output missing the claims array")
+def malformed_provider(ctx: dict) -> None:
+    body = json.dumps({"answer": "done", "proposed_actions": [], "unknowns": []})
+    ctx["client"] = ScriptedClient(body=body)
+
+
+@given("a provider that answers with a well-formed contract document")
+def wellformed_provider(ctx: dict) -> None:
+    claims = [
+        {
+            "text": "cron output summarised",
+            "evidence_refs": ["tool_call_001"],
+            "confidence": "high",
+        }
+    ]
+    ctx["client"] = ScriptedClient(body=contract_json(claims=claims))
+
+
+@given("a provider whose answer costs more than the bulk per-task cap")
+def expensive_provider(ctx: dict, router) -> None:
+    lane = router.config.lanes["bulk"]
+    # Enough tokens that tokens/1000 * price > max_cost_per_task_usd.
+    tokens = int(lane.max_cost_per_task_usd / lane.cost_per_1k_tokens_usd * 1000) + 1000
+    ctx["client"] = ScriptedClient(body=contract_json(), tokens=tokens)
+
+
+@when("the router executes the task")
+def execute_task(ctx: dict, router, notifier, ledger) -> None:
+    ctx["outcome"] = router.execute(ctx["task"], ctx["client"])
+    ctx["notifier"] = notifier
+    ctx["ledger"] = ledger
+    ctx["router"] = router
+
+
+@then("each timed-out attempt is charged to the lane budget")
+def timeout_charged(ctx: dict) -> None:
+    charge = ctx["router"].config.retry.timeout_charge_usd
+    attempts = ctx["outcome"].attempts
+    assert attempts >= 2
+    assert ctx["ledger"].spent("bulk") == attempts * charge
+    assert ctx["outcome"].charged_usd == attempts * charge
+
+
+@then("the router retried exactly once before pausing")
+def retried_once_then_paused(ctx: dict) -> None:
+    assert ctx["router"].config.retry.max_retries_timeout == 1
+    assert ctx["outcome"].attempts == 2
+
+
+@then("the task is routed to needs_human and Chidi is notified")
+def needs_human_and_notified(ctx: dict) -> None:
+    assert ctx["outcome"].state is OutcomeState.NEEDS_HUMAN
+    assert any(ctx["outcome"].task_id in m for m in ctx["notifier"].messages)
+
+
+@then("the task is routed to needs_human after a single attempt")
+def needs_human_single_attempt(ctx: dict) -> None:
+    assert ctx["outcome"].state is OutcomeState.NEEDS_HUMAN
+    assert ctx["outcome"].attempts == 1
+
+
+@then("no retry and no fallback provider was attempted")
+def no_retry_no_fallback(ctx: dict) -> None:
+    configured = ctx["router"].config.lanes["bulk"].model
+    assert ctx["client"].calls == [configured]  # one call, the configured model
+
+
+@then("Chidi is notified")
+def chidi_notified(ctx: dict) -> None:
+    assert any(ctx["outcome"].task_id in m for m in ctx["notifier"].messages)
+
+
+@then("the outcome is refused_malformed and no response object exists")
+def refused_malformed(ctx: dict) -> None:
+    assert ctx["outcome"].state is OutcomeState.REFUSED_MALFORMED
+    assert ctx["outcome"].response is None
+
+
+@then("the missing field was not silently defaulted")
+def not_defaulted(ctx: dict) -> None:
+    assert "claims" in ctx["outcome"].reason  # the refusal names the field
+    assert ctx["outcome"].executed is False
+
+
+@then("the normalised response carries verification status unverified")
+def status_unverified(ctx: dict) -> None:
+    assert ctx["outcome"].state is OutcomeState.COMPLETED_UNVERIFIED
+    response = ctx["outcome"].response
+    assert response is not None
+    assert response.verification is VerificationStatus.UNVERIFIED
+
+
+@then("no field the provider can emit produces a verified response")
+def provider_cannot_self_certify(ctx: dict, router) -> None:
+    # A provider document that claims to be verified, with every extra flag
+    # it can invent, still normalises to UNVERIFIED.
+    body = json.dumps(
+        {
+            "answer": "all done",
+            "claims": [],
+            "proposed_actions": [],
+            "unknowns": [],
+            "verification": "verified",
+            "verified": True,
+            "status": "completed",
+        }
+    )
+    task = RouterTask(input="x", source="cron")
+    outcome = router.execute(task, ScriptedClient(body=body))
+    assert outcome.response is not None
+    assert outcome.response.verification is VerificationStatus.UNVERIFIED
+
+
+@then("the outcome is paused_task_budget and Chidi is notified")
+def paused_task_budget(ctx: dict) -> None:
+    assert ctx["outcome"].state is OutcomeState.PAUSED_TASK_BUDGET
+    assert any("per-task cap" in m for m in ctx["notifier"].messages)
+
+
+@then("the overrun spend is still recorded on the lane ledger")
+def overrun_still_charged(ctx: dict) -> None:
+    assert ctx["ledger"].spent("bulk") > 0
+    assert ctx["ledger"].spent("bulk") == ctx["outcome"].charged_usd
