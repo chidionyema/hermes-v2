@@ -68,6 +68,12 @@ onboarding:
     busy_input_prompt: true
 platforms:
   telegram:
+    # Founder blueprint 2026-08-31T15:24Z (~/.claude/docs/founder/2026-08-31T1524Z-zero-downtime-
+    # deploys-have-been-solved-for-twenty-025ba76e.md): "The message itself should be deleted
+    # outright. It's a user-facing admission that process lifetime and task lifetime are the same
+    # thing." The restart banner is a config flag in the pinned fork (gateway/config.py
+    # gateway_restart_notification, default true); off is the whole change, no fork code.
+    gateway_restart_notification: false
     extra:
       # Founder 2026-08-30 01:2xZ: "my /summary game had a rich interface, now reduced to commands".
       # The card (hermes-agent gateway/summary_card.py) is built from collapsible <details> blocks and
