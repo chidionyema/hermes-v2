@@ -65,6 +65,19 @@ def _build_parser() -> argparse.ArgumentParser:
         help="override the Ed25519 key path (default: env/LAW46 fallback)",
     )
 
+    # W4 (crew#768): `otto onboard <service>` — the estate-onboarding lane.
+    # Minimal delegation only; the whole implementation lives in otto.onboard.
+    onboard_p = sub.add_parser(
+        "onboard",
+        help="onboard an estate service onto Otto (the admission ticket: "
+        "register tools, sign the capability inventory, allocate budgets, "
+        "write the catalog entity, prove trace coverage)",
+    )
+    onboard_p.add_argument("service")
+    onboard_p.add_argument("--manifest", type=Path, default=None)
+    onboard_p.add_argument("--output-dir", type=Path, default=None)
+    onboard_p.add_argument("--key-path", type=Path, default=None)
+
     return p
 
 
@@ -93,6 +106,16 @@ async def _run(args: argparse.Namespace) -> int:
             return 2
         return inventory.inventory_cli(
             key_path=args.key_path, previous_path=args.previous, output_path=args.output
+        )
+
+    if args.command == "onboard":
+        from otto.onboard.cli import onboard_command
+
+        return onboard_command(
+            service=args.service,
+            manifest_path=args.manifest,
+            output_dir=args.output_dir,
+            key_path=args.key_path,
         )
 
     raise AssertionError(f"unhandled command {args.command!r}")
