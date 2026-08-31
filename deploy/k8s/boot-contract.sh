@@ -41,11 +41,13 @@ print(f"boot-contract: {len(mods)} modules import")
 '
 
 echo "boot-contract: 2/2 secretless boot answers the agent card within ${DEADLINE}s"
+# /data stands in for the ext4 PVC, which allows exec; docker mounts tmpfs noexec
+# by default, which would fail the entrypoint's -x check on the copied launcher.
 docker run -d --name "$NAME" \
 	--user 10001:10001 \
 	--read-only \
 	--tmpfs /tmp:uid=10001,gid=10001 \
-	--tmpfs /data:uid=10001,gid=10001 \
+	--tmpfs /data:exec,uid=10001,gid=10001 \
 	--env HOME=/tmp \
 	"$IMAGE" >/dev/null
 
