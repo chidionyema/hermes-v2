@@ -310,6 +310,8 @@ are tracked, so what you see below is the source they come from.
 | `deploy/` | Everything needed to run this estate somewhere other than the founder's laptop. Nothing in here runs locally. |
 | `deploy/k8s/` | What the container does at boot on the cluster (crew#516 CP4). The manifests themselves live in `idp/platform/hermes-agent`. |
 | `deploy/k8s/entrypoint.sh` | The image's entry point: copies the build (`/app/estate`) over the persistent `HERMES_HOME` volume, seeds `auth.json` once from `HERMES_AUTH_JSON`, renders `estate.yaml`, installs the WATCH and WORK lanes, then execs `gateway run`. State on the volume is never overwritten. |
+| `deploy/k8s/boot-contract.sh` | The release contract (crew#736 CP2): before any image ships, CI boots it secretless as uid 10001 with a read-only root, imports every module in `boot-contract.txt`, and requires the agent card to answer within 90 seconds. An image that cannot boot never reaches the registry. |
+| `deploy/k8s/boot-contract.txt` | The list of modules the image must import at boot, one per line with the reason each is load-bearing. A new dependency selection lands here or the contract fails the build. |
 | `Dockerfile` | The hermes-agent runtime image for the Oracle OKE standby (crew#290/crew#286). Clones the pinned upstream commit itself at build time -- hermes-agent is a separate repo (gitignored here), not this repo's own source. |
 | `.github/workflows/build-agent-image.yml` | Builds and pushes the Dockerfile above to GHCR (arm64-only, matching OKE's Ampere node pool), cosign-signed, same pattern as idp's build-multiarch.yml but self-contained here since a first unproven build shouldn't add blast radius to idp's shared pipeline. |
 | `deploy/secrets/` | Ciphertext only. A cleartext credential has never been in this directory and the encryption is what makes it safe to track. |
@@ -435,6 +437,7 @@ are tracked, so what you see below is the source they come from.
 | `templates/skills/screenshot-to-story/SKILL.md.tmpl` | Turn a photo the founder sends into a well-formed issue, for the message that is an image and almost no words. |
 | `templates/skills/verify-to-prod/` | The verify-to-prod skill. |
 | `templates/skills/verify-to-prod/SKILL.md.tmpl` | Prove a merged change is actually running in production, from two angles, before anything is called done. |
+| `tests/test_incident_crew736_cp2_boot_contract.py` | Proves every Dockerfile extra is named in `boot-contract.txt`, that the build workflow runs `boot-contract.sh` against the built tar before signing, and that the contract stays secretless, uid 10001 and read-only — so a compiled image that cannot execute can never ship (crew#736 CP2). |
 | `tests/test_incident_crew182_idea_flow.py` | Proves the phone idea flow cannot write the board without the confirmation prompt, that exploratory phrasing builds nothing, and that Icebox is labelled so the dispatcher never claims it (crew#182). |
 | `tests/test_incident_otto_guide.py` | Proves the `/guide` card names every skill and job on disk and forgets a removed one without a prose edit, and that a topic returns the skill's own text. |
 | `tests/test_incident_crew278_fallback_is_another_provider.py` | Proves `config.yaml` names a fallback provider that is a different vendor from the primary, so one vendor's outage is not Otto's outage (crew#278 CP3). |
