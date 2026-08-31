@@ -17,7 +17,7 @@ Feature: Spine and measurement (spec section 17 Phase 0, section 11, section 15)
     And the reconstructed task envelope, tool calls and verdict match the original with zero diff
     And no data outside JetStream was read to produce the replay
 
-  Scenario: The eval runner records a baseline against the real corpus
+  Scenario: The eval runner records a baseline against the synthetic corpus
     Given the 40 to 60 task synthetic eval corpus standing in for real Otto and Telegram history (extraction is CP0's harness job)
     When an engineer runs "otto eval run --suite core"
     Then the command exits 0

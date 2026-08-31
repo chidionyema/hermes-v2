@@ -44,7 +44,7 @@ subprocess and a real Postgres cluster (no fakes, no mocks):
 $ python3 -m pytest otto/tests/cp1/step_defs/ -v
 
 test_a_completed_task_replays_end_to_end_from_streams_alone PASSED
-test_the_eval_runner_records_a_baseline_against_the_real_corpus PASSED
+test_the_eval_runner_records_a_baseline_against_the_synthetic_corpus PASSED
 test_the_capability_inventory_is_generated_signed_and_diffed_never_hand_written PASSED
 test_edge_case__a_task_with_zero_tool_calls_still_replays_cleanly PASSED
 test_network_failure__nats_partitions_mid_publish_the_outbox_relay_recovers_it PASSED
