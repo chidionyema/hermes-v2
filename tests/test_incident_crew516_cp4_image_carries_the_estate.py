@@ -65,7 +65,7 @@ def test_entrypoint_keeps_the_state_and_installs_both_lanes():
     # build over the volume, state untouched: auth.json only when absent
     assert '[ ! -s "$HERMES_HOME/auth.json" ]' in text
     assert "install-cron.py cron/watch.jobs --feature watch" in text
-    assert "install-cron.py cron/work.jobs  --feature work" in text
+    assert "install-cron.py cron/work.jobs --feature work" in text
     # crew#524 CP2: the third lane is installed the same way and gated on evolution: on in the estate
     assert "install-cron.py cron/evolution.jobs --feature evolution" in text
     assert re.search(r'^exec .*hermes_cli\.main gateway run', text, re.M)
@@ -194,10 +194,15 @@ def test_the_image_installs_an_extra_for_every_provider_the_estate_config_select
 
 
 def test_a_sync_that_drops_the_provider_sdk_is_refused():
-    """Rung 4 the other way: the exact line that was on main fails against the same config."""
-    text = open(DOCKERFILE).read()
-    assert missing_extras(open(CONFIG).read(), text.replace(" --extra anthropic", "")) == ["anthropic"]
-    assert missing_extras(open(CONFIG).read(), text.replace(" --extra messaging", "")) == ["messaging"]
+    """Rung 4 the other way: dropping any extra the config requires fails against the same
+    config. Derived from required_extras, because the hand-picked pair this used to name
+    (anthropic) stopped being required when config.yaml moved onto the estate router, and
+    the test silently graded nothing (found red on main, crew#736 CP2)."""
+    config, text = open(CONFIG).read(), open(DOCKERFILE).read()
+    required = sorted(required_extras(config))
+    assert required, "config.yaml requires no extras; the rung grades nothing"
+    for extra in required:
+        assert missing_extras(config, text.replace(f" --extra {extra}", "")) == [extra]
     assert missing_extras(open(CONFIG).read(), text.replace(" --extra otlp", "")) == ["otlp"]
 
 
