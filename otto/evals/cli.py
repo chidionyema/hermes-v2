@@ -97,6 +97,9 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
+    from otto.evals import boot
+
+    boot()  # W2 (crew#768): instrument or refuse to run dark
     parser = build_parser()
     args = parser.parse_args(argv)
     return args.func(args)

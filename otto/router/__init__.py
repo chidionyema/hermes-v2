@@ -69,3 +69,16 @@ __all__ = [
     "render_claims_for_telegram",
     "run_eval_cli",
 ]
+
+
+def boot(config=None):
+    """W2 wiring (crew#768): this package's boot entrypoint.
+
+    Instruments the component through ``otto.obs`` and returns the
+    handle, or raises ``ObsBootError`` — nothing boots dark (LAW 50).
+    The exporter endpoint comes only from ``OTEL_EXPORTER_OTLP_ENDPOINT``;
+    ``OTTO_OBS_MODE=test`` binds in-memory exporters for suites.
+    """
+    from otto.obs import instrument
+
+    return instrument("router", config)

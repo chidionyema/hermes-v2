@@ -99,6 +99,9 @@ async def _run(args: argparse.Namespace) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
+    from otto.spine import boot
+
+    boot()  # W2 (crew#768): instrument or refuse to run dark
     parser = _build_parser()
     args = parser.parse_args(argv)
     return asyncio.run(_run(args))
