@@ -74,6 +74,31 @@ def _int_env(name: str, default: int) -> int:
         return default
 
 
+def _merge_model_families(
+    base: dict[str, str], overrides: dict[str, str]
+) -> dict[str, str]:
+    """Merge a policy document's ``model_families`` onto the shipped
+    defaults. A policy may ADD a model the defaults do not know about; it
+    may never CHANGE a shipped entry's family — that is the exact route the
+    family guard exists to close (a policy that remaps
+    ``minimax/minimax-01`` to a non-minimax family re-legalizes putting the
+    judgment lane on the real MiniMax model). Redefinition REFUSES the whole
+    config, fail closed, naming the model and both family values — never a
+    silent overwrite."""
+    merged = dict(base)
+    for model, family in overrides.items():
+        if model in base and base[model] != family:
+            msg = (
+                f"policy defect: model_families redefines the shipped entry "
+                f"for '{model}' from '{base[model]}' to '{family}'; a policy "
+                "document may add a new model->family entry but may never "
+                "change a shipped default (refusing the config, fail closed)"
+            )
+            raise ValueError(msg)
+        merged[model] = family
+    return merged
+
+
 @dataclass(frozen=True)
 class RetryPolicy:
     """Bounded retries per failure class. Egress denial never retries:
@@ -261,8 +286,7 @@ class RouterConfig:
             retry=base.retry,
             grounding_min_overlap=base.grounding_min_overlap,
             ungrounded_rate_bar=base.ungrounded_rate_bar,
-            model_families={
-                **base.model_families,
-                **(policy.get("model_families") or {}),
-            },
+            model_families=_merge_model_families(
+                base.model_families, policy.get("model_families") or {}
+            ),
         )

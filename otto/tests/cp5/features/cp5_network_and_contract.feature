@@ -55,3 +55,16 @@ Feature: Network failure handling and the universal contract
     Given the environment sets the judgment lane model to a model absent from the family mapping
     When the router config is validated
     Then the config is refused because the model derives to no family
+
+  Scenario: Policy defect - a policy document redefining a shipped model_families entry is refused
+    Given a policy document that redefines minimax/minimax-01 to family not-minimax
+    When the router config is built from that policy document
+    Then the config is refused because a shipped model_families entry was redefined
+    And the refusal names minimax/minimax-01, minimax and not-minimax
+
+  Scenario: A policy document adding a brand-new model family is accepted and the guard evaluates it
+    Given a policy document that adds a brand-new model mapped to a brand-new family
+    And the policy routes the judgment lane to that brand-new model
+    When the router config is built from that policy document
+    Then the config is accepted
+    And the judgment lane's family derives to the brand-new family
