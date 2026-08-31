@@ -8,6 +8,7 @@ clients live here because both feature files use them.
 from __future__ import annotations
 
 import json
+import os
 from dataclasses import dataclass, field
 
 import pytest
@@ -31,6 +32,21 @@ def pytest_configure(config: pytest.Config) -> None:
     config.addinivalue_line(
         "markers", "live: talks to the estate model router; skips when unreachable"
     )
+
+
+def pytest_collection_modifyitems(
+    config: pytest.Config, items: list[pytest.Item]
+) -> None:
+    """Deselect live tests by default so a plain run counts only hermetic
+    tests. Opt in with OTTO_CP5_LIVE=1 (an env var, not a CLI option: a
+    non-root conftest cannot register options, and this suite must behave
+    the same from any invocation directory)."""
+    if os.environ.get("OTTO_CP5_LIVE") == "1":
+        return
+    live = [item for item in items if "live" in item.keywords]
+    if live:
+        config.hook.pytest_deselected(items=live)
+        items[:] = [item for item in items if "live" not in item.keywords]
 
 
 @pytest.fixture

@@ -11,7 +11,9 @@ import json
 
 from pytest_bdd import given, scenarios, then, when
 
-from otto.router import OutcomeState, RouterTask, VerificationStatus
+import pytest
+
+from otto.router import OutcomeState, RouterConfig, RouterTask, VerificationStatus
 from otto.tests.cp5.conftest import (
     ScriptedClient,
     always_timeout,
@@ -160,3 +162,53 @@ def paused_task_budget(ctx: dict) -> None:
 def overrun_still_charged(ctx: dict) -> None:
     assert ctx["ledger"].spent("bulk") > 0
     assert ctx["ledger"].spent("bulk") == ctx["outcome"].charged_usd
+
+
+# -- distinct-family guard: derived from the model, fail closed ---------------
+# (verifier finding, crew#768 comment 5485570153: the declared label let
+# OTTO_ROUTER_LANE_JUDGMENT_MODEL=minimax through; these steps reproduce
+# that exact exploit and its two neighbours against the derived guard)
+
+
+@given("the environment sets the judgment lane model to minimax")
+def env_judgment_is_bulk_model(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("OTTO_ROUTER_LANE_JUDGMENT_MODEL", "minimax")
+
+
+@given("the environment sets the judgment lane model to another minimax-family model")
+def env_judgment_is_bulk_family(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("OTTO_ROUTER_LANE_JUDGMENT_MODEL", "minimax/minimax-01")
+
+
+@given(
+    "the environment sets the judgment lane model to a model absent from the "
+    "family mapping"
+)
+def env_judgment_is_unmapped_model(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("OTTO_ROUTER_LANE_JUDGMENT_MODEL", "mystery-model-9000")
+
+
+@when("the router config is validated")
+def validate_router_config(ctx: dict) -> None:
+    try:
+        ctx["config"] = RouterConfig()
+        ctx["config_error"] = None
+    except ValueError as exc:
+        ctx["config"] = None
+        ctx["config_error"] = str(exc)
+
+
+@then("the config is refused because judgment and bulk derive to one model family")
+def refused_for_shared_family(ctx: dict) -> None:
+    assert ctx["config"] is None
+    assert ctx["config_error"] is not None
+    assert "judgment and bulk lanes share one model family" in ctx["config_error"]
+    assert "derived from the configured models" in ctx["config_error"]
+
+
+@then("the config is refused because the model derives to no family")
+def refused_for_unknown_model(ctx: dict) -> None:
+    assert ctx["config"] is None
+    assert ctx["config_error"] is not None
+    assert "no family mapping" in ctx["config_error"]
+    assert "mystery-model-9000" in ctx["config_error"]
