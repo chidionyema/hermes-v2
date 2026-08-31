@@ -1,0 +1,13 @@
+id: cp0-004-bandwidth-throttled
+tier: T0
+task_class: ops_read
+input:
+  task: "read the audit stream while a consumer is throttled"
+timeout_s: 3
+bandwidth_degradation: throttled
+expect:
+  - property: exit_code
+    value: 0
+  - property: max_latency_s
+    value: 2.5
+tags: [bandwidth]
