@@ -201,7 +201,10 @@ def replay_shows_empty_tool_calls(ctx: dict) -> None:
 # --------------------------------------------------------------- Scenario 2
 
 
-@given("the 40 to 60 task eval corpus extracted from real Otto and Telegram history")
+@given(
+    "the 40 to 60 task synthetic eval corpus standing in for real Otto and "
+    "Telegram history (extraction is CP0's harness job)"
+)
 def eval_corpus_present(ctx: dict) -> None:
     assert _CORPUS_PATH.is_file(), _CORPUS_PATH
     import yaml
@@ -281,11 +284,20 @@ def current_config_and_previous_deploy_snapshot(tmp_path: Path, ctx: dict) -> No
     drifted["version"] = drifted["version"] + "-previous-deploy"
     previous = {**current, "components": [drifted, *components[1:]]}
 
+    key_path = tmp_path / "inventory_ed25519.pem"
+    # A real previous-deploy artifact was itself the output of a signed
+    # `otto inventory` run — sign this stand-in the same way, with the
+    # same key the CLI invocation below will load, or the CLI's own
+    # fail-closed check on --previous (a tampered/unsigned artifact is
+    # refused, never silently diffed) correctly rejects it.
+    key = inventory_mod.load_or_create_keypair(key_path)
+    signed_previous = inventory_mod.sign_inventory(previous, key)
+
     previous_path = tmp_path / "previous_inventory.json"
-    previous_path.write_text(json.dumps({"inventory": previous}))
+    previous_path.write_text(json.dumps(signed_previous))
     ctx["previous_inventory_path"] = previous_path
     ctx["output_inventory_path"] = tmp_path / "current_inventory.json"
-    ctx["inventory_key_path"] = tmp_path / "inventory_ed25519.pem"
+    ctx["inventory_key_path"] = key_path
 
 
 @when('CI runs "otto inventory --verify-signature"')
