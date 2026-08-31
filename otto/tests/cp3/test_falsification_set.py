@@ -16,6 +16,7 @@ import pytest
 
 from otto.verify import (
     DEFAULT_KEY_PATH_ENV,
+    FAIL,
     Claim,
     ClaimEnvelope,
     CompletionGate,
@@ -176,3 +177,55 @@ def test_unknown_prover_key_is_refused(verifier_identity, rogue_identity, clock)
     assert decision.completed is False
     assert decision.reason == "FORGED_UNKNOWN_KEY"
     assert task.state is TaskState.AWAITING_VERDICT
+
+
+def test_same_key_under_a_different_name_is_refused(verifier_identity) -> None:
+    # The self-certification check is key material, not a label: a lane
+    # presenting the verifier's own public key under a fresh name is the
+    # same principal and is refused.
+    envelope = ClaimEnvelope(
+        task_id=new_trace_id(),
+        builder_identity="a-lane-with-a-different-name",
+        claims=(_claim(),),
+        builder_public_key=verifier_identity.public_key_bytes(),
+    )
+    verifier = Verifier(verifier_identity, artifact_fetcher=_Artifacts())
+    with pytest.raises(SelfCertificationError):
+        verifier.issue_verdict(envelope, "n")
+
+
+def test_malformed_signature_is_a_structured_refusal(verifier_identity, clock) -> None:
+    gate = _gate(verifier_identity, clock)
+    task, envelope, nonce = _awaiting_task(gate, clock)
+    verifier = Verifier(verifier_identity, artifact_fetcher=_Artifacts())
+    verdict = verifier.issue_verdict(envelope, nonce)
+
+    garbage = dataclasses.replace(verdict, sig="!!!not-base64!!!")
+    decision = gate.submit_verdict(task.task_id, garbage)
+    assert decision.completed is False
+    assert decision.reason == "MALFORMED_SIGNATURE"
+    # The task lands where an absent verdict leaves it: still awaiting,
+    # bound for needs_human at its deadline — never completed.
+    assert task.state is TaskState.AWAITING_VERDICT
+
+
+def test_trivial_source_claim_never_passes(verifier_identity) -> None:
+    # The needle IS present in the source: a bare substring check would
+    # emit a hard PASS. The class fix refuses it as unverifiable instead.
+    class _Src:
+        def fetch(self, url: str) -> str:
+            return "a page that contains the letter a"
+
+    for needle in ("", " \n\t  ", "a"):
+        claim = Claim(
+            "source_says", {"text": needle}, {"url": "https://example.invalid"}
+        )
+        envelope = ClaimEnvelope(
+            task_id=new_trace_id(),
+            builder_identity="orchestrator",
+            claims=(claim,),
+        )
+        verdict = Verifier(verifier_identity, source_fetcher=_Src()).issue_verdict(
+            envelope, "n"
+        )
+        assert verdict.result == FAIL, f"trivial needle {needle!r} passed"

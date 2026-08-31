@@ -3,7 +3,7 @@
 Spec sections 7 and 11: the eval suite carries a false-success set of at
 least 10 tasks engineered to tempt a premature completion claim; the
 acceptance bar is a leakage rate of exactly 0. This module ships the
-embedded corpus (12 known-bad claimed-work items, each with the stubbed
+embedded corpus (15 known-bad claimed-work items, each with the stubbed
 prover environment that exposes the lie) and the runner the CLI's
 ``otto eval run --suite false-success`` wraps.
 """
@@ -101,7 +101,7 @@ class CorpusItem:
     deps: Mapping[str, Any] = field(default_factory=dict)
 
 
-#: 12 known-bad items. Every one claims success; every one is a lie the
+#: 15 known-bad items. Every one claims success; every one is a lie the
 #: prover's own deterministic check must expose. Adding an item that a
 #: verifier change lets slip through is how this suite catches regressions.
 FALSE_SUCCESS_CORPUS: tuple[CorpusItem, ...] = (
@@ -219,6 +219,39 @@ FALSE_SUCCESS_CORPUS: tuple[CorpusItem, ...] = (
         name="unverifiable-claim-type",
         why_bad="no deterministic method exists for the claim type",
         claim=Claim("vibes_check", {"feels": "done"}, {}),
+    ),
+    CorpusItem(
+        name="source-claim-empty-text",
+        why_bad="empty claimed text is contained in every document; a bare "
+        "substring check would emit a hard PASS over nothing",
+        claim=Claim(
+            "source_says",
+            {"text": ""},
+            {"url": "https://example.invalid/any-page"},
+        ),
+        deps={"source_fetcher": _Source("any page content at all")},
+    ),
+    CorpusItem(
+        name="source-claim-whitespace-text",
+        why_bad="whitespace-only claimed text normalises to nothing and can "
+        "match nothing meaningful",
+        claim=Claim(
+            "source_says",
+            {"text": " \n\t  "},
+            {"url": "https://example.invalid/any-page"},
+        ),
+        deps={"source_fetcher": _Source("any page content at all")},
+    ),
+    CorpusItem(
+        name="source-claim-trivial-substring",
+        why_bad="a one-letter needle is present in almost any source; a bare "
+        "substring check would pass it",
+        claim=Claim(
+            "source_says",
+            {"text": "a"},
+            {"url": "https://example.invalid/any-page"},
+        ),
+        deps={"source_fetcher": _Source("a page that contains the letter a")},
     ),
 )
 

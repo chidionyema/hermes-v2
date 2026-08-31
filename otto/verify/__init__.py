@@ -67,7 +67,7 @@ from otto.verify.store import (
     UnreachableVerdictStore,
     VerdictStore,
 )
-from otto.verify.verifier import RerunResult, Verifier
+from otto.verify.verifier import RerunResult, Verifier, VerifierConfig
 
 __all__ = [
     "FAIL",
@@ -103,6 +103,7 @@ __all__ = [
     "VerdictBus",
     "VerdictStore",
     "Verifier",
+    "VerifierConfig",
     "VerifierIdentity",
     "WriteDenied",
     "load_identity",

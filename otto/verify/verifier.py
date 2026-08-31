@@ -80,11 +80,31 @@ class VerifyLaneClient(Protocol):
 
 
 @dataclass(frozen=True)
+class VerifierConfig:
+    """Tunable verification thresholds — configuration with defaults,
+    never buried constants.
+
+    ``min_source_match_chars``: minimum length of a *normalised* (all
+    whitespace collapsed) claimed text before a source-containment check
+    may ever emit PASS. Anything shorter is an unverifiable claim and is
+    refused: an empty string is contained in everything, and a one-letter
+    "match" proves nothing about the source.
+    """
+
+    min_source_match_chars: int = 8
+
+
+@dataclass(frozen=True)
 class CheckOutcome:
     passed: bool
     method: str
     hardness: str
     detail: str
+
+
+def _normalise(text: str) -> str:
+    """Collapse all whitespace runs and strip — the match-worthiness form."""
+    return " ".join(text.split())
 
 
 _FAILURES = (
@@ -112,8 +132,10 @@ class Verifier:
         state_reader: StateReader | None = None,
         source_fetcher: SourceFetcher | None = None,
         verify_lane: VerifyLaneClient | None = None,
+        config: VerifierConfig | None = None,
     ) -> None:
         self._identity = identity
+        self._config = config if config is not None else VerifierConfig()
         self._sandbox_runner = sandbox_runner
         self._artifact_fetcher = artifact_fetcher
         self._state_reader = state_reader
@@ -128,8 +150,13 @@ class Verifier:
         """Check every claim, then sign one verdict for the envelope.
 
         Refuses outright (P1 build defect) when the envelope's builder
-        identity is this verifier's own identity.
+        is this verifier. The load-bearing comparison is key material:
+        a builder whose public key equals this verifier's signing key is
+        the same principal whatever it calls itself. The name comparison
+        is an additional refusal only, never the sole one.
         """
+        if envelope.builder_public_key == self._identity.public_key_bytes():
+            raise SelfCertificationError(self._identity.name)
         if envelope.builder_identity == self._identity.name:
             raise SelfCertificationError(self._identity.name)
 
@@ -239,9 +266,26 @@ class Verifier:
     def _check_source(self, claim: Claim) -> CheckOutcome:
         if self._source_fetcher is None:
             return _no_dependency("source_fetch")
+        # Claim validation before any fetch: an empty or trivially short
+        # claimed text is contained in every document, so a containment
+        # check over it can prove nothing. The whole class (empty string,
+        # whitespace, one-letter needles) is refused as unverifiable —
+        # never checked, never passed.
+        needle = _normalise(str(claim.claimed.get("text", "")))
+        if len(needle) < self._config.min_source_match_chars:
+            return CheckOutcome(
+                passed=False,
+                method="source_fetch",
+                hardness=HARD,
+                detail=(
+                    f"claimed text normalises to {len(needle)} chars, under "
+                    f"the {self._config.min_source_match_chars}-char minimum "
+                    "meaningful match; unverifiable claim refused"
+                ),
+            )
         url = str(claim.evidence_spec.get("url", ""))
-        text = self._source_fetcher.fetch(url)
-        ok = str(claim.claimed.get("text", "")) in text
+        text = _normalise(self._source_fetcher.fetch(url))
+        ok = needle in text
         return CheckOutcome(
             passed=ok,
             method="source_fetch",

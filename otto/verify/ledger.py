@@ -140,7 +140,14 @@ class CompletionGate:
             self._trusted_keys[verdict.prover_key_id]
         )
         try:
-            public_key.verify(verdict.sig_bytes(), verdict.signing_payload())
+            sig = verdict.sig_bytes()
+        except ValueError:
+            # A signature that is not even base64 is a structured refusal,
+            # never an escaping exception (binascii.Error is a ValueError).
+            # The task stays where an absent verdict leaves it.
+            return self._refuse(task, "MALFORMED_SIGNATURE")
+        try:
+            public_key.verify(sig, verdict.signing_payload())
         except InvalidSignature:
             return self._refuse(task, "FORGED_BAD_SIGNATURE")
 
