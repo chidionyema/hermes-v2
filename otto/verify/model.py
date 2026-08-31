@@ -57,11 +57,19 @@ class Claim:
 
 @dataclass(frozen=True)
 class ClaimEnvelope:
-    """The claimed-work package published when a task hits awaiting_verdict."""
+    """The claimed-work package published when a task hits awaiting_verdict.
+
+    ``builder_public_key`` is the raw public key of the lane that built
+    the work, when it has one. The verifier refuses to verify an
+    envelope whose builder key equals its own signing key — identity is
+    key material, not a label, so renaming a lane never dodges the P1
+    self-certification check.
+    """
 
     task_id: str
     builder_identity: str
     claims: tuple[Claim, ...]
+    builder_public_key: bytes | None = None
 
     def claim_hash(self) -> str:
         digest = hashlib.sha256(
@@ -102,7 +110,12 @@ class Verdict:
         )
 
     def sig_bytes(self) -> bytes:
-        return base64.b64decode(self.sig)
+        """Decode the signature strictly; garbage raises ``ValueError``.
+
+        Callers on the completion path must catch the decode failure and
+        turn it into a structured refusal, never let it escape.
+        """
+        return base64.b64decode(self.sig, validate=True)
 
     def as_payload(self) -> dict[str, Any]:
         return {
