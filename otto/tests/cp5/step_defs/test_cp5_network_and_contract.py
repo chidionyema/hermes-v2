@@ -212,3 +212,63 @@ def refused_for_unknown_model(ctx: dict) -> None:
     assert ctx["config_error"] is not None
     assert "no family mapping" in ctx["config_error"]
     assert "mystery-model-9000" in ctx["config_error"]
+
+
+# -- model_families merge guard: a policy may add, never redefine ------------
+# (verifier finding, crew#768 comment 5485683430: from_policy_dict merged a
+# policy document's model_families OVER the shipped defaults, so a policy
+# could remap minimax/minimax-01 to a non-minimax family and re-legalize the
+# exact exploit the distinct-family guard exists to refuse)
+
+
+@given("a policy document that redefines minimax/minimax-01 to family not-minimax")
+def policy_redefines_shipped_entry(ctx: dict) -> None:
+    ctx["policy"] = {"model_families": {"minimax/minimax-01": "not-minimax"}}
+
+
+@given("a policy document that adds a brand-new model mapped to a brand-new family")
+def policy_adds_new_entry(ctx: dict) -> None:
+    ctx["policy"] = {
+        "model_families": {"newvendor/newmodel-1": "newvendor"},
+        "lanes": {},
+    }
+
+
+@given("the policy routes the judgment lane to that brand-new model")
+def policy_routes_judgment_to_new_model(ctx: dict) -> None:
+    ctx["policy"]["lanes"]["judgment"] = {"model": "newvendor/newmodel-1"}
+
+
+@when("the router config is built from that policy document")
+def build_config_from_policy(ctx: dict) -> None:
+    try:
+        ctx["config"] = RouterConfig.from_policy_dict(ctx["policy"])
+        ctx["config_error"] = None
+    except ValueError as exc:
+        ctx["config"] = None
+        ctx["config_error"] = str(exc)
+
+
+@then("the config is refused because a shipped model_families entry was redefined")
+def refused_for_redefined_family(ctx: dict) -> None:
+    assert ctx["config"] is None
+    assert ctx["config_error"] is not None
+    assert "redefines the shipped entry" in ctx["config_error"]
+
+
+@then("the refusal names minimax/minimax-01, minimax and not-minimax")
+def refusal_names_both_values(ctx: dict) -> None:
+    assert "minimax/minimax-01" in ctx["config_error"]
+    assert "'minimax'" in ctx["config_error"]
+    assert "'not-minimax'" in ctx["config_error"]
+
+
+@then("the config is accepted")
+def config_accepted(ctx: dict) -> None:
+    assert ctx["config_error"] is None
+    assert ctx["config"] is not None
+
+
+@then("the judgment lane's family derives to the brand-new family")
+def judgment_family_is_new(ctx: dict) -> None:
+    assert ctx["config"].lane_family("judgment") == "newvendor"
