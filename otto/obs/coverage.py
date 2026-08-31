@@ -28,6 +28,12 @@ from typing import Protocol
 PRESENT = "PRESENT"
 ABSENT = "ABSENT"
 
+EMPTY_COMPONENTS_REASON = "component list empty — inventory feed broken or unsigned"
+MALFORMED_COMPONENTS_REASON = (
+    "components file must parse to a non-empty JSON array of component names"
+)
+NO_BACKEND_REASON = "no trace backend bound; cannot measure, so not green"
+
 
 class TraceBackend(Protocol):
     """The one question the gate asks of any trace backend."""
@@ -48,15 +54,17 @@ class CoverageRow:
 class CoverageReport:
     rows: tuple[CoverageRow, ...]
     window_seconds: float
+    reason: str = ""
 
     @property
     def red(self) -> bool:
-        return any(row.status == ABSENT for row in self.rows)
+        return bool(self.reason) or any(row.status == ABSENT for row in self.rows)
 
     def as_dict(self) -> dict[str, object]:
         return {
             "gate": "otto-obs-coverage",
             "result": "red" if self.red else "green",
+            "reason": self.reason,
             "window_seconds": self.window_seconds,
             "components": [
                 {
@@ -74,7 +82,21 @@ def check_coverage(
     backend: TraceBackend,
     window_seconds: float = 900.0,
 ) -> CoverageReport:
-    """PRESENT/ABSENT per component, straight from the backend's answer."""
+    """PRESENT/ABSENT per component, straight from the backend's answer.
+
+    An empty component list is RED, never green: a gate that checked
+    nothing has proved nothing, and the empty list is exactly what a
+    truncated or mis-generated inventory feed produces (the silent-green
+    defect class). Non-name entries are the same malformed-feed red.
+    """
+    bad = [c for c in components if not isinstance(c, str) or not c.strip()]
+    if not components or bad:
+        reason = (
+            EMPTY_COMPONENTS_REASON
+            if not components
+            else f"{MALFORMED_COMPONENTS_REASON}; bad entries: {bad!r}"
+        )
+        return CoverageReport(rows=(), window_seconds=window_seconds, reason=reason)
     rows = []
     for component in components:
         count = backend.span_count(component, window_seconds)
@@ -112,16 +134,34 @@ def main(
 
     with open(args.components_file, encoding="utf-8") as fh:
         components = json.load(fh)
+    if not isinstance(components, list):
+        print(
+            json.dumps(
+                {
+                    "gate": "otto-obs-coverage",
+                    "result": "red",
+                    "reason": MALFORMED_COMPONENTS_REASON,
+                    "parsed_type": type(components).__name__,
+                }
+            ),
+            file=out,
+        )
+        return 2
     if backend is None:
         print(
             json.dumps(
                 {
                     "gate": "otto-obs-coverage",
                     "result": "red",
-                    "reason": "no trace backend bound; cannot measure, so not green",
+                    "reason": NO_BACKEND_REASON,
                 }
             ),
             file=out,
+        )
+        print(
+            "otto-obs-coverage: no backend bound — see W2 wiring "
+            "(SigNoz binds the TraceBackend Protocol at integration)",
+            file=sys.stderr,
         )
         return 2
     report = check_coverage(components, backend, args.window_seconds)

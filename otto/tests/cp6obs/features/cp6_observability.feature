@@ -48,3 +48,15 @@ Feature: Day-0 observability - no black box, no dark boot, no silent drop
     When the coverage gate checks spine and gateway against the backend
     Then every checked component is reported PRESENT
     And the gate exits zero
+
+  Scenario: Coverage gate - an empty component list is red, never a silent green
+    Given the backend holds recent spans from the spine and gateway components only
+    When the coverage gate is fed an empty component list
+    Then the gate reports red naming the broken inventory feed
+    And the gate exits nonzero
+
+  Scenario: Coverage gate - a components file that is not a list of names is red
+    Given the backend holds recent spans from the spine and gateway components only
+    When the coverage gate is fed a components file holding an object instead of a list
+    Then the gate reports red naming the malformed components file
+    And the gate exits nonzero

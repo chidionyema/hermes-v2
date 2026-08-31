@@ -247,9 +247,9 @@ def backend_with_two_components(ctx: dict, test_mode: None) -> None:
     ctx["backend"] = InMemoryBackend()
 
 
-def _run_gate(ctx: dict, tmp_path, components: list[str]) -> None:
+def _run_gate(ctx: dict, tmp_path, payload: object) -> None:
     components_file = tmp_path / "components.json"
-    components_file.write_text(json.dumps(components), encoding="utf-8")
+    components_file.write_text(json.dumps(payload), encoding="utf-8")
     out = io.StringIO()
     ctx["exit_code"] = coverage.main(
         ["--components-file", str(components_file)],
@@ -291,3 +291,27 @@ def all_present(ctx: dict) -> None:
 @then("the gate exits zero")
 def gate_green(ctx: dict) -> None:
     assert ctx["exit_code"] == 0
+
+
+@when("the coverage gate is fed an empty component list")
+def gate_empty_list(ctx: dict, tmp_path) -> None:
+    _run_gate(ctx, tmp_path, [])
+
+
+@then("the gate reports red naming the broken inventory feed")
+def empty_list_is_red(ctx: dict) -> None:
+    assert ctx["report"]["result"] == "red", "SILENT GREEN: empty list passed"
+    assert ctx["report"]["reason"] == coverage.EMPTY_COMPONENTS_REASON
+    assert ctx["report"]["components"] == []
+
+
+@when("the coverage gate is fed a components file holding an object instead of a list")
+def gate_object_payload(ctx: dict, tmp_path) -> None:
+    _run_gate(ctx, tmp_path, {"components": ["spine", "gateway"]})
+
+
+@then("the gate reports red naming the malformed components file")
+def malformed_file_is_red(ctx: dict) -> None:
+    assert ctx["report"]["result"] == "red", "SILENT GREEN: malformed file passed"
+    assert ctx["report"]["reason"] == coverage.MALFORMED_COMPONENTS_REASON
+    assert ctx["report"]["parsed_type"] == "dict"
