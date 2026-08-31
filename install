@@ -277,6 +277,12 @@ else
 	# spec links. Without pytest in the venv none of them can run, so a clone
 	# carried tests nobody could execute. Found 2026-08-22.
 	./.venv/bin/pip install --quiet pytest
+	# otto/obs (crew#768 CP6, LAW 50): the observability layer traces through the
+	# OpenTelemetry SDK, exports OTLP/HTTP in real mode, and its BDD suites (and
+	# every other otto lane's) run on pytest-bdd. Undeclared, a clean env died
+	# with ModuleNotFoundError at otto/obs/export.py's lazy OTLP import — the QA
+	# verdict on crew#768 (comment 5485883490) caught it. Found 2026-08-31.
+	./.venv/bin/pip install --quiet pytest-bdd opentelemetry-sdk opentelemetry-exporter-otlp-proto-http
 	ok "$(./bin/hermes --version 2>/dev/null | grep -o 'Hermes Agent v[0-9.]*' | head -1)"
 fi
 
