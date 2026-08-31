@@ -21,7 +21,7 @@ import psycopg
 @dataclass(frozen=True)
 class AuditEvent:
     fact_id: str
-    action: str  # "expire" | "compact_duplicate"
+    action: str  # "expire" | "compact_duplicate" | "context_compact"
     reason: str
     detail: dict | None = None
     performed_at: datetime = None  # type: ignore[assignment]
@@ -37,10 +37,13 @@ class AuditEmitter(Protocol):
 
 
 class PostgresAuditEmitter:
-    """Default emitter: writes to ``otto_fact_audit`` in the same
-    database, so every hygiene deletion has a queryable record even with
-    no other subscriber wired up. A pluggable emitter (e.g. one that also
-    publishes to NATS) can be supplied instead or in addition."""
+    """Writes to ``otto_fact_audit`` outside the caller's own transaction.
+
+    Not the default any more (otto/memory/hygiene.py and context.py write
+    the audit row themselves, inside the same transaction as the change
+    they are auditing - the outbox pattern: durable local record first,
+    pluggable notification after commit). Kept for a caller that wants a
+    second, independent Postgres write in addition to that guarantee."""
 
     def __init__(self, conn: psycopg.Connection) -> None:
         self._conn = conn
@@ -65,6 +68,20 @@ class PostgresAuditEmitter:
                 ),
             )
         self._conn.commit()
+
+
+class NullAuditEmitter:
+    """The default post-commit notifier: does nothing.
+
+    Safe as the default precisely because it is not the durable record -
+    the caller (hygiene.py, context.py) already wrote the audit row in
+    the same transaction as the change before this is ever invoked. A
+    caller that wants external notification (NATS, Telegram, ...) passes
+    a real emitter instead; one that fails here can never cause an
+    unaudited deletion, because the audit row already exists."""
+
+    def emit(self, event: AuditEvent) -> None:
+        return None
 
 
 class InMemoryAuditEmitter:

@@ -25,6 +25,12 @@ def _env_float(name: str, default: float) -> float:
     return float(raw) if raw not in (None, "") else default
 
 
+class ConfigError(ValueError):
+    """A configured limit is nonsensical enough that running with it would
+    silently do the wrong thing (e.g. a TTL of zero expiring every fact
+    in the store). Fail closed at construction, not three calls later."""
+
+
 @dataclass(frozen=True)
 class MemoryConfig:
     """One place all configurable memory-engine limits are read from.
@@ -60,9 +66,45 @@ class MemoryConfig:
     default_ttl_days: int = 90
     hygiene_batch_size: int = 500
     dedup_lookback_days: int = 365
+    # Circuit breaker (LAW: self-healing needs a circuit breaker, applied
+    # here to a destructive job): a single hygiene run may never delete
+    # more than this fraction of the live table. A bad TTL, a clock bug or
+    # a dedup key collision all fail closed through this one cap - stop,
+    # delete nothing, raise otto_hygiene_alerts loudly - rather than
+    # trusting the TTL/dedup logic alone to be correct forever.
+    hygiene_max_deletion_fraction: float = 0.2
+
+    # Context assembly and compaction (crew#768 board row: "compaction and
+    # budgets", explicitly owned by this lane).
+    context_budget_tokens: int = 2000
+    # Provider-agnostic token estimate (LAW 34: no vendor tokenizer import
+    # in core): len(text) / chars_per_token, rounded up.
+    context_chars_per_token: float = 4.0
 
     # "" = use the package's own otto/memory/migrations directory
     migrations_env_dir: str = ""
+
+    def __post_init__(self) -> None:
+        if self.default_ttl_days <= 0:
+            raise ConfigError(
+                "default_ttl_days must be > 0 (fail closed): a TTL of zero "
+                f"or negative would expire every fact in the store; got "
+                f"{self.default_ttl_days}"
+            )
+        if not (0 < self.hygiene_max_deletion_fraction <= 1):
+            raise ConfigError(
+                "hygiene_max_deletion_fraction must be in (0, 1]; got "
+                f"{self.hygiene_max_deletion_fraction}"
+            )
+        if self.context_budget_tokens <= 0:
+            raise ConfigError(
+                f"context_budget_tokens must be > 0; got {self.context_budget_tokens}"
+            )
+        if self.context_chars_per_token <= 0:
+            raise ConfigError(
+                "context_chars_per_token must be > 0; got "
+                f"{self.context_chars_per_token}"
+            )
 
 
 def load_config() -> MemoryConfig:
@@ -80,5 +122,10 @@ def load_config() -> MemoryConfig:
         default_ttl_days=_env_int("OTTO_MEMORY_DEFAULT_TTL_DAYS", 90),
         hygiene_batch_size=_env_int("OTTO_MEMORY_HYGIENE_BATCH_SIZE", 500),
         dedup_lookback_days=_env_int("OTTO_MEMORY_DEDUP_LOOKBACK_DAYS", 365),
+        hygiene_max_deletion_fraction=_env_float(
+            "OTTO_MEMORY_HYGIENE_MAX_DELETION_FRACTION", 0.2
+        ),
+        context_budget_tokens=_env_int("OTTO_MEMORY_CONTEXT_BUDGET_TOKENS", 2000),
+        context_chars_per_token=_env_float("OTTO_MEMORY_CONTEXT_CHARS_PER_TOKEN", 4.0),
         migrations_env_dir=_env_str("OTTO_MEMORY_MIGRATIONS_DIR", ""),
     )

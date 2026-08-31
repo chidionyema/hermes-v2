@@ -73,6 +73,7 @@ def _lexical_search(
             SELECT *, ts_rank(content_tsv, plainto_tsquery('english', %(q)s)) AS _score
             FROM otto_facts
             WHERE content_tsv @@ plainto_tsquery('english', %(q)s)
+              AND superseded_by IS NULL
             ORDER BY _score DESC
             LIMIT %(limit)s
             """,
@@ -92,6 +93,7 @@ def _vector_search(
             SELECT *
             FROM otto_facts
             WHERE embedding IS NOT NULL
+              AND superseded_by IS NULL
             ORDER BY embedding <=> %(q)s::vector
             LIMIT %(limit)s
             """,

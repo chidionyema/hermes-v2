@@ -1,25 +1,40 @@
 """The hygiene job: expires facts past their TTL and compacts duplicate
-facts for the same (entity, attribute), keeping the most recent. Every
-deletion - expiry or compaction - emits an audit record through a
-pluggable ``AuditEmitter`` (otto/memory/audit.py) so a hygiene run is
-never a black box (spec P4/P8 in spirit: what changed, and why, is
-always recoverable).
+facts for the same (entity, attribute), keeping the most recent.
 
-Bounded per call by ``config.hygiene_batch_size`` (a configurable limit,
-not a hardcoded one) so a single run cannot lock the table indefinitely;
-a scheduler calls this repeatedly until it returns an empty report.
+Two independent, fail-closed guards, belt-and-braces the same way
+provenance is enforced at both the Python and SQL layers:
+
+1. ``MemoryConfig.__post_init__`` refuses a TTL of zero or negative before
+   a run can even start (a bad config can never reach this job).
+2. Even with a sane TTL, this job refuses to delete more than
+   ``config.hygiene_max_deletion_fraction`` of the live table in one run
+   - a clock bug, a dedup key collision, or any other cause of an
+   unexpectedly large candidate set stops the run, deletes nothing, and
+   raises ``otto_hygiene_alerts`` loudly (queryable, and logged) rather
+   than trusting the TTL/dedup logic alone to always be right.
+
+Every deletion is audited in the SAME transaction as the delete (the
+outbox pattern): the audit row is written and committed atomically with
+the DELETE, so a failing pluggable notifier called afterwards can never
+leave a deletion unaudited - by the time it is called, the audit row is
+already durable.
 """
 
 from __future__ import annotations
 
+import json
+import logging
+import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
 import psycopg
 from psycopg.rows import dict_row
 
-from otto.memory.audit import AuditEmitter, AuditEvent, PostgresAuditEmitter
+from otto.memory.audit import AuditEmitter, AuditEvent, NullAuditEmitter
 from otto.memory.config import MemoryConfig, load_config
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -27,6 +42,8 @@ class HygieneReport:
     dry_run: bool
     expired_fact_ids: list[str] = field(default_factory=list)
     compacted_fact_ids: list[str] = field(default_factory=list)
+    capped: bool = False
+    cap_reason: str | None = None
 
     @property
     def total_deleted(self) -> int:
@@ -84,6 +101,68 @@ def _find_duplicate_groups(
     return [rows for rows in groups.values() if len(rows) > 1]
 
 
+def _count_facts(conn: psycopg.Connection) -> int:
+    with conn.cursor() as cur:
+        cur.execute("SELECT count(*) FROM otto_facts")
+        (total,) = cur.fetchone()
+    return total
+
+
+def _raise_needs_attention(
+    conn: psycopg.Connection, reason: str, detail: dict, now: datetime
+) -> None:
+    """Loud and queryable (LAW: an instrument nobody reads is not an
+    instrument): a row in otto_hygiene_alerts, plus a logger.warning so it
+    also lands wherever this process's logs go."""
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            INSERT INTO otto_hygiene_alerts (id, reason, detail, raised_at)
+            VALUES (%s, %s, %s, %s)
+            """,
+            (str(uuid.uuid4()), reason, json.dumps(detail), now),
+        )
+    conn.commit()
+    logger.warning("hygiene run capped: %s", reason)
+
+
+def _delete_and_audit(
+    conn: psycopg.Connection,
+    emitter: AuditEmitter,
+    fact_id: str,
+    action: str,
+    reason: str,
+    detail: dict,
+    now: datetime,
+) -> None:
+    """DELETE the fact and INSERT its audit row in one transaction, commit
+    once, and only then call the pluggable emitter. If the emitter raises,
+    the DELETE and its audit row are already safely committed together -
+    there is no state in which a deletion is committed with no audit
+    record (the defect the independent verifier demonstrated)."""
+    event = AuditEvent(
+        fact_id=fact_id, action=action, reason=reason, detail=detail, performed_at=now
+    )
+    with conn.cursor() as cur:
+        cur.execute("DELETE FROM otto_facts WHERE id = %s", (fact_id,))
+        cur.execute(
+            """
+            INSERT INTO otto_fact_audit (id, fact_id, action, reason, detail, performed_at)
+            VALUES (%s, %s, %s, %s, %s, %s)
+            """,
+            (
+                str(uuid.uuid4()),
+                event.fact_id,
+                event.action,
+                event.reason,
+                json.dumps(event.detail) if event.detail is not None else None,
+                event.performed_at,
+            ),
+        )
+    conn.commit()
+    emitter.emit(event)
+
+
 def run_hygiene(
     conn: psycopg.Connection,
     config: MemoryConfig | None = None,
@@ -91,53 +170,74 @@ def run_hygiene(
     dry_run: bool = False,
     now: datetime | None = None,
 ) -> HygieneReport:
-    config = config or load_config()
+    config = config or load_config()  # __post_init__ already refuses TTL<=0
     now = now or datetime.now(timezone.utc)
-    emitter = audit_emitter or PostgresAuditEmitter(conn)
+    emitter = audit_emitter or NullAuditEmitter()
     report = HygieneReport(dry_run=dry_run)
 
     expired = _find_expired(
         conn, config.default_ttl_days, config.hygiene_batch_size, now
     )
-    for row in expired:
-        report.expired_fact_ids.append(str(row["id"]))
-        if not dry_run:
-            with conn.cursor() as cur:
-                cur.execute("DELETE FROM otto_facts WHERE id = %s", (row["id"],))
-            conn.commit()
-            emitter.emit(
-                AuditEvent(
-                    fact_id=str(row["id"]),
-                    action="expire",
-                    reason="past stale_after or default TTL",
-                    detail={"content_preview": row["content"][:200]},
-                    performed_at=now,
-                )
-            )
-
     duplicate_groups = _find_duplicate_groups(
         conn, config.dedup_lookback_days, config.hygiene_batch_size, now
     )
-    for group in duplicate_groups:
-        keep, *older = group  # newest first (ORDER BY created_at DESC)
-        for dup in older:
-            report.compacted_fact_ids.append(str(dup["id"]))
-            if not dry_run:
-                with conn.cursor() as cur:
-                    cur.execute("DELETE FROM otto_facts WHERE id = %s", (dup["id"],))
-                conn.commit()
-                emitter.emit(
-                    AuditEvent(
-                        fact_id=str(dup["id"]),
-                        action="compact_duplicate",
-                        reason=f"superseded by {keep['id']}",
-                        detail={
-                            "entity": dup["entity"],
-                            "attribute": dup["attribute"],
-                            "superseded_by": str(keep["id"]),
-                        },
-                        performed_at=now,
-                    )
-                )
+    dup_rows = [(group[0], dup) for group in duplicate_groups for dup in group[1:]]
+
+    candidate_count = len(expired) + len(dup_rows)
+    total = _count_facts(conn)
+    if total > 0 and candidate_count > 0:
+        fraction = candidate_count / total
+        if fraction > config.hygiene_max_deletion_fraction:
+            reason = (
+                f"hygiene run would delete {candidate_count}/{total} facts "
+                f"({fraction:.0%}), over the "
+                f"{config.hygiene_max_deletion_fraction:.0%} cap - stopping "
+                "without deleting anything"
+            )
+            report.capped = True
+            report.cap_reason = reason
+            _raise_needs_attention(
+                conn,
+                reason,
+                {
+                    "candidate_count": candidate_count,
+                    "total_facts": total,
+                    "fraction": fraction,
+                    "cap": config.hygiene_max_deletion_fraction,
+                    "dry_run": dry_run,
+                },
+                now,
+            )
+            return report
+
+    for row in expired:
+        report.expired_fact_ids.append(str(row["id"]))
+        if not dry_run:
+            _delete_and_audit(
+                conn,
+                emitter,
+                fact_id=str(row["id"]),
+                action="expire",
+                reason="past stale_after or default TTL",
+                detail={"content_preview": row["content"][:200]},
+                now=now,
+            )
+
+    for keep, dup in dup_rows:
+        report.compacted_fact_ids.append(str(dup["id"]))
+        if not dry_run:
+            _delete_and_audit(
+                conn,
+                emitter,
+                fact_id=str(dup["id"]),
+                action="compact_duplicate",
+                reason=f"superseded by {keep['id']}",
+                detail={
+                    "entity": dup["entity"],
+                    "attribute": dup["attribute"],
+                    "superseded_by": str(keep["id"]),
+                },
+                now=now,
+            )
 
     return report
