@@ -40,3 +40,18 @@ Feature: Network failure handling and the universal contract
     When the router executes the task
     Then the outcome is paused_task_budget and Chidi is notified
     And the overrun spend is still recorded on the lane ledger
+
+  Scenario: Policy defect - the judgment lane set to the bulk lane's exact model is refused
+    Given the environment sets the judgment lane model to minimax
+    When the router config is validated
+    Then the config is refused because judgment and bulk derive to one model family
+
+  Scenario: Policy defect - the judgment lane on a different model of the bulk lane's family is refused
+    Given the environment sets the judgment lane model to another minimax-family model
+    When the router config is validated
+    Then the config is refused because judgment and bulk derive to one model family
+
+  Scenario: Policy defect - a lane on a model in no family mapping is refused, never defaulted
+    Given the environment sets the judgment lane model to a model absent from the family mapping
+    When the router config is validated
+    Then the config is refused because the model derives to no family

@@ -24,10 +24,20 @@ _DEFAULT_LANE_MODELS = {
     "bulk": "minimax",
     "verify": "google/gemini",
 }
-_DEFAULT_LANE_FAMILIES = {
-    "judgment": "anthropic",
-    "bulk": "minimax",
-    "verify": "google",
+#: Family is DERIVED from the model name via this explicit mapping — never
+#: declared alongside it, so a label can never disagree with the model
+#: actually configured (verifier finding on crew#768: a declared label let
+#: judgment run the bulk model while validation read "anthropic"). A model
+#: absent from this mapping REFUSES at validation — fail closed, never a
+#: defaulted family. Extendable via the policy document's model_families.
+_DEFAULT_MODEL_FAMILIES = {
+    "anthropic/claude": "anthropic",
+    "claude": "anthropic",
+    "minimax": "minimax",
+    "minimax/minimax-01": "minimax",
+    "google/gemini": "google",
+    "gemini": "google",
+    "deepseek": "deepseek",
 }
 _DEFAULT_ON_BUDGET_EXHAUSTED = "queue_and_notify"
 _DEFAULT_MAX_RETRIES_5XX = 1
@@ -94,11 +104,15 @@ class RetryPolicy:
 
 @dataclass(frozen=True)
 class LaneConfig:
-    """One lane: which model serves it and what it may spend."""
+    """One lane: which model serves it and what it may spend.
+
+    Deliberately NO ``family`` field: family is derived from ``model`` by
+    ``RouterConfig.family_of`` so no declared label can disagree with the
+    model actually configured.
+    """
 
     name: str
     model: str
-    family: str
     daily_budget_usd: float
     max_cost_per_task_usd: float
     cost_per_1k_tokens_usd: float = _DEFAULT_COST_PER_1K_TOKENS_USD
@@ -112,7 +126,6 @@ def _default_lanes() -> dict[str, LaneConfig]:
             model=os.environ.get(
                 f"OTTO_ROUTER_LANE_{name.upper()}_MODEL", _DEFAULT_LANE_MODELS[name]
             ),
-            family=_DEFAULT_LANE_FAMILIES[name],
             daily_budget_usd=_float_env(
                 f"OTTO_ROUTER_BUDGET_{name.upper()}_USD", budget
             ),
@@ -167,17 +180,38 @@ class RouterConfig:
             "OTTO_ROUTER_UNGROUNDED_RATE_BAR", _DEFAULT_UNGROUNDED_RATE_BAR
         )
     )
+    model_families: dict[str, str] = field(
+        default_factory=lambda: dict(_DEFAULT_MODEL_FAMILIES)
+    )
+
+    def family_of(self, model: str) -> str:
+        """Derive a model's family from the explicit mapping. An unknown
+        model REFUSES — fail closed, never a defaulted family (a default
+        would let an unmapped model slip past the distinct-family guard)."""
+        try:
+            return self.model_families[model]
+        except KeyError:
+            msg = (
+                f"policy defect: model '{model}' is in no family mapping; "
+                "refusing the config (add it to model_families, never default)"
+            )
+            raise ValueError(msg) from None
+
+    def lane_family(self, lane: str) -> str:
+        return self.family_of(self.lanes[lane].model)
 
     def __post_init__(self) -> None:
-        families = {
-            self.lanes[n].family for n in ("judgment", "bulk") if n in self.lanes
-        }
-        if len(families) == 1:
-            msg = (
-                "policy defect: judgment and bulk lanes share one model family; "
-                "the spec requires distinct families so errors do not correlate"
-            )
-            raise ValueError(msg)
+        # Every configured lane's model must derive to a family (unknown
+        # model = refuse), whatever env override or policy document set it.
+        derived = {name: self.family_of(cfg.model) for name, cfg in self.lanes.items()}
+        for a, b in (("judgment", "bulk"), ("judgment", "verify")):
+            if a in derived and b in derived and derived[a] == derived[b]:
+                msg = (
+                    f"policy defect: {a} and {b} lanes share one model family "
+                    f"('{derived[a]}', derived from the configured models); the "
+                    "spec requires distinct families so errors do not correlate"
+                )
+                raise ValueError(msg)
 
     @classmethod
     def from_policy_dict(cls, policy: dict) -> RouterConfig:
@@ -190,7 +224,6 @@ class RouterConfig:
                 LaneConfig(
                     name=name,
                     model=name,
-                    family=name,
                     daily_budget_usd=0.0,
                     max_cost_per_task_usd=0.0,
                 ),
@@ -198,7 +231,6 @@ class RouterConfig:
             lanes[name] = LaneConfig(
                 name=name,
                 model=row.get("model", fallback.model),
-                family=row.get("family", fallback.family),
                 daily_budget_usd=float(
                     (policy.get("guards", {}).get("daily_budget_usd", {})).get(
                         name, fallback.daily_budget_usd
@@ -229,4 +261,8 @@ class RouterConfig:
             retry=base.retry,
             grounding_min_overlap=base.grounding_min_overlap,
             ungrounded_rate_bar=base.ungrounded_rate_bar,
+            model_families={
+                **base.model_families,
+                **(policy.get("model_families") or {}),
+            },
         )
