@@ -1,0 +1,12 @@
+id: cp0-003-network-partition
+tier: T0
+task_class: ops_read
+input:
+  task: "read cluster state while NATS JetStream is partitioned"
+timeout_s: 3
+network_degradation: partition
+expect:
+  - property: exit_code
+    value: 0
+  - property: no_error
+tags: [network]
