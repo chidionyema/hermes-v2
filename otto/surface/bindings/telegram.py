@@ -29,7 +29,7 @@ TELEGRAM_CAPABILITIES: frozenset[Capability] = frozenset(
 )
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class TelegramBinding:
     """``chat_id_allowlist`` maps a Telegram chat id to a bound-account
     principal name. Supplied by the caller (config, not this file) — a

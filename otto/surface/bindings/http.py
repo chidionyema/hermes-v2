@@ -24,7 +24,7 @@ from otto.surface.renderer import parts_from_response, render_parts
 HTTP_CAPABILITIES: frozenset[Capability] = frozenset({Capability.TEXT, Capability.RICH})
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class HttpBinding:
     """``principal_allowlist`` maps an opaque caller id — already
     authenticated upstream of this function, by whatever the HTTP

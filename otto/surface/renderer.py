@@ -22,7 +22,7 @@ from otto.surface.envelope import Capability
 DEFAULT_DEGRADATION_TEMPLATE = "[{surface} cannot render {needed}: {summary}]"
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class ResponsePart:
     """One piece of a router response.
 

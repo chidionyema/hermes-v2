@@ -277,6 +277,12 @@ else
 	# spec links. Without pytest in the venv none of them can run, so a clone
 	# carried tests nobody could execute. Found 2026-08-22.
 	./.venv/bin/pip install --quiet pytest
+	# The Otto CP2b surface-contract BDD suite (otto/tests/cp2b) runs on
+	# pytest-bdd, and its envelope's correlation_id is a ULID (python-ulid) -
+	# same as every other otto lane's task_id. Undeclared, a clean env has
+	# neither and the test command in the crew#768 evidence does not
+	# reproduce. Found 2026-09-01 (independent verifier, crew#768).
+	./.venv/bin/pip install --quiet pytest-bdd python-ulid
 	ok "$(./bin/hermes --version 2>/dev/null | grep -o 'Hermes Agent v[0-9.]*' | head -1)"
 fi
 
