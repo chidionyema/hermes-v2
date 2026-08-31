@@ -52,6 +52,16 @@ def default_servers() -> list[str]:
     return [s.strip() for s in raw.split(",") if s.strip()]
 
 
+def default_duplicate_window_seconds() -> float:
+    # `Nats-Msg-Id` dedupe (outbox.py, publish() above) only works inside
+    # this window; leaving it at 0 means the server's own default (120s),
+    # which is shorter than a real NATS-partition-then-heal cycle can take
+    # (spec §17 network scenario) — a retry after the window has expired
+    # would double-publish instead of no-op. Configurable, never a bare
+    # constant (LAW 46); 2 hours is a deliberate choice, not the library's.
+    return float(os.environ.get("OTTO_JETSTREAM_DUPLICATE_WINDOW_SECONDS", "7200"))
+
+
 @dataclass(frozen=True)
 class PublishResult:
     subject: str
@@ -99,6 +109,7 @@ class Bus:
                 retention=RetentionPolicy.LIMITS,
                 storage=StorageType.FILE,
                 max_age=spec.retention_days * 24 * 3600,
+                duplicate_window=default_duplicate_window_seconds(),
             )
             try:
                 await self.js.add_stream(cfg)
@@ -148,8 +159,31 @@ class Bus:
                 filter_subject, durable=durable, stream=stream, config=cfg
             )
         except APIError:
-            # Durable already exists with a different config generation —
-            # reuse it as-is rather than fail the caller.
+            # A durable of this name already exists. Adopting it silently
+            # is how the slow-consumer scenario's redelivery bug happened
+            # (a caller asking for DeliverPolicy.NEW got an existing
+            # DeliverPolicy.ALL consumer instead, with no error). Verify
+            # the fields that change delivery *semantics* actually match
+            # what this caller asked for before reusing it; a mismatch is
+            # a bug in the caller (two different durable names collided,
+            # or a real config change was never migrated) and must raise,
+            # never be papered over.
+            info = await self.js.consumer_info(stream, durable)
+            existing = info.config
+            mismatches = {
+                field: (getattr(existing, field), wanted)
+                for field, wanted in (
+                    ("deliver_policy", cfg.deliver_policy),
+                    ("ack_policy", cfg.ack_policy),
+                    ("filter_subject", cfg.filter_subject),
+                )
+                if getattr(existing, field) != wanted
+            }
+            if mismatches:
+                raise RuntimeError(
+                    f"durable consumer {durable!r} on stream {stream!r} already "
+                    f"exists with incompatible config: {mismatches}"
+                ) from None
             return await self.js.pull_subscribe(
                 filter_subject, durable=durable, stream=stream
             )

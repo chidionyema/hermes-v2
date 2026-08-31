@@ -30,6 +30,7 @@ from __future__ import annotations
 import base64
 import json
 import os
+import sys
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from importlib import metadata as importlib_metadata
@@ -215,6 +216,17 @@ def inventory_cli(
     prev = None
     if previous_path is not None and previous_path.exists():
         prev_signed = json.loads(previous_path.read_text())
+        # Fail closed: an unverifiable --previous is refused rather than
+        # silently diffed against. Diffing a tampered artifact would print
+        # a false "nothing changed" for a row someone edited by hand after
+        # signing — exactly the incident spec §15 exists to catch.
+        if not verify_signed_inventory(prev_signed, key.public_key()):
+            print(
+                f"error: {previous_path} does not verify against this key "
+                f"({default_key_path() if key_path is None else key_path}) — refusing to diff",
+                file=sys.stderr,
+            )
+            return 1
         prev = prev_signed.get("inventory")
     diff = diff_inventory(prev, inventory)
     print(
