@@ -160,6 +160,17 @@ def _(ctx, pg_ready):
     )
     store.write_fact(pg_ready, newer)
 
+    # Enough unrelated healthy facts alongside the two deletion candidates
+    # that the run stays under the default 20% max-deletion-fraction cap
+    # (otto/memory/hygiene.py) - this scenario is about the stale fact and
+    # the duplicate specifically, not about tripping the cap (that has its
+    # own scenario in cp4_hardening.feature).
+    for i in range(8):
+        store.write_fact(
+            pg_ready,
+            Fact(content=f"unrelated healthy fact {i}", provenance=prov),
+        )
+
     ctx["stale_fact"] = stale
     ctx["older_dup"] = older
     ctx["newer_dup"] = newer
