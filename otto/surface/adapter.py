@@ -20,7 +20,7 @@ from otto.surface.envelope import Capability, SurfaceEnvelope
 __all__ = ["Capability", "RenderedMessage", "SurfaceAdapter"]
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class RenderedMessage:
     """What ``SurfaceAdapter.render`` returns: the text a surface actually
     sends, plus a record of what happened to get there.

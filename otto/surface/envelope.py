@@ -59,7 +59,7 @@ def _new_correlation_id() -> str:
     return str(ULID())
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class SurfaceEnvelope:
     """The one envelope shape every surface binding produces.
 
