@@ -1,0 +1,364 @@
+#!/usr/bin/env python3
+"""One command that proves the Otto v1 spec against a fresh test run.
+
+Run ``bin/otto-demo`` with nothing else — no arguments, no flags (the
+founder runs one word, per rule R31). It replays the whole Otto evidence
+set fresh: one pytest run per spec section, one cross-lane end-to-end
+walk (the assembly suite), then a spec-conformance matrix mapping every
+spec section to the tests that prove it and the fresh result. The matrix
+is written to ``docs/demo/otto.md`` so the page is always generated,
+never hand-written.
+
+The matrix is built so it cannot lie by omission:
+
+* the section list comes from the declared manifest below, never from
+  whatever tests happen to exist;
+* a section whose test path is missing, or collects zero tests, renders
+  as a RED row and the command exits nonzero;
+* every test file under the suite root must belong to a manifest
+  section — a stray test directory no section claims is itself a RED row.
+
+The command exits 0 only when every row is green.
+
+Two environment variables exist so the command's own test suite can
+exercise it against small fixture manifests; a person never sets them:
+``OTTO_DEMO_MANIFEST`` (path to a JSON manifest) and ``OTTO_DEMO_OUTPUT``
+(where to write the generated page).
+
+No prompt strings in this file; prompt work is DSPy-only per R64.
+"""
+
+from __future__ import annotations
+
+import json
+import os
+import re
+import subprocess
+import sys
+from dataclasses import dataclass
+from datetime import datetime, timezone
+from pathlib import Path
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
+
+# One pytest run may not hang the machine forever. Thirty minutes is far
+# above any observed section time (the whole suite runs in about four).
+SECTION_TIMEOUT_SECONDS = 1800
+
+# The declared spec manifest. Every section of the Otto v1 spec, the
+# plain-English claim it makes, and the test path whose fresh run proves
+# it. Paths are relative to the repository root (never absolute, LAW 46).
+DEFAULT_MANIFEST: dict = {
+    "suite_root": "otto/tests",
+    "sections": [
+        {
+            "section": "CP0 evals",
+            "claim": "Model evaluations run, score and gate releases.",
+            "path": "otto/tests/cp0",
+        },
+        {
+            "section": "CP1 spine",
+            "claim": "One task envelope, a durable bus, replay and a signed inventory.",
+            "path": "otto/tests/cp1",
+        },
+        {
+            "section": "CP2 gateway",
+            "claim": "Every tool call goes through one checked gateway.",
+            "path": "otto/tests/cp2",
+        },
+        {
+            "section": "CP2b surface contract",
+            "claim": "Every chat surface speaks one envelope with a trust class.",
+            "path": "otto/tests/cp2b",
+        },
+        {
+            "section": "CP3 verify",
+            "claim": "Work is claimed, re-run fresh by a verifier, and gated on a signed verdict.",
+            "path": "otto/tests/cp3",
+        },
+        {
+            "section": "CP4 memory",
+            "claim": "Facts carry provenance and survive restarts.",
+            "path": "otto/tests/cp4",
+        },
+        {
+            "section": "CP5 router",
+            "claim": "Model output is normalised and unverified claims are labelled.",
+            "path": "otto/tests/cp5",
+        },
+        {
+            "section": "CP6 observability",
+            "claim": "Nothing boots dark; every lane emits spans and coverage is queried.",
+            "path": "otto/tests/cp6obs",
+        },
+        {
+            "section": "Assembly (one task end to end)",
+            "claim": "One task crosses all six lanes in a single process, surface to memory.",
+            "path": "otto/tests/integration",
+        },
+        {
+            "section": "W3 demo command",
+            "claim": "This demo command itself is tested, including its refusal paths.",
+            "path": "otto/tests/demo",
+        },
+    ],
+}
+
+
+@dataclass
+class Row:
+    """One line of the spec-conformance matrix."""
+
+    section: str
+    claim: str
+    path: str
+    green: bool
+    passed: int
+    failed: int
+    detail: str
+
+
+def load_manifest() -> dict:
+    """Return the declared manifest, or the test-suite override."""
+    override = os.environ.get("OTTO_DEMO_MANIFEST")
+    if override:
+        with open(override, encoding="utf-8") as handle:
+            return json.load(handle)
+    return DEFAULT_MANIFEST
+
+
+def resolve(path_text: str) -> Path:
+    """Resolve a manifest path against the repository root."""
+    path = Path(path_text)
+    return path if path.is_absolute() else REPO_ROOT / path
+
+
+def parse_counts(output: str) -> dict:
+    """Read the pass, fail and error counts out of a pytest summary."""
+    counts = {"passed": 0, "failed": 0, "errors": 0}
+    for key, word in (("passed", "passed"), ("failed", "failed"), ("errors", "error")):
+        match = re.search(rf"(\d+) {word}", output)
+        if match:
+            counts[key] = int(match.group(1))
+    return counts
+
+
+def run_section(entry: dict) -> Row:
+    """Run one spec section's tests fresh and grade the result."""
+    section = entry["section"]
+    claim = entry["claim"]
+    path_text = entry["path"]
+    target = resolve(path_text)
+
+    if not target.exists():
+        return Row(
+            section, claim, path_text, False, 0, 0, "RED - the test path does not exist"
+        )
+
+    command = [sys.executable, "-m", "pytest", str(target), "-q"]
+    try:
+        result = subprocess.run(
+            command,
+            cwd=REPO_ROOT,
+            capture_output=True,
+            text=True,
+            timeout=SECTION_TIMEOUT_SECONDS,
+        )
+    except subprocess.TimeoutExpired:
+        return Row(
+            section, claim, path_text, False, 0, 0, "RED - the test run timed out"
+        )
+
+    output = result.stdout + result.stderr
+    counts = parse_counts(output)
+    passed, failed = counts["passed"], counts["failed"] + counts["errors"]
+
+    if result.returncode == 5 or (result.returncode == 0 and passed == 0):
+        # Exit code 5 is pytest's "nothing collected". A section with no
+        # covering tests is unproven, so the row is red - the matrix must
+        # not read green by omission.
+        return Row(
+            section, claim, path_text, False, 0, 0, "RED - no tests cover this section"
+        )
+    if result.returncode != 0:
+        detail = f"RED - {failed} failed, {passed} passed"
+        return Row(section, claim, path_text, False, passed, failed, detail)
+    return Row(
+        section, claim, path_text, True, passed, failed, f"GREEN - all {passed} passed"
+    )
+
+
+def collected_test_files(suite_root: Path) -> list[Path] | None:
+    """Ask pytest itself which test files it collects under the suite root.
+
+    The sweep must use pytest's own collection rules, never a filename
+    glob of its own: a glob for ``test_*.py`` alone misses ``*_test.py``
+    (pytest's other default) and would silently drift from any future
+    collection setting. Asking pytest keeps the two identical forever
+    (independent verifier's finding on crew#768, comment 5486646142).
+
+    Returns ``None`` when the enumeration itself fails, so the caller can
+    fail closed with a red row rather than quietly sweep nothing.
+    """
+    # --rootdir pins pytest's node ids to the suite root, so every
+    # collected path resolves against one known base (without it, pytest
+    # picks its own root and the ids move around).
+    command = [
+        sys.executable,
+        "-m",
+        "pytest",
+        str(suite_root),
+        "--collect-only",
+        "-q",
+        f"--rootdir={suite_root}",
+    ]
+    try:
+        result = subprocess.run(
+            command,
+            cwd=REPO_ROOT,
+            capture_output=True,
+            text=True,
+            timeout=SECTION_TIMEOUT_SECONDS,
+        )
+    except subprocess.TimeoutExpired:
+        return None
+    # 0 means tests were collected, 5 means none were - both are honest
+    # enumerations. Anything else means the enumeration itself broke.
+    if result.returncode not in (0, 5):
+        return None
+    files: set[Path] = set()
+    for line in result.stdout.splitlines():
+        text = line.strip()
+        if "::" not in text:
+            continue
+        raw = Path(text.split("::", 1)[0])
+        resolved = raw if raw.is_absolute() else suite_root / raw
+        if not resolved.is_file():
+            # A collected path that cannot be placed on disk means the
+            # enumeration is not trustworthy; fail closed.
+            return None
+        files.add(resolved)
+    return sorted(files)
+
+
+def sweep_for_unclaimed_tests(manifest: dict) -> list[Row]:
+    """Find collected test files under the suite root that no section claims.
+
+    A test file the manifest does not name would otherwise vanish from
+    the matrix. Each unclaimed file becomes its own red row, and a sweep
+    that cannot enumerate the collection is itself a red row.
+    """
+    suite_root = resolve(manifest["suite_root"])
+    claimed = [resolve(entry["path"]) for entry in manifest["sections"]]
+    rows: list[Row] = []
+    if not suite_root.exists():
+        return rows
+    collected = collected_test_files(suite_root)
+    if collected is None:
+        return [
+            Row(
+                "Unclaimed tests",
+                "Every collected test file must belong to a spec section.",
+                str(manifest["suite_root"]),
+                False,
+                0,
+                0,
+                "RED - could not enumerate the tests pytest collects",
+            )
+        ]
+    for test_file in collected:
+        if not any(test_file.is_relative_to(prefix) for prefix in claimed):
+            relative = (
+                test_file.relative_to(REPO_ROOT)
+                if test_file.is_relative_to(REPO_ROOT)
+                else test_file
+            )
+            rows.append(
+                Row(
+                    "Unclaimed tests",
+                    "Every collected test file must belong to a spec section.",
+                    str(relative),
+                    False,
+                    0,
+                    0,
+                    "RED - no spec section claims this test file",
+                )
+            )
+    return rows
+
+
+def render(rows: list[Row], started_at: str, finished_at: str) -> str:
+    """Render the matrix as the generated demo page."""
+    all_green = all(row.green for row in rows)
+    total_passed = sum(row.passed for row in rows)
+    total_failed = sum(row.failed for row in rows)
+    verdict = (
+        f"Every row is green: {total_passed} tests passed fresh, none failed."
+        if all_green
+        else f"NOT PROVEN: at least one row is red ({total_passed} passed, {total_failed} failed)."
+    )
+
+    lines = [
+        "# Otto v1 demo: the spec, proved fresh",
+        "",
+        "<!-- generated by bin/otto-demo, do not edit -->",
+        "",
+        f"Generated by `bin/otto-demo`, do not edit. Run started {started_at},",
+        f"finished {finished_at} (both UTC).",
+        "",
+        "Every row below is a section of the Otto v1 spec, the tests that",
+        "prove it, and the result of running those tests fresh just now.",
+        "A section with no covering tests shows as a red row; this page",
+        "cannot read green by leaving something out.",
+        "",
+        "| Spec section | What it promises | Proof (test path) | Fresh result |",
+        "| --- | --- | --- | --- |",
+    ]
+    for row in rows:
+        lines.append(f"| {row.section} | {row.claim} | `{row.path}` | {row.detail} |")
+    lines += ["", f"**Verdict:** {verdict}", ""]
+    return "\n".join(lines)
+
+
+def main() -> int:
+    started_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    manifest = load_manifest()
+
+    print("Otto v1 demo: replaying the whole evidence set fresh.")
+    print(
+        f"Sections to prove: {len(manifest['sections'])}. This runs every test, so it takes a few minutes."
+    )
+    print()
+
+    rows: list[Row] = []
+    for entry in manifest["sections"]:
+        print(f"  running {entry['section']} ({entry['path']}) ...", flush=True)
+        row = run_section(entry)
+        print(f"    {row.detail}")
+        rows.append(row)
+
+    rows.extend(sweep_for_unclaimed_tests(manifest))
+
+    finished_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    page = render(rows, started_at, finished_at)
+
+    output_path = Path(
+        os.environ.get("OTTO_DEMO_OUTPUT", REPO_ROOT / "docs" / "demo" / "otto.md")
+    )
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(page, encoding="utf-8")
+
+    print()
+    print(page)
+    print(f"The matrix above was written to {output_path}.")
+
+    all_green = all(row.green for row in rows)
+    if all_green:
+        print("Demo verdict: every spec section is proved by a fresh green run.")
+        return 0
+    print("Demo verdict: NOT PROVEN. At least one row is red; see the matrix above.")
+    return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())
