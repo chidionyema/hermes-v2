@@ -1,0 +1,13 @@
+# What the image must import before it may ship (crew#736 CP2; Unbreakable Release
+# Contract G2, founder 2026-08-31: "Compiling is not executing").
+# One module per line; text after '#' is comment. deploy/k8s/boot-contract.sh imports
+# each of these inside the built image as uid 10001. When config.yaml selects a new
+# provider or platform, tests/test_incident_crew736_cp2_boot_contract.py fails until
+# the matching module lands here.
+hermes_cli.main
+telegram.ext                            # messaging: python-telegram-bot[webhooks]
+anthropic                               # provider SDK config.yaml names
+hindsight_client                        # memory.provider: hindsight
+opentelemetry.sdk                       # otlp: LAW 50, every workload emits
+opentelemetry.exporter.otlp.proto.http  # the exporter the pod points at the collector
+edge_tts                                # voice notes; lazy install cannot pip into a read-only pod

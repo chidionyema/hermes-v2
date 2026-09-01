@@ -54,7 +54,7 @@ WORKDIR /app/hermes-agent
 # `crane export --platform linux/arm64 ... | tar -tv`). The interpreter lives in a world-readable
 # directory instead.
 ENV UV_PYTHON_INSTALL_DIR=/opt/uv/python
-RUN uv sync --frozen --no-dev --extra messaging --extra hindsight --extra otlp --extra anthropic \
+RUN uv sync --frozen --no-dev --extra messaging --extra hindsight --extra otlp --extra anthropic --extra edge-tts \
     && chmod -R a+rX /opt/uv \
     && test -x "$(readlink -f .venv/bin/python)" \
     && case "$(readlink -f .venv/bin/python)" in /root/*) echo "python under /root" >&2; exit 1;; esac
