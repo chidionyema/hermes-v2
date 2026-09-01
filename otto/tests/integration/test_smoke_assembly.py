@@ -14,6 +14,10 @@ through its ``boot()`` entrypoint under ``OTTO_OBS_MODE=test``, emits one
 task span per component carrying the same task ULID, and proves the
 ``otto-obs-coverage`` gate green over all six — nothing boots dark.
 
+Store hygiene: every test here runs between ``_reset_shared_store()``
+calls, and a third test proves the invariant that this file's teardown
+leaves the process-shared exporter usable for whatever runs next.
+
 This is glue proof, not lane proof — each lane's own suite (cp0..cp6)
 carries the behavioural coverage.
 """
@@ -24,7 +28,11 @@ import dataclasses
 import json
 from datetime import datetime, timezone
 
+import pytest
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+from opentelemetry.sdk.trace.export.in_memory_span_exporter import (
+    InMemorySpanExporter,
+)
 
 # Import the sixth lane at module level so a collection of this file alone
 # proves all six packages load in one interpreter.
@@ -50,6 +58,29 @@ from otto.verify.model import Claim as WorkClaim
 from otto.verify.model import ClaimEnvelope
 from otto.verify.store import InMemoryVerdictStore
 from otto.verify.verifier import CODE_PASSES_TESTS, RerunResult, Verifier
+
+
+def _reset_shared_store() -> None:
+    """Clear the shared obs store AND replace its span exporter.
+
+    Same idiom as ``otto/tests/onboard/conftest.py``: ``handle.shutdown()``
+    stops the delegate exporter, and a stopped ``InMemorySpanExporter``
+    refuses every later export while ``clear()`` does not revive it. Left
+    in place, a suite running after this file in the same process would
+    export into a dead sink SILENTLY and the coverage gate would read a
+    false red. A fresh exporter on both sides of every test removes the
+    leak in both directions."""
+    store = obs_test_store()
+    store.clear()
+    store.span_exporter = InMemorySpanExporter()
+
+
+@pytest.fixture(autouse=True)
+def _fresh_shared_store():
+    """Every test in this file starts and ends with a live shared store."""
+    _reset_shared_store()
+    yield
+    _reset_shared_store()
 
 
 class _GreenSandbox:
@@ -220,7 +251,6 @@ def test_w2_every_package_boots_instrumented(monkeypatch) -> None:
     """W2: each package's boot() instruments through otto.obs; the
     coverage gate sees every component; the task ULID is the trace id."""
     monkeypatch.setenv(MODE_ENV, MODE_TEST)
-    obs_test_store().clear()
 
     import otto.evals
     import otto.gateway
@@ -264,6 +294,51 @@ def test_w2_every_package_boots_instrumented(monkeypatch) -> None:
         report = check_coverage(sorted(packages), _StoreBackend())
         assert not report.red, report.as_dict()
     finally:
+        # Providers are shut down properly; this stops the shared store's
+        # current span exporter too, which is exactly why the autouse
+        # ``_fresh_shared_store`` fixture replaces it after every test.
         for handle in handles.values():
             handle.shutdown()
-        obs_test_store().clear()
+
+
+def test_regression_fresh_export_lands_after_smoke_teardown(monkeypatch) -> None:
+    """Regression (crew#768 integration defect): the smoke teardown above
+    must leave the process-shared exporter usable.
+
+    The defect class: ``handle.shutdown()`` on handles booted against the
+    shared ``obs_test_store()`` stops the shared ``InMemorySpanExporter``;
+    ``clear()`` does not revive it; every later export in the process then
+    fails SILENTLY and coverage reads a false red. This test runs after
+    ``test_w2_every_package_boots_instrumented`` (pytest keeps definition
+    order within a module) and proves the invariant directly: a fresh
+    handle booted now, in the same process, still lands a span in the
+    shared store, and its export health stays green."""
+    monkeypatch.setenv(MODE_ENV, MODE_TEST)
+
+    import otto.spine
+
+    surface_env = SurfaceEnvelope(
+        surface="telegram",
+        principal="founder",
+        trust_class=TrustClass.OPERATOR,
+        capabilities=frozenset({Capability.TEXT}),
+        content="post-teardown export probe",
+        received_at=datetime.now(timezone.utc),
+    )
+    ctx = TaskContext(task_ulid=surface_env.correlation_id)
+    probe = otto.spine.boot()  # default config: the shared store's exporter
+    try:
+        with probe.task_span(ctx, "regression.fresh-export"):
+            pass
+        landed = [
+            span
+            for span in obs_test_store().finished_spans()
+            if span.name == "regression.fresh-export"
+        ]
+        assert landed, (
+            "shared exporter is stopped: a prior test's shutdown poisoned it "
+            "and clear() did not revive it"
+        )
+        assert probe.health.healthy, probe.health.as_dict()
+    finally:
+        probe.shutdown()  # the autouse fixture replaces the exporter after
