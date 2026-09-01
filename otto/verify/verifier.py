@@ -107,6 +107,42 @@ def _normalise(text: str) -> str:
     return " ".join(text.split())
 
 
+# Zero-width code points: invisible, not whitespace, so ``str.split`` keeps
+# them. Left in place they make two visually identical strings compare
+# unequal, and they count toward length minimums while showing nothing.
+_ZERO_WIDTH = ("\u200b", "\u200c", "\u200d", "\ufeff")
+
+
+def _has_zero_width(text: str) -> bool:
+    return any(zw in text for zw in _ZERO_WIDTH)
+
+
+def _strip_zero_width(text: str) -> tuple[str, int]:
+    """Remove zero-width code points; report how many were removed."""
+    removed = 0
+    for zw in _ZERO_WIDTH:
+        removed += text.count(zw)
+        text = text.replace(zw, "")
+    return text, removed
+
+
+def _zero_width_refusal(method: str, field_name: str) -> CheckOutcome:
+    """Claimed text is evidence; invisible content in it is refused, never
+    normalised away — a claim padded with zero-width code points could
+    otherwise pass length minimums or match salted documents while
+    displaying something else entirely."""
+    return CheckOutcome(
+        passed=False,
+        method=method,
+        hardness=HARD,
+        detail=(
+            f"claimed {field_name} contains zero-width code points "
+            "(U+200B/U+200C/U+200D/U+FEFF); invisible content is refused, "
+            "fail closed"
+        ),
+    )
+
+
 _FAILURES = (
     SourceUnreachable,
     ArtifactUnreachable,
@@ -271,7 +307,10 @@ class Verifier:
         # check over it can prove nothing. The whole class (empty string,
         # whitespace, one-letter needles) is refused as unverifiable —
         # never checked, never passed.
-        needle = _normalise(str(claim.claimed.get("text", "")))
+        raw_claimed = str(claim.claimed.get("text", ""))
+        if _has_zero_width(raw_claimed):
+            return _zero_width_refusal("source_fetch", "text")
+        needle = _normalise(raw_claimed)
         if len(needle) < self._config.min_source_match_chars:
             return CheckOutcome(
                 passed=False,
@@ -284,22 +323,35 @@ class Verifier:
                 ),
             )
         url = str(claim.evidence_spec.get("url", ""))
-        text = _normalise(self._source_fetcher.fetch(url))
+        # The fetched document is an observation, not a claim: zero-width
+        # code points in it are stripped (and recorded) so a visually
+        # identical source still matches, rather than refused — a web page
+        # may legitimately carry a byte-order mark or joiner it never chose.
+        fetched, zero_width_removed = _strip_zero_width(self._source_fetcher.fetch(url))
+        text = _normalise(fetched)
         ok = needle in text
+        detail = f"containment check against {url!r}"
+        if zero_width_removed:
+            detail += (
+                f"; {zero_width_removed} zero-width code points stripped "
+                "from the source before comparison"
+            )
         return CheckOutcome(
             passed=ok,
             method="source_fetch",
             hardness=HARD,
-            detail=f"containment check against {url!r}",
+            detail=detail,
         )
 
     def _check_text_judgment(self, claim: Claim) -> CheckOutcome:
         if self._verify_lane is None:
             return _no_dependency("cross_model")
-        supported = self._verify_lane.supports(
-            str(claim.claimed.get("statement", "")),
-            str(claim.evidence_spec.get("context", "")),
-        )
+        statement = str(claim.claimed.get("statement", ""))
+        if _has_zero_width(statement):
+            return _zero_width_refusal("cross_model", "statement")
+        # Context is an observation; strip, same rule as the source fetch.
+        context, _ = _strip_zero_width(str(claim.evidence_spec.get("context", "")))
+        supported = self._verify_lane.supports(statement, context)
         return CheckOutcome(
             passed=supported,
             method="cross_model",

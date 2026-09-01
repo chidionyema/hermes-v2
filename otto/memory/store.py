@@ -30,6 +30,13 @@ class WriteFailedError(RuntimeError):
     call. Never assume a partial row was persisted - it wasn't."""
 
 
+class DanglingReferenceError(RuntimeError):
+    """A fact referenced a row that does not exist (e.g. ``superseded_by``
+    naming a missing fact id). Deliberately NOT a ``WriteFailedError``:
+    that class means "retry or surface", and retrying a dangling
+    reference can never succeed - the caller must abort, not retry."""
+
+
 def write_fact(conn: psycopg.Connection, fact: Fact) -> Fact:
     if fact.provenance is None:
         raise ProvenanceError("a fact without provenance is refused at write")
@@ -58,6 +65,15 @@ def write_fact(conn: psycopg.Connection, fact: Fact) -> Fact:
         conn.rollback()
         raise ProvenanceError(
             "database refused the write: provenance column is NOT NULL"
+        ) from exc
+    except psycopg.errors.ForeignKeyViolation as exc:
+        # The foreign key on otto_facts (superseded_by REFERENCES
+        # otto_facts) is the last point where every writer merges; a
+        # violation there means the fact names a row that does not exist.
+        # Nothing was stored, and a retry can never succeed.
+        conn.rollback()
+        raise DanglingReferenceError(
+            f"fact {fact.id} references a missing row; nothing was stored: {exc}"
         ) from exc
     except (psycopg.OperationalError, psycopg.errors.Error) as exc:
         try:

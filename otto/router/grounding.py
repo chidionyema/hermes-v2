@@ -28,7 +28,10 @@ _STOPWORDS = frozenset(
 
 
 def _significant_tokens(text: str) -> set[str]:
-    return {t for t in _WORD.findall(text.lower()) if t not in _STOPWORDS}
+    # casefold, not lower: tokens that differ only by Unicode case rules
+    # (German ss/SS, Turkish dotless-i forms) must compare equal, or two
+    # spellings of the same word grade a claim differently.
+    return {t for t in _WORD.findall(text.casefold()) if t not in _STOPWORDS}
 
 
 @dataclass(frozen=True)

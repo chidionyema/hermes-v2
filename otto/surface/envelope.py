@@ -94,6 +94,10 @@ class SurfaceEnvelope:
         # Defensive: a caller handing in a list/set still ends up with the
         # immutable, hashable type the dataclass is typed as.
         object.__setattr__(self, "capabilities", frozenset(self.capabilities))
+        # trust_class must be one of the three known classes at the
+        # boundary; a raw string or unknown value is refused here rather
+        # than compared against later.
+        object.__setattr__(self, "trust_class", TrustClass(self.trust_class))
 
     @property
     def is_instruction_bearing(self) -> bool:
@@ -106,5 +110,21 @@ class SurfaceEnvelope:
         content pattern that promotes ambient data to an instruction,
         because the promotion is exactly the vulnerability this rule
         closes.
+
+        The decision is made on the value read HERE, not on what
+        ``__post_init__`` saw: ``object.__setattr__`` rewrites even a
+        frozen, slotted dataclass field on CPython, so construction-time
+        validation alone does not bind. The value read at check time must
+        be one of the three known trust classes; anything else raises
+        ``ValueError`` — an unrecognised trust class is never treated as
+        instruction-bearing.
         """
-        return self.trust_class is not TrustClass.AMBIENT
+        try:
+            trust = TrustClass(self.trust_class)
+        except ValueError:
+            raise ValueError(
+                f"unknown trust class {self.trust_class!r}; refusing to "
+                "grade instruction-bearing (known classes: "
+                f"{[t.value for t in TrustClass]})"
+            ) from None
+        return trust is not TrustClass.AMBIENT
