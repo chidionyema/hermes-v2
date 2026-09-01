@@ -22,7 +22,7 @@ Config, in estate.yaml:
     catalog_oci: oci://ghcr.io/OWNER/idp/estate-catalog:latest   # what the cluster runs
     catalog_repo: OWNER/idp                 # fallback: the file in the platform repo
     catalog_path: catalog/catalog-info.yaml
-    include: mumchimp.com                   # substring a URL's host must contain
+    include: <the estate zone>              # substring a URL's host must contain
     chat_env: TELEGRAM_HOME_CHANNEL         # env var naming the chat to pin in
 
 Telegram is the Bot API over HTTPS (sendMessage, editMessageText, pinChatMessage);

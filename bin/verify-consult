@@ -35,7 +35,7 @@ skip() {
 }
 PY=python3
 [ -x .venv/bin/python ] && PY=.venv/bin/python
-printf '\n\033[1mVerifying consult\033[0m  %s\n\n' "${LITELLM_BASE_URL:-https://llm.mumchimp.com/v1}"
+printf '\n\033[1mVerifying consult\033[0m  %s\n\n' "${LITELLM_BASE_URL:-https://llm.${ESTATE_ZONE:?set ESTATE_ZONE, the estate zone}/v1}"
 
 test -x bin/consult && "$PY" -c "import ast;ast.parse(open('bin/consult').read())" 2>/dev/null
 row "client exists and parses" "$?" "bin/consult"

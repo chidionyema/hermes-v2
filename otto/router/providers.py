@@ -23,7 +23,7 @@ from pathlib import Path
 from typing import Protocol
 
 _KEY_FILE_RELATIVE = ".config/prospector/secrets.d/LITELLM_API_KEY"
-_DEFAULT_BASE_URL = "https://llm.mumchimp.com/v1"
+_DEFAULT_BASE_URL = f"https://llm.{os.environ['ESTATE_ZONE']}/v1"  # the zone is one value (idp clusters/<cluster>/estate-config.yaml); unset = loud KeyError, never a wrong estate
 
 
 class ProviderTimeout(Exception):

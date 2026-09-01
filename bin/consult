@@ -20,7 +20,7 @@ question into the issue as a comment and carry on with what you can still do.
 
 CONFIGURATION. Environment only, none required:
 
-  LITELLM_BASE_URL   default https://llm.mumchimp.com/v1
+  LITELLM_BASE_URL   default https://llm.<ESTATE_ZONE>/v1 (ESTATE_ZONE: the estate zone, one value in idp clusters/<cluster>/estate-config.yaml)
   LITELLM_API_KEY    else the file ~/.config/prospector/secrets.d/LITELLM_API_KEY
   CONSULT_LANE       default minimax (a row of the router's model list)
   CONSULT_TIMEOUT    seconds, default 120
@@ -33,7 +33,7 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
-BASE = os.environ.get("LITELLM_BASE_URL", "https://llm.mumchimp.com/v1").rstrip("/")
+BASE = (os.environ.get("LITELLM_BASE_URL") or f"https://llm.{os.environ['ESTATE_ZONE']}/v1").rstrip("/")
 LANE = os.environ.get("CONSULT_LANE", "minimax")
 TIMEOUT = int(os.environ.get("CONSULT_TIMEOUT", "120"))
 UNAVAILABLE = 3

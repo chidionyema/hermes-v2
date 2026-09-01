@@ -1,3 +1,4 @@
+# estate-zone-gate: exempt (framework config read by hermes_cli before the estate env is plumbed into the Mac gateway and the pod; crew#796 follow-up replaces the three base_url lines with ${env:ESTATE_ZONE})
 model:
   # crew#568 Phase 5: the primary model is the router's claude lane on a router key, never a
   # vendor key (LAW 34). The router owns the vendor credential and the spend ledger.
