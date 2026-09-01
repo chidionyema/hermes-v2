@@ -7,7 +7,10 @@ Feature: W3 demo command — the spec-conformance matrix cannot lie
   head exits 0 with an all-green matrix and a regenerated page, a spec
   section with no covering tests is a red row and a nonzero exit (the
   cannot-lie-by-omission proof), a failing test is a nonzero exit, and a
-  test file no section claims is itself a red row.
+  test file no section claims is itself a red row - whatever the file is
+  named, because the sweep asks pytest for its own collected set rather
+  than matching filenames itself (verifier finding, crew#768 comment
+  5486646142).
 
   Each scenario drives the real executable in a subprocess, pointed at a
   small fixture manifest so a laptop run finishes in seconds; the
@@ -38,4 +41,10 @@ Feature: W3 demo command — the spec-conformance matrix cannot lie
     Given a manifest that claims one directory while a stray test file sits beside it
     When the demo command runs
     Then it exits with a nonzero code
-    And the matrix shows a red row for the unclaimed test file
+    And the matrix shows a red row for the unclaimed file "test_stray_orphan.py"
+
+  Scenario: A test file named to dodge a plain filename glob is still caught
+    Given a manifest that claims one directory while an unclaimed file named "evader_test.py" sits beside it
+    When the demo command runs
+    Then it exits with a nonzero code
+    And the matrix shows a red row for the unclaimed file "evader_test.py"

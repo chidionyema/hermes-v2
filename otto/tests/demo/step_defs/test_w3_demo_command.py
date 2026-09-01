@@ -15,7 +15,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from pytest_bdd import given, scenarios, then, when
+from pytest_bdd import given, parsers, scenarios, then, when
 
 scenarios("../features/w3_demo_command.feature")
 
@@ -121,6 +121,38 @@ def manifest_stray(ctx: dict, tmp_path: Path) -> None:
     ctx["output"] = tmp_path / "otto.md"
 
 
+@given(
+    "a manifest that claims one directory while an unclaimed file named "
+    '"evader_test.py" sits beside it'
+)
+def manifest_evader(ctx: dict, tmp_path: Path) -> None:
+    # The independent verifier's probe (crew#768 comment 5486646142): a
+    # test file matching pytest's *other* default pattern (*_test.py)
+    # dodged the old test_*.py filename glob. The sweep now takes its
+    # file list from pytest's own collection, so the name cannot matter.
+    suite_root = tmp_path / "suite"
+    claimed = suite_root / "claimed"
+    claimed.mkdir(parents=True)
+    (claimed / "test_claimed_green.py").write_text(
+        "def test_claimed_green():\n    assert True\n", encoding="utf-8"
+    )
+    (suite_root / "evader_test.py").write_text(
+        "def test_evader():\n    assert True\n", encoding="utf-8"
+    )
+    ctx["manifest"] = _write_manifest(
+        tmp_path,
+        [
+            {
+                "section": "CP1 spine",
+                "claim": "One task envelope and a durable bus.",
+                "path": str(claimed),
+            }
+        ],
+        suite_root=str(suite_root),
+    )
+    ctx["output"] = tmp_path / "otto.md"
+
+
 # -- when --------------------------------------------------------------------
 
 
@@ -185,7 +217,7 @@ def red_row_failure_count(ctx: dict) -> None:
     assert "RED - 1 failed" in ctx["stdout"], ctx["stdout"]
 
 
-@then("the matrix shows a red row for the unclaimed test file")
-def red_row_unclaimed(ctx: dict) -> None:
+@then(parsers.parse('the matrix shows a red row for the unclaimed file "{name}"'))
+def red_row_unclaimed(ctx: dict, name: str) -> None:
     assert "RED - no spec section claims this test file" in ctx["stdout"], ctx["stdout"]
-    assert "test_stray_orphan.py" in ctx["stdout"], ctx["stdout"]
+    assert name in ctx["stdout"], ctx["stdout"]

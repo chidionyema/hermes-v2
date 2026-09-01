@@ -188,18 +188,85 @@ def run_section(entry: dict) -> Row:
     )
 
 
-def sweep_for_unclaimed_tests(manifest: dict) -> list[Row]:
-    """Find test files under the suite root that no section claims.
+def collected_test_files(suite_root: Path) -> list[Path] | None:
+    """Ask pytest itself which test files it collects under the suite root.
 
-    A test directory the manifest does not name would otherwise vanish
-    from the matrix. Each unclaimed file becomes its own red row.
+    The sweep must use pytest's own collection rules, never a filename
+    glob of its own: a glob for ``test_*.py`` alone misses ``*_test.py``
+    (pytest's other default) and would silently drift from any future
+    collection setting. Asking pytest keeps the two identical forever
+    (independent verifier's finding on crew#768, comment 5486646142).
+
+    Returns ``None`` when the enumeration itself fails, so the caller can
+    fail closed with a red row rather than quietly sweep nothing.
+    """
+    # --rootdir pins pytest's node ids to the suite root, so every
+    # collected path resolves against one known base (without it, pytest
+    # picks its own root and the ids move around).
+    command = [
+        sys.executable,
+        "-m",
+        "pytest",
+        str(suite_root),
+        "--collect-only",
+        "-q",
+        f"--rootdir={suite_root}",
+    ]
+    try:
+        result = subprocess.run(
+            command,
+            cwd=REPO_ROOT,
+            capture_output=True,
+            text=True,
+            timeout=SECTION_TIMEOUT_SECONDS,
+        )
+    except subprocess.TimeoutExpired:
+        return None
+    # 0 means tests were collected, 5 means none were - both are honest
+    # enumerations. Anything else means the enumeration itself broke.
+    if result.returncode not in (0, 5):
+        return None
+    files: set[Path] = set()
+    for line in result.stdout.splitlines():
+        text = line.strip()
+        if "::" not in text:
+            continue
+        raw = Path(text.split("::", 1)[0])
+        resolved = raw if raw.is_absolute() else suite_root / raw
+        if not resolved.is_file():
+            # A collected path that cannot be placed on disk means the
+            # enumeration is not trustworthy; fail closed.
+            return None
+        files.add(resolved)
+    return sorted(files)
+
+
+def sweep_for_unclaimed_tests(manifest: dict) -> list[Row]:
+    """Find collected test files under the suite root that no section claims.
+
+    A test file the manifest does not name would otherwise vanish from
+    the matrix. Each unclaimed file becomes its own red row, and a sweep
+    that cannot enumerate the collection is itself a red row.
     """
     suite_root = resolve(manifest["suite_root"])
     claimed = [resolve(entry["path"]) for entry in manifest["sections"]]
     rows: list[Row] = []
     if not suite_root.exists():
         return rows
-    for test_file in sorted(suite_root.rglob("test_*.py")):
+    collected = collected_test_files(suite_root)
+    if collected is None:
+        return [
+            Row(
+                "Unclaimed tests",
+                "Every collected test file must belong to a spec section.",
+                str(manifest["suite_root"]),
+                False,
+                0,
+                0,
+                "RED - could not enumerate the tests pytest collects",
+            )
+        ]
+    for test_file in collected:
         if not any(test_file.is_relative_to(prefix) for prefix in claimed):
             relative = (
                 test_file.relative_to(REPO_ROOT)
@@ -209,7 +276,7 @@ def sweep_for_unclaimed_tests(manifest: dict) -> list[Row]:
             rows.append(
                 Row(
                     "Unclaimed tests",
-                    "Every test file must belong to a spec section.",
+                    "Every collected test file must belong to a spec section.",
                     str(relative),
                     False,
                     0,
