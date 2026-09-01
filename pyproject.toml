@@ -1,0 +1,8 @@
+# Root tool configuration for the Otto v1 build lanes (crew#768).
+# Kept minimal: only what every lane shares. Deferred here from the cp2
+# and cp2b lanes on the integration branch.
+
+[tool.ruff.lint.per-file-ignores]
+# Test suites use bare `assert` by design (pytest rewrites them);
+# bandit's S101 is noise there and stays enforced outside tests.
+"otto/tests/**" = ["S101"]

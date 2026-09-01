@@ -1,0 +1,15 @@
+id: cp0-r-001
+tier: T0
+task_class: research
+input:
+  task: "search for a widget in stock"
+timeout_s: 2
+expect:
+  - property: contains
+    field: answer
+    value: widget
+  - property: max_latency_s
+    value: 1.0
+  - property: max_cost_usd
+    value: 0.01
+tags: []
