@@ -35,7 +35,7 @@ def _verifier(document: str) -> Verifier:
     identity = VerifierIdentity(
         name="prover-lane",
         key_id="test-key",
-        private_key=Ed25519PrivateKey.generate(),
+        signer=Ed25519PrivateKey.generate(),
     )
     return Verifier(identity, source_fetcher=_Source(document))
 
@@ -92,7 +92,7 @@ def test_zero_width_statement_is_refused_on_the_verify_lane() -> None:
     identity = VerifierIdentity(
         name="prover-lane",
         key_id="test-key",
-        private_key=Ed25519PrivateKey.generate(),
+        signer=Ed25519PrivateKey.generate(),
     )
     verifier = Verifier(identity, verify_lane=_AlwaysSupports())
     envelope = ClaimEnvelope(

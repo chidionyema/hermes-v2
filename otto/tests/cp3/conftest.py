@@ -76,6 +76,4 @@ def verifier_identity(
 def rogue_identity(tmp_path: Path) -> VerifierIdentity:
     """A different, untrusted key claiming the same key id (the forger)."""
     key = Ed25519PrivateKey.generate()
-    return VerifierIdentity(
-        name="rogue-lane", key_id="vp-ed25519-test", private_key=key
-    )
+    return VerifierIdentity(name="rogue-lane", key_id="vp-ed25519-test", signer=key)

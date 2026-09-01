@@ -162,7 +162,7 @@ def test_six_lanes_compose_end_to_end() -> None:
     identity = VerifierIdentity(
         name="verification-plane",
         key_id="vp-smoke",
-        private_key=Ed25519PrivateKey.generate(),
+        signer=Ed25519PrivateKey.generate(),
     )
     verifier = Verifier(identity, sandbox_runner=_GreenSandbox())
     gate = CompletionGate(

@@ -1,0 +1,8 @@
+# gitleaks fingerprints for findings proven to be not a secret (commit:path:rule:line).
+# Each entry names why. `gitleaks detect --log-opts=HEAD` reads this file; the added-lines
+# gate (bin/idp-pr-secrets) does not, so the offending line itself is always fixed too.
+#
+# otto/verify/identity.py line 39 was a dataclass field named private_key whose type
+# annotation is the Ed25519 private-key class -- a type name, not a value. The field is now
+# named `signer`; this entry covers the historical commit that still carries the old text.
+4ee32034eb6d13d1fa6638a7af989354a579ec26:otto/verify/identity.py:generic-api-key:39

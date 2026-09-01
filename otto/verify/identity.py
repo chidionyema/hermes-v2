@@ -36,13 +36,13 @@ class VerifierIdentity:
 
     name: str
     key_id: str
-    private_key: Ed25519PrivateKey = field(repr=False)
+    signer: Ed25519PrivateKey = field(repr=False)
 
     def sign(self, payload: bytes) -> bytes:
-        return self.private_key.sign(payload)
+        return self.signer.sign(payload)
 
     def public_key_bytes(self) -> bytes:
-        return self.private_key.public_key().public_bytes(
+        return self.signer.public_key().public_bytes(
             encoding=serialization.Encoding.Raw,
             format=serialization.PublicFormat.Raw,
         )
@@ -78,5 +78,5 @@ def load_identity(
     return VerifierIdentity(
         name=name,
         key_id=key_id,
-        private_key=Ed25519PrivateKey.from_private_bytes(raw),
+        signer=Ed25519PrivateKey.from_private_bytes(raw),
     )
