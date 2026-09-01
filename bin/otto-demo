@@ -101,6 +101,11 @@ DEFAULT_MANIFEST: dict = {
             "claim": "This demo command itself is tested, including its refusal paths.",
             "path": "otto/tests/demo",
         },
+        {
+            "section": "W4 estate onboarding",
+            "claim": "One command onboards an estate service onto Otto, and onboarding is the admission ticket.",
+            "path": "otto/tests/onboard",
+        },
     ],
 }
 
