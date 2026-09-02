@@ -59,6 +59,19 @@ RUN uv sync --frozen --no-dev --extra messaging --extra hindsight --extra otlp -
     && test -x "$(readlink -f .venv/bin/python)" \
     && case "$(readlink -f .venv/bin/python)" in /root/*) echo "python under /root" >&2; exit 1;; esac
 
+# otto rides in this image too: platform/otto-staging (idp) runs `python -m otto.boot` with this
+# same venv, but nothing ever installed otto's declared dependencies -- otto/requirements.txt was
+# COPY'd with the estate below and never pip-installed, so main-58 shipped an otto that dies on
+# `import jsonschema` (otto/gateway/core.py:21, pod otto-staging-7db5dfc98b 2026-09-02) while the
+# boot contract graded only the hermes modules. The runtime section installs into the one
+# contracted interpreter; the test-only tail (pytest and friends) never ships. Guard:
+# deploy/k8s/boot-contract.txt names otto.boot.pipeline, so an image whose interpreter cannot
+# import the otto chain never reaches the registry again.
+COPY otto/requirements.txt /tmp/otto-requirements.txt
+RUN sed '/^# test-only$/,$d' /tmp/otto-requirements.txt > /tmp/otto-runtime.txt \
+    && uv pip install --python /app/hermes-agent/.venv/bin/python --no-cache -r /tmp/otto-runtime.txt \
+    && rm -f /tmp/otto-requirements.txt /tmp/otto-runtime.txt
+
 ENV PATH="/app/hermes-agent/.venv/bin:$PATH"
 ENV HERMES_HOME=/app
 ENV PYTHONUNBUFFERED=1
