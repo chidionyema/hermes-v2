@@ -1,8 +1,9 @@
 model:
-  # crew#568 Phase 5: the primary model is the router's claude lane on a router key, never a
-  # vendor key (LAW 34). The router owns the vendor credential and the spend ledger.
+  # crew#568 Phase 5: the primary model is a router lane on a router key, never a vendor key
+  # (LAW 34). The router owns the vendor credential and the spend ledger. Founder 2026-09-02:
+  # Kimi is Otto's primary -- the router's kimi lane (moonshot/kimi-k3, idp platform/llm/config.yaml).
   provider: custom
-  default: claude
+  default: kimi
   base_url: https://llm.mumchimp.com/v1
   key_env: LITELLM_API_KEY
 fallback_providers:
