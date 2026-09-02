@@ -19,7 +19,9 @@ cleanup() { docker rm -f "$NAME" >/dev/null 2>&1 || true; }
 trap cleanup EXIT
 
 echo "boot-contract: 1/2 every contracted module imports, as uid 10001"
-docker run --rm --user 10001:10001 --entrypoint python "$IMAGE" -c '
+# -w /app/estate mirrors the pod's workingDir (idp otto-staging deployment.yaml), so repo-root
+# packages like otto import here exactly as they do on the cluster.
+docker run --rm --user 10001:10001 -w /app/estate --entrypoint python "$IMAGE" -c '
 import importlib, os, pathlib, sys
 assert os.getuid() == 10001, f"container runs as uid {os.getuid()}, not 10001"
 mods = []
