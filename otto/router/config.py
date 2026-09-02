@@ -38,6 +38,12 @@ _DEFAULT_MODEL_FAMILIES = {
     "google/gemini": "google",
     "gemini": "google",
     "deepseek": "deepseek",
+    # Founder 2026-09-02: Kimi is Otto's primary. `kimi` is the estate router's alias for
+    # moonshot/kimi-k3; the family entry is what lets a deployment set
+    # OTTO_ROUTER_LANE_JUDGMENT_MODEL=kimi without tripping the fail-closed unknown-model
+    # refusal, and moonshot stays a distinct family from the bulk lane's minimax.
+    "kimi": "moonshot",
+    "moonshot/kimi-k3": "moonshot",
 }
 _DEFAULT_ON_BUDGET_EXHAUSTED = "queue_and_notify"
 _DEFAULT_MAX_RETRIES_5XX = 1
