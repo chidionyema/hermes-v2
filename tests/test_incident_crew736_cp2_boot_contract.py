@@ -81,3 +81,23 @@ def test_contract_is_secretless_and_runs_as_the_pods_uid():
         f"the contract passes env {env_flags}; a secret smuggled here hides a boot "
         "that dies on the cluster while ESO is still syncing"
     )
+
+
+def test_otto_rides_with_its_deps_and_the_contract_imports_it():
+    """2026-09-02: main-58 shipped an otto-staging that dies on ``import jsonschema``
+    (otto/gateway/core.py:21) -- otto/requirements.txt pinned the dep but nothing ever
+    installed it, and the contract graded only the hermes modules. These pins keep the
+    otto lane wired the same way the extras are."""
+    dockerfile = (ROOT / "Dockerfile").read_text()
+    assert "otto/requirements.txt" in dockerfile, (
+        "the image runs `python -m otto.boot` (idp platform/otto-staging) but the "
+        "Dockerfile installs none of otto's pinned dependencies"
+    )
+    assert "otto.boot.pipeline" in contract_modules(), (
+        "otto ships in the image but boot-contract.txt never imports its chain -- "
+        "the next missing module ships silently"
+    )
+    assert "-w /app/estate" in SCRIPT.read_text(), (
+        "the contract's import run must mirror the pod's workingDir /app/estate "
+        "(idp otto-staging deployment.yaml); otto resolves from nowhere else"
+    )
