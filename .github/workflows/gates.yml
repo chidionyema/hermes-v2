@@ -77,7 +77,7 @@ jobs:
       # The live-gateway half of CP2 SKIPs here: there is no gateway.pid on a
       # runner, and SKIP is a result. Everything else must pass.
       - name: crew incident tests
-        run: python -m pytest -q -rs tests/test_incident_crew182_phone_flow.py tests/test_incident_20260831_the_evolution_lane_never_installed_a_job.py
+        run: python -m pytest -q -rs tests/test_incident_crew182_phone_flow.py tests/test_incident_crew751_architect_stays_on_the_router.py tests/test_incident_20260831_the_evolution_lane_never_installed_a_job.py
 
   # crew#620 CP3: strict shell practice, estate-wide, immediate effect. Every
   # *.sh/*.bash file (or a file whose first line is an sh/bash shebang) must

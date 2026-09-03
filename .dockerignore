@@ -44,3 +44,5 @@ __pycache__/
 *.pyc
 .pytest_cache
 .ruff_cache
+cron/.jobs_*.tmp
+lsp/bin/
