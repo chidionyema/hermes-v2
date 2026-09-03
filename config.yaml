@@ -2,6 +2,8 @@ model:
   # crew#568 Phase 5: the primary model is a router lane on a router key, never a vendor key
   # (LAW 34). The router owns the vendor credential and the spend ledger. Founder 2026-09-02:
   # Kimi is Otto's primary -- the router's kimi lane (moonshot/kimi-k3, idp platform/llm/config.yaml).
+  # crew#751: the Architect stays on the router. Cursor is the WORK runtime (Mac `agent -p` through
+  # mac-run), never the Telegram brain: Cursor ACP hangs on unknown methods and does not stream.
   provider: custom
   default: kimi
   base_url: https://llm.mumchimp.com/v1
