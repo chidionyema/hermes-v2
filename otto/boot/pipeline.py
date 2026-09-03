@@ -48,7 +48,7 @@ from otto.gateway.registry import Tier as GatewayTier
 from otto.memory.models import Fact, Provenance
 from otto.obs.core import ObsHandle, TaskContext
 from otto.router.contract import RouterResponse, normalise_provider_output
-from otto.router.render import render_claims_for_telegram
+from otto.router.render import render_claims
 from otto.spine.envelope import TaskClass, TaskEnvelope, TaskSource, Tier, TrustTag
 from otto.surface.bindings.telegram import TelegramBinding
 from otto.surface.envelope import SurfaceEnvelope, TrustClass
@@ -58,6 +58,22 @@ from otto.surface.envelope import SurfaceEnvelope, TrustClass
 #: proof that "no tool authority" is a gateway decision, not a hope.
 NOTE_TOOL_NAME = "note"
 _NOTE_TIER = GatewayTier.T2
+
+#: The one customer this legacy single-channel boot lane serves.
+#:
+#: This lane predates the Universal Event Gateway (``otto/ingress``) and
+#: is the only Telegram-shaped door left in the codebase. It is kept
+#: because it is the door currently answering in the cluster, not because
+#: it is the pattern to repeat: the gateway resolves the tenant from the
+#: presented credential per request and serves every customer from one
+#: process, which is what this constant cannot do.
+#:
+#: Deliberately a constant here rather than an environment variable on
+#: the pod: the founder's 2026-09-03 directive forbids per-customer
+#: configuration reaching a deployment, and a value hard-wired in one
+#: named place is far easier to delete than a value spread across
+#: manifests. Deleting this constant is the last step of the migration.
+LEGACY_SINGLE_TENANT = "legacy-boot-lane"
 
 _NOTE_SCHEMA = {
     "type": "object",
@@ -164,8 +180,10 @@ def process_update(
     for a well-formed but untrusted or empty event — the caller (the
     HTTP layer) validates that ``native_event`` is at least dict-shaped
     before this function is ever called."""
-    surface_env = binding.normalize(native_event)
-    ctx = TaskContext(task_ulid=surface_env.correlation_id)
+    surface_env = binding.normalize(native_event, tenant_id=LEGACY_SINGLE_TENANT)
+    ctx = TaskContext(
+        task_ulid=surface_env.correlation_id, tenant_id=surface_env.tenant_id
+    )
     chat_id = _extract_chat_id(native_event)
 
     with obs.boot.task_span(ctx, "boot.receive"):
@@ -188,6 +206,7 @@ def process_update(
     with obs.spine.task_span(ctx, "spine.mint_envelope"):
         task_env = TaskEnvelope(
             task_id=surface_env.correlation_id,
+            tenant_id=surface_env.tenant_id,
             source=TaskSource.telegram,
             **{"class": TaskClass.comms},
             input=content,
@@ -250,9 +269,9 @@ def process_update(
         )
         # P1 holds by construction: normalise_provider_output always mints
         # UNVERIFIED (otto/router/contract.py), and this pipeline never
-        # calls the Verification Plane, so render_claims_for_telegram
+        # calls the Verification Plane, so render_claims
         # always applies the unverified marker below.
-        reply_lines = render_claims_for_telegram(router_resp)
+        reply_lines = render_claims(router_resp)
 
     with obs.memory.task_span(ctx, "memory.write_fact"):
         fact = Fact(

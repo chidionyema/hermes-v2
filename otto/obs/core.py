@@ -60,6 +60,13 @@ from otto.obs.ulid import is_ulid, new_ulid, ulid_to_trace_id
 
 COMPONENT_ATTR = "otto.component"
 ULID_ATTR = "otto.task_ulid"
+#: Which customer the work belongs to. This is a span and log attribute,
+#: deliberately NOT an OpenTelemetry Resource attribute: a Resource
+#: describes the process and is fixed for its whole life, while one
+#: multi-tenant process serves many customers in the same second. Putting
+#: the tenant on the Resource would label every span with whichever
+#: customer happened to boot the pod, which is worse than no label at all.
+TENANT_ATTR = "otto.tenant_id"
 
 _pending_trace_id: contextvars.ContextVar[int] = contextvars.ContextVar(
     "otto_obs_pending_trace_id", default=0
@@ -94,12 +101,25 @@ class TaskContext:
     """
 
     task_ulid: str
+    #: The customer this task belongs to. Empty means "not a tenant-scoped
+    #: task" (a platform-internal span such as a boot check); when it is
+    #: set, every span, metric point and log line this context touches
+    #: carries it, so a trace search can be filtered to one customer.
+    tenant_id: str = ""
     remote_trace_id: int = 0
     remote_span_id: int = 0
 
+    @property
+    def tenant_attrs(self) -> dict[str, str]:
+        """The tenant attribute, or nothing at all. An empty string is not
+        written as a value: a span labelled ``otto.tenant_id=""`` reads as
+        a tenant whose id is blank, which is a different and worse claim
+        than a span carrying no tenant label."""
+        return {TENANT_ATTR: self.tenant_id} if self.tenant_id else {}
+
     @classmethod
-    def new(cls) -> TaskContext:
-        return cls(task_ulid=new_ulid())
+    def new(cls, tenant_id: str = "") -> TaskContext:
+        return cls(task_ulid=new_ulid(), tenant_id=tenant_id)
 
     @classmethod
     def from_envelope(cls, envelope: dict[str, object]) -> TaskContext:
@@ -135,7 +155,12 @@ class Metrics:
         self._latency = meter.create_histogram(names.task_latency, unit="ms")
 
     def _attrs(self, ctx: TaskContext, **extra: str) -> dict[str, str]:
-        return {ULID_ATTR: ctx.task_ulid, COMPONENT_ATTR: self._component, **extra}
+        return {
+            ULID_ATTR: ctx.task_ulid,
+            COMPONENT_ATTR: self._component,
+            **ctx.tenant_attrs,
+            **extra,
+        }
 
     def cost(self, ctx: TaskContext, lane: str, usd: float) -> None:
         self._cost.add(usd, self._attrs(ctx, lane=lane))
@@ -217,7 +242,11 @@ class ObsHandle:
             with self._tracer.start_as_current_span(
                 name,
                 context=parent,
-                attributes={ULID_ATTR: ctx.task_ulid, COMPONENT_ATTR: self.component},
+                attributes={
+                    ULID_ATTR: ctx.task_ulid,
+                    COMPONENT_ATTR: self.component,
+                    **ctx.tenant_attrs,
+                },
             ) as span:
                 yield span
         finally:
@@ -244,6 +273,7 @@ class ObsHandle:
             "component": self.component,
             "event": event,
             ULID_ATTR: ctx.task_ulid,
+            **ctx.tenant_attrs,
         }
         if span_ctx.is_valid:
             line["trace_id"] = f"{span_ctx.trace_id:032x}"

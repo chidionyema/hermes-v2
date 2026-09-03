@@ -52,7 +52,7 @@ def _run_cli(
 ) -> subprocess.CompletedProcess:
     env = dict(os.environ)
     env.update(env_overrides)
-    return subprocess.run(
+    return subprocess.run(  # noqa: S603 - a literal CLI list, no shell, no caller input
         [*_CLI, *args],
         cwd=_REPO_ROOT,
         env=env,
@@ -64,6 +64,7 @@ def _run_cli(
 
 def _new_envelope(*, provenance: str) -> TaskEnvelope:
     return TaskEnvelope.new(
+        tenant_id="tenant-under-test",
         source=TaskSource.telegram,
         task_class=TaskClass.ops_read,
         input="run the CP1 spine BDD scenario",

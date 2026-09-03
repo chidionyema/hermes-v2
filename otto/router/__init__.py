@@ -39,7 +39,7 @@ from otto.router.providers import (
     ProviderHTTPError,
     ProviderTimeout,
 )
-from otto.router.render import render_claims_for_telegram
+from otto.router.render import render_claims
 from otto.router.ulid import new_ulid
 
 __all__ = [
@@ -66,7 +66,7 @@ __all__ = [
     "VerificationStatus",
     "new_ulid",
     "normalise_provider_output",
-    "render_claims_for_telegram",
+    "render_claims",
     "run_eval_cli",
 ]
 

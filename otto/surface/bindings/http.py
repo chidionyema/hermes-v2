@@ -34,7 +34,9 @@ class HttpBinding:
 
     principal_allowlist: dict[str, str]
 
-    def normalize(self, native_event: dict[str, Any]) -> SurfaceEnvelope:
+    def normalize(
+        self, native_event: dict[str, Any], *, tenant_id: str
+    ) -> SurfaceEnvelope:
         caller_id = native_event.get("caller_id")
         text = native_event.get("content", "")
 
@@ -48,6 +50,7 @@ class HttpBinding:
             trust_class = TrustClass.UNTRUSTED
 
         return SurfaceEnvelope(
+            tenant_id=tenant_id,
             surface="http",
             principal=principal,
             trust_class=trust_class,

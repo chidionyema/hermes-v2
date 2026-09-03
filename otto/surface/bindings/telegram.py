@@ -39,7 +39,9 @@ class TelegramBinding:
 
     chat_id_allowlist: dict[int, str]
 
-    def normalize(self, native_event: dict[str, Any]) -> SurfaceEnvelope:
+    def normalize(
+        self, native_event: dict[str, Any], *, tenant_id: str
+    ) -> SurfaceEnvelope:
         message = native_event.get("message", native_event)
         chat = message.get("chat", {})
         chat_id = chat.get("id")
@@ -53,6 +55,7 @@ class TelegramBinding:
             trust_class = TrustClass.UNTRUSTED
 
         return SurfaceEnvelope(
+            tenant_id=tenant_id,
             surface="telegram",
             principal=principal,
             trust_class=trust_class,

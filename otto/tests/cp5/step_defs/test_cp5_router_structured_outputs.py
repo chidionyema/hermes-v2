@@ -18,7 +18,7 @@ from otto.router import (
     RouterTask,
 )
 from otto.router.evals import run_eval_cli
-from otto.router.render import UNVERIFIED_PREFIX, render_claims_for_telegram
+from otto.router.render import UNVERIFIED_PREFIX, render_claims
 from otto.tests.cp5.conftest import ScriptedClient, always_5xx, contract_json
 
 scenarios("../features/cp5_router_structured_outputs.feature")
@@ -105,7 +105,7 @@ def response_with_bare_claim(ctx: dict) -> None:
 
 @when("it is rendered to Telegram")
 def render_to_telegram(ctx: dict) -> None:
-    ctx["rendered"] = render_claims_for_telegram(ctx["response"])
+    ctx["rendered"] = render_claims(ctx["response"])
 
 
 @then(
