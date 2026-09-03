@@ -1,0 +1,7 @@
+{
+  "mode": "local_embedded",
+  "llm_provider": "ollama",
+  "llm_model": "qwen2.5-coder:7b",
+  "bank_id": "hermes",
+  "recall_budget": "mid"
+}

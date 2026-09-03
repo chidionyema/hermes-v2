@@ -1,0 +1,105 @@
+#!/usr/bin/env bash
+# Move the Telegram gateway from prospector-hermes to prospector-hermes-v2,
+# prove it answers, and undo it automatically if it does not.
+#
+#     ./deploy/fly/finish-cutover.sh
+#
+# This script handles no secrets. It cannot read one, it never asks for one, and
+# it has no flag that takes one. Identity is seeded by the platform's own secret
+# store and read by entrypoint.sh at boot. See docs/claude-auth.md.
+#
+# ORDER MATTERS, and the obvious order is wrong. "Never stop the old service
+# until the new one is proven healthy" cannot be done through Telegram: one bot
+# token allows one getUpdates poller, so while the old gateway holds the lock
+# the new one can only report Conflict (crew #18). Overlapping them to prove
+# health is the thing that produces the conflict.
+#
+# So the proof that moves before the stop is a real agent turn, which needs no
+# Telegram at all. If the new container can answer a prompt, its credential, its
+# code and its runtime are all good, and the only thing left untested is the
+# poller — which is also the only thing that can be rolled back in seconds.
+#
+#   1. new container answers a real prompt      old gateway still serving
+#   2. stop the old gateway                     the gap starts here
+#   3. flip the new one on, wait for connected
+#   4. connected -> done. not connected -> restart the old one.
+#
+# The gap in step 2-3 is a machine restart, about two minutes. It exists because
+# of the single bot token. A second token for v2 removes it entirely and that is
+# the real fix (crew #18).
+set -euo pipefail
+
+NEW=prospector-hermes-v2
+OLD=prospector-hermes
+
+LOG=${CUTOVER_LOG:-/tmp/finish-cutover.log}
+if [ -z "${CUTOVER_TEEING:-}" ]; then
+    export CUTOVER_TEEING=1
+    printf 'logging this run to %s\n' "$LOG"
+    set +e
+    "$0" "$@" 2>&1 | tee "$LOG"
+    RC=${PIPESTATUS[0]}
+    set -e
+    printf '\nfull log: %s  (exit %s)\n' "$LOG" "$RC"
+    exit "$RC"
+fi
+
+say()  { printf '\n\033[1m== %s\033[0m\n' "$*"; }
+fail() { printf '\033[31mFAILED: %s\033[0m\n' "$*" >&2; exit 1; }
+
+say "1/4  can the new container do a real turn?"
+# The old gateway is untouched at this point. A failure here costs nothing.
+ANSWER=$(fly ssh console -a "$NEW" -C \
+    "/bin/sh -c 'cd /opt/hermes-v2 && timeout 180 ./.venv/bin/hermes -z \"Reply with exactly one word: pong\" 2>&1 | tail -3'" \
+    2>&1 | tr -d '\r' | grep -io 'pong' | head -1 || true)
+if [ "$ANSWER" != "pong" ]; then
+    fail "the new container cannot complete a turn. Nothing has been changed; the old gateway is still serving.
+       Check its credential:  fly logs -a $NEW | grep entrypoint"
+fi
+echo "it answered: pong"
+
+say "2/4  stop the old gateway"
+# supervisorctl exits 3 for a STOPPED program; that is the answer, not an error.
+fly ssh console -a "$OLD" -C "supervisorctl stop gateway" 2>&1 | grep -v '^Connecting' | tail -1 || true
+fly ssh console -a "$OLD" -C "supervisorctl status gateway" 2>&1 | grep -v '^Connecting' | grep -i gateway || true
+
+say "3/4  start the new gateway"
+# A stale state file from a restored backup would otherwise be read as this
+# boot's answer. Delete it and let this boot write its own.
+fly ssh console -a "$NEW" -C "/bin/sh -c 'rm -f /data/gateway_state.json'" >/dev/null 2>&1 || true
+# Setting a secret restarts the machine, and entrypoint.sh reads the flag on boot.
+fly secrets set HERMES_GATEWAY_AUTOSTART=1 -a "$NEW" >/dev/null
+CONNECTED=0
+for i in $(seq 1 24); do
+    sleep 15
+    RAW=$(fly ssh console -a "$NEW" \
+        -C "/bin/sh -c 'cat /data/gateway_state.json 2>/dev/null || true'" 2>/dev/null | tr -d '\r')
+    # A live reading is one a process in THIS container wrote, and argv says so.
+    # Do not test for a laptop path anywhere in the file: hermes_home legitimately
+    # holds one, and matching it refused a healthy state file mid-cutover, in the
+    # one gap where nothing serves.
+    case "$RAW" in
+        '')                            ;;
+        *'"argv":["/opt/hermes-v2/'*)  ;;
+        *) fail "the state file was not written by this container" ;;
+    esac
+    STATE=$(printf %s "$RAW" | grep -o '"state"[[:space:]]*:[[:space:]]*"[a-z]*"' | head -2 | tr '\n' ' ')
+    printf '  %3ds  %s\n' "$((i*15))" "${STATE:-no state file yet}"
+    case "$STATE" in *'"connected"'*) CONNECTED=1; break ;; esac
+done
+
+say "4/4  verdict"
+if [ "$CONNECTED" = 1 ]; then
+    echo "the new gateway is connected to Telegram."
+    echo "send it a message. if it answers, the next step is:"
+    echo "    fly apps suspend $OLD          # keeps the volume; nothing is destroyed"
+    exit 0
+fi
+
+printf '\033[31mthe new gateway did not connect. rolling back.\033[0m\n'
+fly secrets set HERMES_GATEWAY_AUTOSTART=0 -a "$NEW" >/dev/null
+fly ssh console -a "$OLD" -C "supervisorctl start gateway" 2>&1 | grep -v '^Connecting' | tail -1 || true
+fly ssh console -a "$OLD" -C "supervisorctl status gateway" 2>&1 | grep -v '^Connecting' | grep -i gateway || true
+echo "the old gateway is back. logs from the new one:"
+fly ssh console -a "$NEW" -C "/bin/sh -c 'tail -40 /data/logs/gateway.log 2>/dev/null || true'" 2>&1 | tail -40
+exit 1

@@ -194,11 +194,11 @@ def test_the_image_installs_an_extra_for_every_provider_the_estate_config_select
 
 
 def test_a_sync_that_drops_the_provider_sdk_is_refused():
-    """Rung 4 the other way: the exact line that was on main fails against the same config."""
+    """Rung 4 the other way: a required extra missing from uv sync is red."""
     text = open(DOCKERFILE).read()
-    assert missing_extras(open(CONFIG).read(), text.replace(" --extra anthropic", "")) == ["anthropic"]
     assert missing_extras(open(CONFIG).read(), text.replace(" --extra messaging", "")) == ["messaging"]
     assert missing_extras(open(CONFIG).read(), text.replace(" --extra otlp", "")) == ["otlp"]
+    assert missing_extras(open(CONFIG).read(), text.replace(" --extra hindsight", "")) == ["hindsight"]
 
 
 def test_a_provider_the_table_does_not_know_fails_instead_of_passing():
