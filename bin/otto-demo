@@ -111,6 +111,16 @@ DEFAULT_MANIFEST: dict = {
             "claim": "A real Telegram webhook crosses surface, spine, gateway and memory, and replies through a checked transport; an unrecognised sender gets no tool authority.",
             "path": "otto/tests/boot",
         },
+        {
+            "section": "Universal event gateway",
+            "claim": "One door takes every channel's webhook, resolves the sender to a tenant from a database row, and refuses what it does not recognise.",
+            "path": "otto/tests/ingress",
+        },
+        {
+            "section": "Tenancy",
+            "claim": "Every task names the customer it belongs to, and the compute lanes never learn which channel it arrived on.",
+            "path": "otto/tests/tenancy",
+        },
     ],
 }
 
