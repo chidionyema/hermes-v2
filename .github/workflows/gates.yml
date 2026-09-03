@@ -147,6 +147,18 @@ jobs:
           sudo apt-get update -q
           sudo apt-get install -y -q postgresql-16-pgvector
 
+      # CP4's conftest reads OTTO_CP4_TEST_PG_BINDIR for its own initdb/pg_ctl
+      # calls, but CP1's conftest (otto/tests/cp1/conftest.py) calls
+      # initdb/pg_ctl/createdb as bare commands with no such override -- they
+      # resolve only via PATH. Without this, CP1's postgres_handle fixture
+      # fails in well under a second (FileNotFoundError), which read as a
+      # false "6 failed, 7 passed" (the 7 that never touch postgres still
+      # passed) and looked like a runner-timing flake until the job's own
+      # timestamps showed the whole CP1 section finishing in 1.5s -- too
+      # fast to be the real nats+postgres scenarios actually running.
+      - name: put the pre-installed PostgreSQL 16 binaries on PATH
+        run: echo "/usr/lib/postgresql/16/bin" >> "$GITHUB_PATH"
+
       - name: otto v1 demo, bin/otto-demo runs every spec section fresh
         env:
           OTTO_NATS_SERVER_BIN: /usr/local/bin/nats-server
