@@ -676,6 +676,7 @@ are tracked, so what you see below is the source they come from.
 | `otto/tests/demo/` | Tests for the demo command itself. |
 | `otto/tests/demo/__init__.py` | Package marker for `otto/tests/demo`. |
 | `otto/tests/demo/conftest.py` | Shared fixtures for the W3 demo-command BDD suite (crew#768). |
+| `otto/tests/demo/test_manifest_claims_every_file.py` | Runs the real `DEFAULT_MANIFEST` against the real repository — the guard for the class of defect PR #67 left behind (a new test directory with no manifest section claiming it). |
 | `otto/tests/demo/features/` | Gherkin features for the demo command. |
 | `otto/tests/demo/features/w3_demo_command.feature` | Gherkin: W3 demo command — the spec-conformance matrix cannot lie. |
 | `otto/tests/demo/step_defs/` | pytest-bdd step definitions for the demo command. |
