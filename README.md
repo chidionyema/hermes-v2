@@ -504,7 +504,9 @@ are tracked, so what you see below is the source they come from.
 | `otto/gateway/registry.py` | Tool registry: at most ``config.max_tools`` tools, each with a strict JSON Schema for its input (spec section 6). |
 | `otto/ingress/` | The Universal Event Gateway: one door for every channel and every customer; the founder's 2026-09-03 directive that onboarding a channel is a database write, never a deployment. |
 | `otto/ingress/__init__.py` | Package docstring: what the gateway is, the multi-tenant directive it implements, and its boundaries. |
+| `otto/ingress/__main__.py` | `python -m otto.ingress`: the process the deployment runs, booting the collector, the binding database and the bus before the socket opens. |
 | `otto/ingress/gateway.py` | The request pipeline every channel and every customer shares: nine steps, none of which names a channel. |
+| `otto/ingress/pg_store.py` | The binding table on PostgreSQL, the store the running gateway holds; the connection details come from the deployment and the password from a mounted file. |
 | `otto/ingress/plugins.py` | Per-channel plugins — the only place a channel's name means anything; the Telegram verifier lives here, behind the channel-blind door. |
 | `otto/ingress/publisher.py` | Hands the normalised task envelope to the spine; the gateway's job ends when the envelope is on the bus. |
 | `otto/ingress/secrets.py` | Resolves a secret reference to a secret value at request time; the binding table stores references, never material. |
@@ -684,6 +686,7 @@ are tracked, so what you see below is the source they come from.
 | `otto/tests/ingress/` | Universal Event Gateway tests: one door for every channel and every customer, no network. |
 | `otto/tests/ingress/__init__.py` | Package marker and scope note for `otto/tests/ingress`. |
 | `otto/tests/ingress/conftest.py` | Shared fixtures: `OTTO_OBS_MODE=test`, in-memory binding store and recorded publisher. |
+| `otto/tests/ingress/test_entrypoint.py` | The boot contract the deployment depends on: the port, the database, and the refusal to listen before the collector and the table are proved. |
 | `otto/tests/ingress/test_gateway.py` | The one door: routing, refusals, and channel independence. |
 | `otto/tests/ingress/test_registry_as_data.py` | Onboarding a customer is a database write, not a deployment — the point of the gateway, proved. |
 | `otto/tests/ingress/test_routes.py` | Path routing: `channel_from_path` is the whole of the routing surface, and no route names a channel. |
