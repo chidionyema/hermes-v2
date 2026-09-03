@@ -1,6 +1,8 @@
 model:
   # crew#568 Phase 5: the primary model is the router's claude lane on a router key, never a
   # vendor key (LAW 34). The router owns the vendor credential and the spend ledger.
+  # crew#751: Architect stays here until WORK (Mac `agent -p`) has opened a real PR.
+  # Cursor ACP is not the Telegram brain (hangs on unknown methods; no stream).
   provider: custom
   default: claude
   base_url: https://llm.mumchimp.com/v1
