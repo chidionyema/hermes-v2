@@ -101,3 +101,54 @@ jobs:
 
       - name: shell-strict (shellcheck, shfmt, strict mode, trap)
         run: python3 bin/shell-strict .
+
+  # The Otto v1 conformance suite (otto/tests/, crew#768): 255 tests, none
+  # of which ran on any pull request before this row existed. `bin/otto-demo`
+  # is the one command the founder already runs by hand (R31); this job runs
+  # the exact same command a stranger's pull request cannot silently break.
+  #
+  # Two sections need a real service, not a fake, by their own design intent
+  # (otto/tests/cp1/conftest.py, otto/tests/cp4/conftest.py): CP1 spine needs
+  # a real `nats-server -js` and a real Postgres; CP4 memory needs a real
+  # Postgres with the pgvector extension installed. Both are provisioned
+  # below and handed to the suite through the env vars its own conftests
+  # already read (`OTTO_NATS_SERVER_BIN`, `OTTO_CP4_TEST_PG_BINDIR`) -- no
+  # otto/ source changes needed to wire this in. `otto/tests/cp5/test_live_minimax.py`
+  # skips itself cleanly when the estate model router is unreachable, which
+  # it always is from a runner.
+  otto-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: install the otto test suite's pinned dependencies
+        run: python -m pip install -q -r otto/requirements.txt
+
+      - name: install nats-server v2.11.4 (pinned, matches what CP1 verified locally)
+        run: |
+          curl --retry 5 --retry-connrefused -fsSL \
+            -o /tmp/nats-server.tar.gz \
+            https://github.com/nats-io/nats-server/releases/download/v2.11.4/nats-server-v2.11.4-linux-amd64.tar.gz
+          tar -xzf /tmp/nats-server.tar.gz -C /tmp
+          sudo install -m 0755 /tmp/nats-server-v2.11.4-linux-amd64/nats-server /usr/local/bin/nats-server
+          nats-server --version
+
+      # ubuntu-latest ships PostgreSQL 16 already (service disabled by
+      # default, binaries not on PATH); this only adds the pgvector
+      # extension files to that same installation. CP1/CP4 start their own
+      # disposable cluster with initdb/pg_ctl, so the system service is
+      # never started.
+      - name: install the pgvector extension for the pre-installed PostgreSQL 16
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q postgresql-16-pgvector
+
+      - name: otto v1 demo, bin/otto-demo runs every spec section fresh
+        env:
+          OTTO_NATS_SERVER_BIN: /usr/local/bin/nats-server
+          OTTO_CP4_TEST_PG_BINDIR: /usr/lib/postgresql/16/bin
+        run: python3 bin/otto-demo
