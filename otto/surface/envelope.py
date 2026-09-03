@@ -16,6 +16,15 @@ before any producer of them other than Telegram exists:
   from the text, because that second question has no safe answer — the
   safe answer is "ambient never instructs," full stop.
 
+A third field carries the business model, added by the founder's
+2026-09-03 directive: ``tenant_id``. Otto is an enterprise, multi-tenant,
+multi-channel product, so the customer a message belongs to is part of
+the envelope from the first line of code — never inferred later from
+which pod received it, and never carried in a deployment's environment
+variables. It is required with no default: an envelope that cannot say
+whose message this is has no safe reading, so it is refused at
+construction rather than defaulted to some house tenant.
+
 ``Capability`` lives here (not in ``adapter.py``, which the spec's own
 list associates it with) because ``SurfaceEnvelope.capabilities`` is
 typed against it and ``adapter.py`` needs ``SurfaceEnvelope`` for its
@@ -69,6 +78,7 @@ class SurfaceEnvelope:
     ULID — passes it in rather than getting a second, disconnected one).
     """
 
+    tenant_id: str
     surface: str
     principal: str | None
     trust_class: TrustClass
@@ -78,6 +88,12 @@ class SurfaceEnvelope:
     correlation_id: str = field(default_factory=_new_correlation_id)
 
     def __post_init__(self) -> None:
+        if not isinstance(self.tenant_id, str) or not self.tenant_id.strip():
+            raise ValueError(
+                "SurfaceEnvelope.tenant_id must be a non-empty string; an "
+                "envelope that cannot say which customer it belongs to is "
+                f"refused (got {self.tenant_id!r})"
+            )
         if not self.surface:
             raise ValueError("SurfaceEnvelope.surface must be non-empty")
         if self.received_at.tzinfo is None:

@@ -48,8 +48,16 @@ class SurfaceAdapter(Protocol):
     never on ``TelegramBinding`` or ``HttpBinding`` directly.
     """
 
-    def normalize(self, native_event: Any) -> SurfaceEnvelope:
-        """Turn one native inbound event into the neutral envelope."""
+    def normalize(self, native_event: Any, *, tenant_id: str) -> SurfaceEnvelope:
+        """Turn one native inbound event into the neutral envelope.
+
+        ``tenant_id`` is supplied by the caller — in production the
+        Universal Event Gateway (``otto/ingress``), which resolved it
+        from the presented credential before this adapter ever ran. A
+        binding never decides which customer a message belongs to and
+        never holds per-customer state: that is what lets one process
+        serve every tenant on every channel.
+        """
         ...
 
     def render(

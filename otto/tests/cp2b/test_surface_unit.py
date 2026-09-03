@@ -24,6 +24,7 @@ from otto.surface.renderer import ResponsePart, render_parts
 
 def _envelope(**overrides) -> SurfaceEnvelope:
     fields = {
+        "tenant_id": "tenant-under-test",
         "surface": "test",
         "principal": None,
         "trust_class": TrustClass.UNTRUSTED,
@@ -130,10 +131,12 @@ def test_unknown_principal_source_is_also_refused() -> None:
 
 def test_telegram_and_http_bindings_agree_on_untrusted_default() -> None:
     telegram_env = TelegramBinding(chat_id_allowlist={}).normalize(
-        {"message": {"chat": {"id": 999}, "text": "hi", "date": 1_700_000_000}}
+        {"message": {"chat": {"id": 999}, "text": "hi", "date": 1_700_000_000}},
+        tenant_id="tenant-under-test",
     )
     http_env = HttpBinding(principal_allowlist={}).normalize(
-        {"caller_id": "unknown", "content": "hi"}
+        {"caller_id": "unknown", "content": "hi"},
+        tenant_id="tenant-under-test",
     )
     assert telegram_env.principal is None
     assert http_env.principal is None
@@ -144,13 +147,16 @@ def test_telegram_and_http_bindings_agree_on_untrusted_default() -> None:
 
 def test_telegram_binding_defaults_received_at_when_no_date() -> None:
     env = TelegramBinding(chat_id_allowlist={}).normalize(
-        {"message": {"chat": {"id": 1}, "text": "x"}}
+        {"message": {"chat": {"id": 1}, "text": "x"}},
+        tenant_id="tenant-under-test",
     )
     assert env.received_at.tzinfo is not None
 
 
 def test_http_binding_defaults_received_at_when_absent() -> None:
-    env = HttpBinding(principal_allowlist={}).normalize({"content": "x"})
+    env = HttpBinding(principal_allowlist={}).normalize(
+        {"content": "x"}, tenant_id="tenant-under-test"
+    )
     assert env.received_at.tzinfo is not None
 
 

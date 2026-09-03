@@ -47,7 +47,7 @@ from otto.obs.coverage import check_coverage
 from otto.obs.export import obs_test_store
 from otto.obs.ulid import ulid_to_trace_id
 from otto.router.contract import VerificationStatus, normalise_provider_output
-from otto.router.render import UNVERIFIED_PREFIX, render_claims_for_telegram
+from otto.router.render import UNVERIFIED_PREFIX, render_claims
 from otto.spine.envelope import TaskClass, TaskEnvelope, TaskSource, Tier
 from otto.surface.envelope import Capability, SurfaceEnvelope, TrustClass
 from otto.verify.bus import RecordingBus
@@ -58,6 +58,10 @@ from otto.verify.model import Claim as WorkClaim
 from otto.verify.model import ClaimEnvelope
 from otto.verify.store import InMemoryVerdictStore
 from otto.verify.verifier import CODE_PASSES_TESTS, RerunResult, Verifier
+
+#: The one customer these scenarios speak for. Named once so a reader
+#: can see at a glance that every envelope below is tenant-scoped.
+TENANT_UNDER_TEST = "tenant-under-test"
 
 
 def _reset_shared_store() -> None:
@@ -96,6 +100,7 @@ def test_six_lanes_compose_end_to_end() -> None:
 
     # -- otto.surface: an inbound event mints the correlation ULID ---------
     surface_env = SurfaceEnvelope(
+        tenant_id=TENANT_UNDER_TEST,
         surface="telegram",
         principal="founder",
         trust_class=TrustClass.OPERATOR,
@@ -108,6 +113,7 @@ def test_six_lanes_compose_end_to_end() -> None:
     # -- otto.spine: the surface correlation_id IS the task ULID (W2) ------
     task_env = TaskEnvelope(
         task_id=surface_env.correlation_id,
+        tenant_id=surface_env.tenant_id,
         source=TaskSource.telegram,
         **{"class": TaskClass.code},
         input=surface_env.content,
@@ -208,15 +214,13 @@ def test_six_lanes_compose_end_to_end() -> None:
     )
     # P1 holds: the router alone never verifies.
     assert router_resp.verification is VerificationStatus.UNVERIFIED
-    assert render_claims_for_telegram(router_resp) == [
-        f"{UNVERIFIED_PREFIX}echo tool executed"
-    ]
+    assert render_claims(router_resp) == [f"{UNVERIFIED_PREFIX}echo tool executed"]
     # Only the completion gate's signed decision upgrades the rendering.
     assert decision.completed
     verified_resp = dataclasses.replace(
         router_resp, verification=VerificationStatus.VERIFIED
     )
-    assert render_claims_for_telegram(verified_resp) == ["echo tool executed"]
+    assert render_claims(verified_resp) == ["echo tool executed"]
 
     # -- otto.memory: a fact with the task's provenance round-trips --------
     fact = Fact(
@@ -270,6 +274,7 @@ def test_w2_every_package_boots_instrumented(monkeypatch) -> None:
     # W2: the surface envelope's correlation ULID is the task identity the
     # whole trace runs under — surface -> spine -> every component's spans.
     surface_env = SurfaceEnvelope(
+        tenant_id=TENANT_UNDER_TEST,
         surface="telegram",
         principal="founder",
         trust_class=TrustClass.OPERATOR,
@@ -277,7 +282,9 @@ def test_w2_every_package_boots_instrumented(monkeypatch) -> None:
         content="obs smoke",
         received_at=datetime.now(timezone.utc),
     )
-    ctx = TaskContext(task_ulid=surface_env.correlation_id)
+    ctx = TaskContext(
+        task_ulid=surface_env.correlation_id, tenant_id=surface_env.tenant_id
+    )
     handles = {name: pkg.boot() for name, pkg in packages.items()}
     try:
         for name, handle in handles.items():
@@ -318,6 +325,7 @@ def test_regression_fresh_export_lands_after_smoke_teardown(monkeypatch) -> None
     import otto.spine
 
     surface_env = SurfaceEnvelope(
+        tenant_id=TENANT_UNDER_TEST,
         surface="telegram",
         principal="founder",
         trust_class=TrustClass.OPERATOR,
@@ -325,7 +333,9 @@ def test_regression_fresh_export_lands_after_smoke_teardown(monkeypatch) -> None
         content="post-teardown export probe",
         received_at=datetime.now(timezone.utc),
     )
-    ctx = TaskContext(task_ulid=surface_env.correlation_id)
+    ctx = TaskContext(
+        task_ulid=surface_env.correlation_id, tenant_id=surface_env.tenant_id
+    )
     probe = otto.spine.boot()  # default config: the shared store's exporter
     try:
         with probe.task_span(ctx, "regression.fresh-export"):

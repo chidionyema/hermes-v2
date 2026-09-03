@@ -502,6 +502,14 @@ are tracked, so what you see below is the source they come from.
 | `otto/gateway/denial.py` | Structured denial — a refusal is data, never silence. |
 | `otto/gateway/errors.py` | Exceptions raised at registration time (not call time). |
 | `otto/gateway/registry.py` | Tool registry: at most ``config.max_tools`` tools, each with a strict JSON Schema for its input (spec section 6). |
+| `otto/ingress/` | The Universal Event Gateway: one door for every channel and every customer; the founder's 2026-09-03 directive that onboarding a channel is a database write, never a deployment. |
+| `otto/ingress/__init__.py` | Package docstring: what the gateway is, the multi-tenant directive it implements, and its boundaries. |
+| `otto/ingress/gateway.py` | The request pipeline every channel and every customer shares: nine steps, none of which names a channel. |
+| `otto/ingress/plugins.py` | Per-channel plugins — the only place a channel's name means anything; the Telegram verifier lives here, behind the channel-blind door. |
+| `otto/ingress/publisher.py` | Hands the normalised task envelope to the spine; the gateway's job ends when the envelope is on the bus. |
+| `otto/ingress/secrets.py` | Resolves a secret reference to a secret value at request time; the binding table stores references, never material. |
+| `otto/ingress/server.py` | The socket: `GET /healthz` and `POST /webhook/{channel}`, for every channel and every customer. |
+| `otto/ingress/store.py` | The `channel_binding` table: which customer owns which channel — the whole of channel onboarding. |
 | `otto/memory/` | CP4: facts with provenance that survive a restart; the Postgres store and its migrations. |
 | `otto/memory/__init__.py` | CP4 memory / context-engine core (crew#768). |
 | `otto/memory/audit.py` | Pluggable audit emission for the hygiene job. |
@@ -673,6 +681,13 @@ are tracked, so what you see below is the source they come from.
 | `otto/tests/demo/step_defs/` | pytest-bdd step definitions for the demo command. |
 | `otto/tests/demo/step_defs/__init__.py` | Package marker for `otto/tests/demo/step_defs`. |
 | `otto/tests/demo/step_defs/test_w3_demo_command.py` | Step definitions for ``features/w3_demo_command.feature``. |
+| `otto/tests/ingress/` | Universal Event Gateway tests: one door for every channel and every customer, no network. |
+| `otto/tests/ingress/__init__.py` | Package marker and scope note for `otto/tests/ingress`. |
+| `otto/tests/ingress/conftest.py` | Shared fixtures: `OTTO_OBS_MODE=test`, in-memory binding store and recorded publisher. |
+| `otto/tests/ingress/test_gateway.py` | The one door: routing, refusals, and channel independence. |
+| `otto/tests/ingress/test_registry_as_data.py` | Onboarding a customer is a database write, not a deployment — the point of the gateway, proved. |
+| `otto/tests/ingress/test_routes.py` | Path routing: `channel_from_path` is the whole of the routing surface, and no route names a channel. |
+| `otto/tests/ingress/test_store_and_secrets.py` | The binding table and the secret resolver alone: the table holds no secret material, and resolution happens at request time. |
 | `otto/tests/integration/` | Cross-lane tests: one task through all six lanes in one process, and the dependency pins. |
 | `otto/tests/integration/__init__.py` | Cross-lane assembly smoke tests for the Otto v1 integration branch. |
 | `otto/tests/integration/test_requirements_pinned.py` | Regression: every otto dependency is declared, and declared pinned. |
@@ -685,6 +700,10 @@ are tracked, so what you see below is the source they come from.
 | `otto/tests/onboard/step_defs/` | pytest-bdd step definitions for onboarding. |
 | `otto/tests/onboard/step_defs/__init__.py` | Package marker for `otto/tests/onboard/step_defs`. |
 | `otto/tests/onboard/step_defs/test_onboarding.py` | Step definitions for ``features/onboarding.feature`` (W4, crew#768). |
+| `otto/tests/tenancy/` | Tenancy tests: a message knows which customer it belongs to and cannot be built without saying so. |
+| `otto/tests/tenancy/__init__.py` | Package marker and scope note for `otto/tests/tenancy`. |
+| `otto/tests/tenancy/test_compute_is_channel_blind.py` | AST guard: the compute lanes may not import anything channel-specific; `otto/boot/` is the named legacy exemption. |
+| `otto/tests/tenancy/test_tenant_is_required.py` | An envelope that cannot say whose message it is gets refused — no default tenant, ever. |
 | `otto/verify/` | CP3: work is claimed, re-run fresh by an independent verifier and gated on a signed verdict. |
 | `otto/verify/__init__.py` | Otto CP3 — Verification Plane core (crew#768, spec section 7). |
 | `otto/verify/bus.py` | Verdict bus: the one thing the prover and the orchestrator share. |

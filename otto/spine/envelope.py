@@ -99,6 +99,11 @@ class TaskEnvelope(BaseModel):
     )
 
     task_id: str
+    # Which customer this task belongs to. Required, minimum length 1, no
+    # default: Otto is a multi-tenant product, and a task that cannot name
+    # its tenant must not be routable, billable or auditable. Every stream
+    # record, every span and every log line carries it from here.
+    tenant_id: str = Field(min_length=1)
     source: TaskSource
     parent_task_id: str | None = None
     task_class: TaskClass = Field(alias="class")
@@ -151,6 +156,7 @@ class TaskEnvelope(BaseModel):
     def new(
         cls,
         *,
+        tenant_id: str,
         source: TaskSource,
         task_class: TaskClass,
         input: str,
@@ -167,6 +173,7 @@ class TaskEnvelope(BaseModel):
         is ever generated — every other constructor call takes one in."""
         return cls(
             task_id=str(ULID()),
+            tenant_id=tenant_id,
             source=source,
             parent_task_id=parent_task_id,
             **{"class": task_class},

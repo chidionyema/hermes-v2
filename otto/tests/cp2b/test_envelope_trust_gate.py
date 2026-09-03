@@ -19,6 +19,7 @@ from otto.surface.envelope import Capability, SurfaceEnvelope, TrustClass
 
 def _envelope(trust_class: TrustClass) -> SurfaceEnvelope:
     return SurfaceEnvelope(
+        tenant_id="tenant-under-test",
         surface="test",
         principal=None,
         trust_class=trust_class,

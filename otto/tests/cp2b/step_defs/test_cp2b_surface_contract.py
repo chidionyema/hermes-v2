@@ -19,6 +19,10 @@ from otto.surface.envelope import Capability, SurfaceEnvelope, TrustClass
 from otto.surface.identity import validate_principal_source
 from otto.surface.renderer import render_parts
 
+#: The one customer these scenarios speak for. Named once so a reader
+#: can see at a glance that every envelope below is tenant-scoped.
+TENANT_UNDER_TEST = "tenant-under-test"
+
 scenarios("../features/cp2b_surface_contract.feature")
 
 
@@ -73,7 +77,9 @@ def telegram_normalize(ctx: dict, text: str, chat_id: int) -> None:
             "date": 1_700_000_000,
         }
     }
-    ctx["telegram_envelope"] = ctx["telegram_binding"].normalize(native_event)
+    ctx["telegram_envelope"] = ctx["telegram_binding"].normalize(
+        native_event, tenant_id=TENANT_UNDER_TEST
+    )
 
 
 @when(
@@ -87,7 +93,9 @@ def http_normalize(ctx: dict, content: str, caller_id: str) -> None:
         "content": content,
         "received_at": "2026-08-31T12:00:00+00:00",
     }
-    ctx["http_envelope"] = ctx["http_binding"].normalize(native_event)
+    ctx["http_envelope"] = ctx["http_binding"].normalize(
+        native_event, tenant_id=TENANT_UNDER_TEST
+    )
 
 
 @then(
@@ -164,6 +172,7 @@ def rendered_is_not_degraded(ctx: dict) -> None:
 )
 def make_envelope(ctx: dict, trust_class: str, content: str) -> None:
     ctx["envelope"] = SurfaceEnvelope(
+        tenant_id=TENANT_UNDER_TEST,
         surface="test",
         principal=None,
         trust_class=TrustClass(trust_class),
