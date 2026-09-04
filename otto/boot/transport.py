@@ -7,8 +7,9 @@ Same pattern as ``otto.router.providers.LiteLLMClient``: the estate
 already talks to an external HTTP API from this repository with stdlib
 ``urllib.request`` alone, so this module follows it rather than adding a
 Telegram client library — the two calls this boot lane needs
-(``sendMessage``, ``setWebhook``) are a POST of a JSON body and reading a
-JSON response, which is exactly what ``urllib.request`` already does.
+(``sendMessage``, ``setWebhook``, ``sendChatAction``) are a POST of a JSON
+body and reading a JSON response, which is exactly what ``urllib.request``
+already does.
 
 ``TelegramTransport`` is a ``Protocol`` so the test suite injects a
 recording fake and never opens a socket; ``TelegramHTTPTransport`` is the
@@ -35,6 +36,8 @@ class TelegramTransport(Protocol):
     def send_message(self, chat_id: int, text: str) -> None: ...
 
     def set_webhook(self, url: str) -> None: ...
+
+    def send_chat_action(self, chat_id: int, action: str = "typing") -> None: ...
 
 
 @dataclass(frozen=True)
@@ -79,3 +82,19 @@ class TelegramHTTPTransport:
 
     def set_webhook(self, url: str) -> None:
         self._post("setWebhook", {"url": url})
+
+    def send_chat_action(self, chat_id: int, action: str = "typing") -> None:
+        """Telegram's own "the other side is composing" indicator.
+
+        A reasoning lane takes tens of seconds to answer -- `moonshot/kimi-k3`
+        answered a three-word question in 30.5s when the estate router was
+        probed on 2026-09-04 -- and Telegram shows nothing at all while a
+        webhook is being processed, so silence is indistinguishable from the
+        bot being down. Telegram clears the indicator after roughly five
+        seconds, which is why ``otto.boot.presence`` re-sends it on a timer
+        rather than calling this once.
+
+        A failure here is swallowed by the caller, never raised: the
+        indicator is a courtesy and must not be able to cost the sender
+        their answer."""
+        self._post("sendChatAction", {"chat_id": chat_id, "action": action})

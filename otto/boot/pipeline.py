@@ -119,6 +119,12 @@ def _router() -> Router:
 #: the only thing that decides whether output is well formed.
 _CONTRACT_PROMPT = """You are Otto, the operator's assistant for this estate.
 
+You may think for as long as you need to, but your thinking is not the
+reply. Your entire output must be one raw JSON object: no markdown fence,
+no preamble, no commentary before it or after it. A reasoning lane that
+narrates its way to the answer breaks the parser exactly as badly as an
+answer cut off half way through (founder, 2026-09-04).
+
 Answer the message below. Reply with a single JSON object and nothing else:
 
 {{"answer": "<your answer in plain English>",
@@ -135,6 +141,39 @@ Message:
 
 def _prompt_for(message: str) -> str:
     return _CONTRACT_PROMPT.format(message=message)
+
+
+#: Typing one of these first sends the message to the reasoning lane
+#: instead of the lane the route table would have picked.
+#:
+#: The route table (otto/router/config.py) decides by task attributes, and
+#: nothing inbound from Telegram distinguishes "answer this quickly" from
+#: "think hard about this" -- every message arrives as class `research`.
+#: Until something upstream can tell those apart, the operator says which
+#: he wants, which is deterministic and costs no extra model call. The
+#: prefix is stripped before the message reaches the model, so the model
+#: never sees the routing instruction as part of the question.
+DEEP_PREFIXES = ("/think", "/kimi")
+
+#: The task class the route table maps to the deep lane.
+DEEP_TASK_CLASS = "deep"
+
+
+def route_hint(content: str) -> tuple[str, str]:
+    """Split an inbound message into (task_class, message).
+
+    Returns the deep task class and the message with the prefix removed
+    when the operator asked for the reasoning lane; otherwise the default
+    research class and the message untouched. A prefix must be a whole
+    word: `/thinking about lunch` is a question, not a routing request.
+    """
+    stripped = content.strip()
+    for prefix in DEEP_PREFIXES:
+        if stripped == prefix:
+            return DEEP_TASK_CLASS, ""
+        if stripped.startswith(prefix) and stripped[len(prefix)] in " \n\t":
+            return DEEP_TASK_CLASS, stripped[len(prefix) :].strip()
+    return "research", stripped
 
 
 def _state_sentence(outcome) -> str:
@@ -215,7 +254,7 @@ class PipelineOutcome:
     reply_text: str | None
 
 
-def _extract_chat_id(native_event: dict) -> int | None:
+def extract_chat_id(native_event: dict) -> int | None:
     """The same lookup ``TelegramBinding.normalize`` performs, written
     defensively (``isinstance`` guards throughout) so a malformed but
     dict-shaped update can never raise here — this is the one place the
@@ -247,7 +286,7 @@ def process_update(
     ctx = TaskContext(
         task_ulid=surface_env.correlation_id, tenant_id=surface_env.tenant_id
     )
-    chat_id = _extract_chat_id(native_event)
+    chat_id = extract_chat_id(native_event)
 
     with obs.boot.task_span(ctx, "boot.receive"):
         obs.boot.info(
@@ -305,12 +344,13 @@ def process_update(
         )
 
     noted_text = gw_response.output["noted"] if gw_response.output else content
+    task_class, asked = route_hint(noted_text)
     with obs.router.task_span(ctx, "router.execute"):
         outcome = _router().execute(
             RouterTask(
-                input=_prompt_for(noted_text),
+                input=_prompt_for(asked or noted_text),
                 source="telegram",
-                task_class="research",
+                task_class=task_class,
                 task_id=task_env.task_id,
             ),
             provider_client or LiteLLMClient(),
@@ -323,7 +363,10 @@ def process_update(
             attempts=outcome.attempts,
         )
         router_resp = outcome.response
-        if outcome.state is not OutcomeState.COMPLETED_UNVERIFIED or router_resp is None:
+        if (
+            outcome.state is not OutcomeState.COMPLETED_UNVERIFIED
+            or router_resp is None
+        ):
             # The router refused, queued or paused the task. Every one of
             # those states is named, and the sender is told which one in
             # plain words rather than receiving a manufactured answer.
@@ -357,7 +400,9 @@ def process_update(
             # render_claims renders claims, not the answer. A model that
             # answers well but lists no claims would otherwise send silence,
             # which reads exactly like the bot being down.
-            reply_lines = [render_claim(router_resp.answer, has_evidence=False, verified=False)]
+            reply_lines = [
+                render_claim(router_resp.answer, has_evidence=False, verified=False)
+            ]
 
     with obs.memory.task_span(ctx, "memory.write_fact"):
         fact = Fact(

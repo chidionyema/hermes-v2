@@ -85,10 +85,57 @@ def extract_json_object(text: str) -> dict:
     try:
         parsed = json.loads(stripped)
     except json.JSONDecodeError as exc:
-        raise _refuse(f"not valid JSON ({exc.msg})") from exc
+        # A reasoning lane sometimes narrates its way to the answer and
+        # leaves the object embedded in prose ("Let me work through this...
+        # {...}"). That is framing too, so it is stripped the same way --
+        # only ever as a fallback, and only when exactly one balanced
+        # object can be found, so nothing is guessed at.
+        embedded = _first_balanced_object(stripped)
+        if embedded is None:
+            raise _refuse(f"not valid JSON ({exc.msg})") from exc
+        try:
+            parsed = json.loads(embedded)
+        except json.JSONDecodeError:
+            raise _refuse(f"not valid JSON ({exc.msg})") from exc
     if not isinstance(parsed, dict):
         raise _refuse("top level is not an object")
     return parsed
+
+
+def _first_balanced_object(text: str) -> str | None:
+    """The first brace-balanced ``{...}`` span in ``text``, or ``None``.
+
+    Braces inside JSON strings are not structure, so the scan tracks
+    whether it is inside a string and honours the backslash escape --
+    without that, a model answering about a `{` in a code snippet would
+    have its object cut short and the contract would refuse a reply that
+    was actually well formed.
+    """
+    start = text.find("{")
+    if start == -1:
+        return None
+    depth = 0
+    in_string = False
+    escaped = False
+    for i in range(start, len(text)):
+        ch = text[i]
+        if in_string:
+            if escaped:
+                escaped = False
+            elif ch == "\\":
+                escaped = True
+            elif ch == '"':
+                in_string = False
+            continue
+        if ch == '"':
+            in_string = True
+        elif ch == "{":
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+            if depth == 0:
+                return text[start : i + 1]
+    return None
 
 
 def _parse_claims(raw: object) -> tuple[Claim, ...]:
