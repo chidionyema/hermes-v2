@@ -55,8 +55,8 @@ from otto.router.budget import BudgetLedger
 from otto.router.config import RouterConfig
 from otto.router.contract import RouterResponse, normalise_provider_output
 from otto.router.core import InMemoryNotifier, OutcomeState, Router, RouterTask
-from otto.router.providers import LiteLLMClient
-from otto.router.render import render_claims
+from otto.router.providers import LiteLLMClient, ProviderClient
+from otto.router.render import render_claim, render_claims
 from otto.spine.envelope import TaskClass, TaskEnvelope, TaskSource, Tier, TrustTag
 from otto.surface.bindings.telegram import TelegramBinding
 from otto.surface.envelope import SurfaceEnvelope, TrustClass
@@ -122,7 +122,7 @@ _CONTRACT_PROMPT = """You are Otto, the operator's assistant for this estate.
 Answer the message below. Reply with a single JSON object and nothing else:
 
 {{"answer": "<your answer in plain English>",
-  "claims": [{{"text": "<one factual claim>", "evidence_refs": [], "confidence": "high|medium|low"}}],
+  "claims": [{{"text": "<one factual claim>", "evidence_refs": [], "confidence": "high|med|low"}}],
   "proposed_actions": [],
   "unknowns": ["<anything you could not establish>"]}}
 
@@ -237,6 +237,7 @@ def process_update(
     binding: TelegramBinding,
     registry_gateway: ToolGateway,
     obs: ObsHandles,
+    provider_client: ProviderClient | None = None,
 ) -> PipelineOutcome:
     """Run one inbound Telegram update across every lane. Never raises
     for a well-formed but untrusted or empty event — the caller (the
@@ -312,7 +313,7 @@ def process_update(
                 task_class="research",
                 task_id=task_env.task_id,
             ),
-            LiteLLMClient(),
+            provider_client or LiteLLMClient(),
         )
         obs.router.info(
             "router.outcome",
@@ -330,7 +331,13 @@ def process_update(
                 json.dumps(
                     {
                         "answer": _state_sentence(outcome),
-                        "claims": [],
+                        "claims": [
+                            {
+                                "text": _state_sentence(outcome),
+                                "evidence_refs": [],
+                                "confidence": "low",
+                            }
+                        ],
                         "proposed_actions": [],
                         "unknowns": [outcome.reason or outcome.state.value],
                     }
@@ -346,6 +353,11 @@ def process_update(
         # calls the Verification Plane, so render_claims
         # always applies the unverified marker below.
         reply_lines = render_claims(router_resp)
+        if not reply_lines and router_resp.answer:
+            # render_claims renders claims, not the answer. A model that
+            # answers well but lists no claims would otherwise send silence,
+            # which reads exactly like the bot being down.
+            reply_lines = [render_claim(router_resp.answer, has_evidence=False, verified=False)]
 
     with obs.memory.task_span(ctx, "memory.write_fact"):
         fact = Fact(

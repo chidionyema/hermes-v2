@@ -13,7 +13,7 @@ from __future__ import annotations
 from otto.boot.pipeline import boot_obs_handles, build_registry, deliver, process_update
 from otto.gateway.core import ToolGateway
 from otto.surface.bindings.telegram import TelegramBinding
-from otto.tests.boot.fakes import FakeTransport
+from otto.tests.boot.fakes import FakeProviderClient, FakeTransport
 
 _ALLOWLIST = {111: "founder"}
 
@@ -38,13 +38,21 @@ def test_allowlisted_chat_round_trip_produces_a_send_message() -> None:
             }
         }
         outcome = process_update(
-            native_event, binding=binding, registry_gateway=gateway, obs=obs
+            native_event,
+            binding=binding,
+            registry_gateway=gateway,
+            obs=obs,
+            provider_client=FakeProviderClient(answer="Otto here, and this is an answer."),
         )
         assert outcome.gateway_response is not None
         assert not outcome.gateway_response.denied
         assert outcome.reply_chat_id == 111
         assert outcome.reply_text is not None
-        assert "noted: hello otto" in outcome.reply_text
+        # The reply is the model's answer, not the sender's own words echoed
+        # back. The lane used to reply "noted: <your text>" to everything,
+        # which is what the founder reported three times as "not responding".
+        assert "Otto here, and this is an answer." in outcome.reply_text
+        assert "hello otto" not in outcome.reply_text
         # P1: the router alone never verifies -- every reply this lane ever
         # renders carries the unverified marker.
         assert outcome.reply_text.startswith("⚠")
