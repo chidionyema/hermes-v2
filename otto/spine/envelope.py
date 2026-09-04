@@ -120,6 +120,11 @@ class TaskEnvelope(BaseModel):
     # and the taint set the two-source rule reads.
     provenance: str = Field(min_length=1)
     taint: frozenset[TrustTag] = Field(default_factory=frozenset)
+    # The channel-native address an answer goes back to, carried opaquely.
+    # A lane that reads this never parses it: it hands it to the channel
+    # plugin that minted it. Optional because a task with no reply address
+    # (a cron tick, a subtask) is a normal task, not a malformed one.
+    reply_to: str | None = None
 
     @field_serializer("taint")
     def _serialize_taint(self, taint: frozenset[TrustTag]) -> list[str]:
@@ -168,6 +173,7 @@ class TaskEnvelope(BaseModel):
         deadline_s: int = 600,
         taint: frozenset[TrustTag] = frozenset(),
         created_at: datetime | None = None,
+        reply_to: str | None = None,
     ) -> "TaskEnvelope":
         """Mint a fresh envelope with a fresh ULID. The one place a task_id
         is ever generated — every other constructor call takes one in."""
@@ -185,6 +191,7 @@ class TaskEnvelope(BaseModel):
             created_at=created_at or datetime.now(timezone.utc),
             provenance=provenance,
             taint=frozenset(taint),
+            reply_to=reply_to,
         )
 
     def canonical_json(self) -> bytes:

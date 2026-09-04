@@ -514,6 +514,7 @@ are tracked, so what you see below is the source they come from.
 | `otto/ingress/secrets.py` | Resolves a secret reference to a secret value at request time; the binding table stores references, never material. |
 | `otto/ingress/server.py` | The socket: `GET /healthz` and `POST /webhook/{channel}`, for every channel and every customer. |
 | `otto/ingress/store.py` | The `channel_binding` table: which customer owns which channel — the whole of channel onboarding. |
+| `otto/ingress/worker.py` | The answering half of the one door: a durable pull consumer on `OTTO_TASKS` that runs the shared answering path and replies on the customer's own channel, with its own token. |
 | `otto/memory/` | CP4: facts with provenance that survive a restart; the Postgres store and its migrations. |
 | `otto/memory/__init__.py` | CP4 memory / context-engine core (crew#768). |
 | `otto/memory/audit.py` | Pluggable audit emission for the hygiene job. |
@@ -696,6 +697,7 @@ are tracked, so what you see below is the source they come from.
 | `otto/tests/ingress/test_registry_as_data.py` | Onboarding a customer is a database write, not a deployment — the point of the gateway, proved. |
 | `otto/tests/ingress/test_routes.py` | Path routing: `channel_from_path` is the whole of the routing surface, and no route names a channel. |
 | `otto/tests/ingress/test_store_and_secrets.py` | The binding table and the secret resolver alone: the table holds no secret material, and resolution happens at request time. |
+| `otto/tests/ingress/test_worker_answers.py` | The round trip: an update pushed through the real door, answered off the bus on the customer's own credential, and the delivery discipline for every way that can fail. |
 | `otto/tests/integration/` | Cross-lane tests: one task through all six lanes in one process, and the dependency pins. |
 | `otto/tests/integration/__init__.py` | Cross-lane assembly smoke tests for the Otto v1 integration branch. |
 | `otto/tests/integration/test_requirements_pinned.py` | Regression: every otto dependency is declared, and declared pinned. |

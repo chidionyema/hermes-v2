@@ -47,21 +47,34 @@ DEFAULT_PORT = "5432"
 
 INSERT_SQL = (
     "INSERT INTO channel_binding "
-    "(tenant_id, channel, external_id, secret_ref, token_fingerprint, status) "
-    "VALUES (%s, %s, %s, %s, %s, %s) "
+    "(tenant_id, channel, external_id, secret_ref, token_fingerprint, "
+    "status, outbound_secret_ref) "
+    "VALUES (%s, %s, %s, %s, %s, %s, %s) "
     "ON CONFLICT (channel, external_id) DO UPDATE SET "
     "tenant_id = excluded.tenant_id, "
     "secret_ref = excluded.secret_ref, "
     "token_fingerprint = excluded.token_fingerprint, "
-    "status = excluded.status"
+    "status = excluded.status, "
+    "outbound_secret_ref = excluded.outbound_secret_ref"
 )
 
 #: The lookup the gateway runs on every inbound event. ``channel`` is in
 #: the WHERE clause and not only the fingerprint: without it, a
 #: credential stolen from one channel would open a binding on another.
 LOOKUP_SQL = (
-    "SELECT tenant_id, channel, external_id, secret_ref, status "
+    "SELECT tenant_id, channel, external_id, secret_ref, status, "
+    "outbound_secret_ref "
     "FROM channel_binding WHERE channel = %s AND token_fingerprint = %s"
+)
+
+#: The read the answering side runs: it holds a task envelope naming a
+#: tenant and needs that tenant's outbound credential reference. Indexed
+#: by (channel, tenant_id), like the inbound lookup is by fingerprint --
+#: neither path may become a scan as customers are added.
+TENANT_LOOKUP_SQL = (
+    "SELECT tenant_id, channel, external_id, secret_ref, status, "
+    "outbound_secret_ref "
+    "FROM channel_binding WHERE channel = %s AND tenant_id = %s"
 )
 
 STATUS_SQL = (
@@ -157,6 +170,7 @@ class PostgresChannelBindingStore:
                     binding.secret_ref,
                     fingerprint(credential),
                     binding.status,
+                    binding.outbound_secret_ref,
                 ),
             )
 
@@ -167,6 +181,15 @@ class PostgresChannelBindingStore:
             row = conn.execute(
                 LOOKUP_SQL, (channel, fingerprint(credential))
             ).fetchone()
+        return self._row_to_binding(row)
+
+    def find_by_tenant(self, channel: str, tenant_id: str) -> ChannelBinding | None:
+        with self._connect() as conn:
+            row = conn.execute(TENANT_LOOKUP_SQL, (channel, tenant_id)).fetchone()
+        return self._row_to_binding(row)
+
+    @staticmethod
+    def _row_to_binding(row) -> ChannelBinding | None:
         if row is None:
             return None
         return ChannelBinding(
@@ -175,6 +198,7 @@ class PostgresChannelBindingStore:
             external_id=row[2],
             secret_ref=row[3],
             status=row[4],
+            outbound_secret_ref=row[5],
         )
 
     def set_status(self, channel: str, external_id: str, status: str) -> None:

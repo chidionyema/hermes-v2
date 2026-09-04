@@ -11,7 +11,11 @@ nats-py==2.15.0
 opentelemetry-api==1.37.0
 opentelemetry-exporter-otlp-proto-http==1.37.0
 opentelemetry-sdk==1.37.0
-psycopg==3.3.4
+# The [binary] extra, not the bare name: python:3.12-slim carries no libpq, so a bare
+# psycopg imports and dies with "no pq wrapper available" -- which is exactly how
+# otto-gateway crash-looped 18 times in 72 minutes on image main-69-55ec2477 (2026-09-04).
+# The wheel ships its own libpq, so nothing has to be apt-installed into the image.
+psycopg[binary]==3.3.4
 pydantic==2.13.4
 python-ulid==4.0.1
 PyYAML==6.0.3

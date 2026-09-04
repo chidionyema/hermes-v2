@@ -221,4 +221,9 @@ class EventGateway:
                 f"principal:{surface_env.principal or 'unknown'}"
             ),
             taint=taint,
+            # Carried, not interpreted. The gateway's own docstring says a
+            # lane must not branch on the channel name; an opaque address
+            # minted by the channel's binding and handed back to the same
+            # binding to send keeps that true while still closing the loop.
+            reply_to=surface_env.reply_to,
         )

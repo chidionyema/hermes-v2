@@ -270,56 +270,40 @@ def extract_chat_id(native_event: dict) -> int | None:
     return chat_id if isinstance(chat_id, int) else None
 
 
-def process_update(
-    native_event: dict,
+@dataclass(frozen=True)
+class AnswerOutcome:
+    """What the lanes below the surface made of one task envelope."""
+
+    gateway_response: GatewayResponse
+    router_response: RouterResponse | None
+    fact: Fact | None
+    reply_text: str | None
+
+
+def answer_envelope(
+    task_env: TaskEnvelope,
     *,
-    binding: TelegramBinding,
     registry_gateway: ToolGateway,
     obs: ObsHandles,
     provider_client: ProviderClient | None = None,
-) -> PipelineOutcome:
-    """Run one inbound Telegram update across every lane. Never raises
-    for a well-formed but untrusted or empty event — the caller (the
-    HTTP layer) validates that ``native_event`` is at least dict-shaped
-    before this function is ever called."""
-    surface_env = binding.normalize(native_event, tenant_id=LEGACY_SINGLE_TENANT)
-    ctx = TaskContext(
-        task_ulid=surface_env.correlation_id, tenant_id=surface_env.tenant_id
-    )
-    chat_id = extract_chat_id(native_event)
+) -> AnswerOutcome:
+    """Answer one task envelope: gateway authority, then the model
+    router, then the memory fact.
 
-    with obs.boot.task_span(ctx, "boot.receive"):
-        obs.boot.info(
-            "webhook.received",
-            ctx,
-            trust_class=surface_env.trust_class.value,
-            has_chat_id=chat_id is not None,
-        )
+    It takes a ``TaskEnvelope`` rather than a channel's native payload on
+    purpose. The same function answers an update this process received on
+    its own webhook and a task some other process published onto the bus
+    and this one pulled off (``otto.ingress.worker``), so what a customer
+    gets back cannot depend on which door their message came through.
+    That is the whole of "one messaging layer": not one socket, one
+    answering path.
 
-    content = (surface_env.content or "").strip()
-    if not surface_env.is_instruction_bearing or not content:
-        return PipelineOutcome(surface_env, None, None, None, None, None, None)
-
-    taint = (
-        frozenset({TrustTag.untrusted})
-        if surface_env.trust_class is TrustClass.UNTRUSTED
-        else frozenset()
-    )
-    with obs.spine.task_span(ctx, "spine.mint_envelope"):
-        task_env = TaskEnvelope(
-            task_id=surface_env.correlation_id,
-            tenant_id=surface_env.tenant_id,
-            source=TaskSource.telegram,
-            **{"class": TaskClass.comms},
-            input=content,
-            authority_ceiling=Tier.T2,
-            context_budget_tokens=24_000,
-            cost_budget_usd=0.50,
-            deadline_s=600,
-            created_at=surface_env.received_at,
-            provenance=f"surface:telegram principal:{surface_env.principal or 'unknown'}",
-            taint=taint,
-        )
+    Never raises for an untrusted or unauthorised task -- a denial comes
+    back as an ``AnswerOutcome`` with no reply text, and the caller sends
+    nothing.
+    """
+    ctx = TaskContext(task_ulid=task_env.task_id, tenant_id=task_env.tenant_id)
+    content = task_env.input
 
     with obs.gateway.task_span(ctx, "gateway.call"):
         gw_env = GatewayEnvelope(
@@ -329,7 +313,7 @@ def process_update(
         )
         gw_response = registry_gateway.call(gw_env, NOTE_TOOL_NAME, {"text": content})
         if task_env.is_taint_capped:
-            obs.gateway.metrics.taint_hit(ctx, source="telegram")
+            obs.gateway.metrics.taint_hit(ctx, source=task_env.source.value)
 
     if gw_response.denied:
         obs.gateway.info(
@@ -339,9 +323,7 @@ def process_update(
         )
         # No tool authority was granted: no reply is sent, and no router
         # or memory step runs for a call that never executed.
-        return PipelineOutcome(
-            surface_env, task_env, gw_response, None, None, None, None
-        )
+        return AnswerOutcome(gw_response, None, None, None)
 
     noted_text = gw_response.output["noted"] if gw_response.output else content
     task_class, asked = route_hint(noted_text)
@@ -349,7 +331,7 @@ def process_update(
         outcome = _router().execute(
             RouterTask(
                 input=_prompt_for(asked or noted_text),
-                source="telegram",
+                source=task_env.source.value,
                 task_class=task_class,
                 task_id=task_env.task_id,
             ),
@@ -413,7 +395,7 @@ def process_update(
                 taint=task_env.is_taint_capped,
             ),
             entity="otto/boot",
-            attribute="telegram-note",
+            attribute=f"{task_env.source.value}-note",
             value=gw_response.envelope_id,
         )
         restored = Fact.from_row(fact.to_row())
@@ -423,14 +405,79 @@ def process_update(
             fact_id=restored.id,
         )
 
+    reply_text = "\n".join(reply_lines) if reply_lines else None
+    return AnswerOutcome(gw_response, router_resp, restored, reply_text)
+
+
+def process_update(
+    native_event: dict,
+    *,
+    binding: TelegramBinding,
+    registry_gateway: ToolGateway,
+    obs: ObsHandles,
+    provider_client: ProviderClient | None = None,
+) -> PipelineOutcome:
+    """Run one inbound Telegram update across every lane. Never raises
+    for a well-formed but untrusted or empty event — the caller (the
+    HTTP layer) validates that ``native_event`` is at least dict-shaped
+    before this function is ever called."""
+    surface_env = binding.normalize(native_event, tenant_id=LEGACY_SINGLE_TENANT)
+    ctx = TaskContext(
+        task_ulid=surface_env.correlation_id, tenant_id=surface_env.tenant_id
+    )
+    chat_id = extract_chat_id(native_event)
+
+    with obs.boot.task_span(ctx, "boot.receive"):
+        obs.boot.info(
+            "webhook.received",
+            ctx,
+            trust_class=surface_env.trust_class.value,
+            has_chat_id=chat_id is not None,
+        )
+
+    content = (surface_env.content or "").strip()
+    if not surface_env.is_instruction_bearing or not content:
+        return PipelineOutcome(surface_env, None, None, None, None, None, None)
+
+    taint = (
+        frozenset({TrustTag.untrusted})
+        if surface_env.trust_class is TrustClass.UNTRUSTED
+        else frozenset()
+    )
+    with obs.spine.task_span(ctx, "spine.mint_envelope"):
+        task_env = TaskEnvelope(
+            task_id=surface_env.correlation_id,
+            tenant_id=surface_env.tenant_id,
+            source=TaskSource.telegram,
+            **{"class": TaskClass.comms},
+            input=content,
+            authority_ceiling=Tier.T2,
+            context_budget_tokens=24_000,
+            cost_budget_usd=0.50,
+            deadline_s=600,
+            created_at=surface_env.received_at,
+            provenance=f"surface:telegram principal:{surface_env.principal or 'unknown'}",
+            taint=taint,
+            reply_to=surface_env.reply_to,
+        )
+
+    answer = answer_envelope(
+        task_env,
+        registry_gateway=registry_gateway,
+        obs=obs,
+        provider_client=provider_client,
+    )
     return PipelineOutcome(
         surface_envelope=surface_env,
         task_envelope=task_env,
-        gateway_response=gw_response,
-        router_response=router_resp,
-        fact=restored,
-        reply_chat_id=chat_id,
-        reply_text="\n".join(reply_lines) if reply_lines else None,
+        gateway_response=answer.gateway_response,
+        router_response=answer.router_response,
+        fact=answer.fact,
+        # A denied or empty answer sends nothing, exactly as before: the
+        # chat id is only carried out of here when there is something to
+        # put in it.
+        reply_chat_id=chat_id if answer.reply_text else None,
+        reply_text=answer.reply_text,
     )
 
 

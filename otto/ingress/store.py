@@ -45,10 +45,18 @@ CREATE TABLE IF NOT EXISTS channel_binding (
     token_fingerprint TEXT        NOT NULL,
     status            TEXT        NOT NULL DEFAULT 'active',
     created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+    outbound_secret_ref TEXT,
     PRIMARY KEY (channel, external_id)
 );
 CREATE UNIQUE INDEX IF NOT EXISTS channel_binding_lookup
     ON channel_binding (channel, token_fingerprint);
+CREATE INDEX IF NOT EXISTS channel_binding_tenant
+    ON channel_binding (channel, tenant_id);
+-- Added after the table shipped, so a running gateway's table gains the
+-- column without a migration tool: the outbound reference is what the
+-- answering side resolves to talk back to the customer, and a door that
+-- can only listen is half a channel.
+ALTER TABLE channel_binding ADD COLUMN IF NOT EXISTS outbound_secret_ref TEXT;
 """
 
 _SQLITE_DDL = """
@@ -59,10 +67,13 @@ CREATE TABLE IF NOT EXISTS channel_binding (
     secret_ref        TEXT NOT NULL,
     token_fingerprint TEXT NOT NULL,
     status            TEXT NOT NULL DEFAULT 'active',
+    outbound_secret_ref TEXT,
     PRIMARY KEY (channel, external_id)
 );
 CREATE UNIQUE INDEX IF NOT EXISTS channel_binding_lookup
     ON channel_binding (channel, token_fingerprint);
+CREATE INDEX IF NOT EXISTS channel_binding_tenant
+    ON channel_binding (channel, tenant_id);
 """
 
 ACTIVE = "active"
@@ -91,6 +102,15 @@ class ChannelBinding:
     external_id: str
     secret_ref: str
     status: str = ACTIVE
+    #: The reference to the credential this platform presents when it
+    #: talks *out* on this channel -- a Telegram bot token, a Slack bot
+    #: token. Separate from ``secret_ref``, which is the credential the
+    #: channel presents when it talks *in*: on Telegram those are two
+    #: different values (the webhook's shared secret and the bot token),
+    #: and conflating them would mean either accepting the bot token as
+    #: an inbound password or being unable to answer. ``None`` is a
+    #: listen-only connection, which is a legitimate state, not an error.
+    outbound_secret_ref: str | None = None
 
     def __post_init__(self) -> None:
         for name in ("tenant_id", "channel", "external_id", "secret_ref"):
@@ -115,6 +135,13 @@ class ChannelBindingStore(Protocol):
     ) -> ChannelBinding | None:
         """The customer that presented this credential on this channel,
         or ``None``. One indexed read."""
+        ...
+
+    def find_by_tenant(self, channel: str, tenant_id: str) -> ChannelBinding | None:
+        """The customer's connection on this channel, looked up by who
+        they are rather than by what they presented. This is the read the
+        answering side does: it holds a task envelope naming a tenant, and
+        needs that tenant's outbound credential reference."""
         ...
 
     def set_status(self, channel: str, external_id: str, status: str) -> None:
@@ -144,13 +171,15 @@ class SqliteChannelBindingStore:
             )
         self._conn.execute(
             "INSERT INTO channel_binding "
-            "(tenant_id, channel, external_id, secret_ref, token_fingerprint, status) "
-            "VALUES (?, ?, ?, ?, ?, ?) "
+            "(tenant_id, channel, external_id, secret_ref, token_fingerprint, "
+            "status, outbound_secret_ref) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?) "
             "ON CONFLICT (channel, external_id) DO UPDATE SET "
             "tenant_id = excluded.tenant_id, "
             "secret_ref = excluded.secret_ref, "
             "token_fingerprint = excluded.token_fingerprint, "
-            "status = excluded.status",
+            "status = excluded.status, "
+            "outbound_secret_ref = excluded.outbound_secret_ref",
             (
                 binding.tenant_id,
                 binding.channel,
@@ -158,6 +187,7 @@ class SqliteChannelBindingStore:
                 binding.secret_ref,
                 fingerprint(credential),
                 binding.status,
+                binding.outbound_secret_ref,
             ),
         )
         self._conn.commit()
@@ -166,10 +196,24 @@ class SqliteChannelBindingStore:
         self, channel: str, credential: str
     ) -> ChannelBinding | None:
         row = self._conn.execute(
-            "SELECT tenant_id, channel, external_id, secret_ref, status "
+            "SELECT tenant_id, channel, external_id, secret_ref, status, "
+            "outbound_secret_ref "
             "FROM channel_binding WHERE channel = ? AND token_fingerprint = ?",
             (channel, fingerprint(credential)),
         ).fetchone()
+        return self._row_to_binding(row)
+
+    def find_by_tenant(self, channel: str, tenant_id: str) -> ChannelBinding | None:
+        row = self._conn.execute(
+            "SELECT tenant_id, channel, external_id, secret_ref, status, "
+            "outbound_secret_ref "
+            "FROM channel_binding WHERE channel = ? AND tenant_id = ?",
+            (channel, tenant_id),
+        ).fetchone()
+        return self._row_to_binding(row)
+
+    @staticmethod
+    def _row_to_binding(row) -> ChannelBinding | None:
         if row is None:
             return None
         return ChannelBinding(
@@ -178,6 +222,7 @@ class SqliteChannelBindingStore:
             external_id=row["external_id"],
             secret_ref=row["secret_ref"],
             status=row["status"],
+            outbound_secret_ref=row["outbound_secret_ref"],
         )
 
     def set_status(self, channel: str, external_id: str, status: str) -> None:

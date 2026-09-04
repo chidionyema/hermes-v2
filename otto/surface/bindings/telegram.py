@@ -62,6 +62,11 @@ class TelegramBinding:
             capabilities=TELEGRAM_CAPABILITIES,
             content=text,
             received_at=_parse_date(message.get("date")),
+            # The chat id, as a string, is the whole of Telegram's reply
+            # address. It is deliberately not the principal: the
+            # allow-list above decides *trust*, this decides *where the
+            # answer goes*, and an untrusted sender still has an address.
+            reply_to=str(chat_id) if isinstance(chat_id, int) else None,
         )
 
     def render(

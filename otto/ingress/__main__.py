@@ -16,7 +16,14 @@ The order:
    replica may run this; the statements are idempotent.
 3. the bus, connected and its streams ensured, because a task that
    cannot be published is a customer event dropped after acknowledgement.
-4. only then the socket.
+4. the answering lane (``otto.ingress.worker``), which subscribes to the
+   tasks this door publishes and talks back on the customer's own
+   channel. It runs in this process, beside the socket, rather than as a
+   second deployment: it needs exactly what the door already holds --
+   the binding table, the secret resolver and the bus -- and a separate
+   pod would need all three again for no isolation the door does not
+   already have.
+5. only then the socket.
 
 Configuration is read here and nowhere below: the gateway, the store and
 the publisher all take what they need as arguments, so a test builds the
@@ -35,6 +42,7 @@ from otto.ingress.pg_store import PostgresChannelBindingStore, dsn_from_env
 from otto.ingress.publisher import JetStreamPublisher
 from otto.ingress.secrets import EnvSecretResolver
 from otto.ingress.server import ServerDeps, build_server
+from otto.ingress.worker import start_worker_thread
 from otto.obs.core import instrument
 from otto.spine.bus import Bus
 
@@ -66,8 +74,15 @@ def port_from_env(environ: Mapping[str, str] | None = None) -> int:
     return port
 
 
-def build_deps(loop: asyncio.AbstractEventLoop) -> ServerDeps:
-    """Every dependency, proved, in the order failure should surface."""
+def build_deps(
+    loop: asyncio.AbstractEventLoop, *, start_answering: bool = True
+) -> ServerDeps:
+    """Every dependency, proved, in the order failure should surface.
+
+    ``start_answering`` is the one seam a test uses: the answering lane
+    opens its own connection to NATS and would otherwise run for real
+    inside a test that only wanted to prove the boot order.
+    """
     obs = instrument(COMPONENT)
 
     store = PostgresChannelBindingStore(dsn_from_env())
@@ -76,10 +91,15 @@ def build_deps(loop: asyncio.AbstractEventLoop) -> ServerDeps:
     bus = loop.run_until_complete(Bus().connect())
     loop.run_until_complete(bus.ensure_streams())
 
+    secrets = EnvSecretResolver()
+
+    if start_answering:
+        start_worker_thread(store=store, secrets=secrets, obs=obs)
+
     return ServerDeps(
         gateway=EventGateway(
             store=store,
-            secrets=EnvSecretResolver(),
+            secrets=secrets,
             publisher=JetStreamPublisher(bus, loop),
             obs=obs,
         )
