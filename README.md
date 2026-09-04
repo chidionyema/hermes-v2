@@ -668,6 +668,7 @@ are tracked, so what you see below is the source they come from.
 | `otto/tests/cp5/step_defs/test_cp5_router_structured_outputs.py` | Step definitions for ``features/cp5_router_structured_outputs.feature``. |
 | `otto/tests/cp5/test_grounding_casefold.py` | Regression: grounding tokens compare under casefold, not lower. |
 | `otto/tests/cp5/test_live_minimax.py` | Live integration: one real bulk-lane request through the router to lane ``minimax`` on the estate model router (LiteLLM), asserting the response normalises into the universal contract with verification UNVERIFIED. |
+| `otto/tests/cp5/test_provider_completion_budget.py` | The completion budget a request carries: the default covers a reasoning lane's own thinking (`moonshot/kimi-k3` spent 1,030 reasoning tokens on a three-word answer, and a 200-token cap returned an empty string), a deployment sets it with `OTTO_ROUTER_MAX_TOKENS`, and an unusable override falls back to the default. |
 | `otto/tests/cp6obs/` | CP6 observability tests. |
 | `otto/tests/cp6obs/__init__.py` | CP6 observability BDD suite (crew#768). |
 | `otto/tests/cp6obs/conftest.py` | Shared fixtures for the CP6 observability BDD suite. |

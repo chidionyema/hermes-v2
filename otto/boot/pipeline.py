@@ -9,19 +9,23 @@ never calls the Verification Plane — P1 holds by omission, not by
 claim), and a fact carrying the task's own provenance is built the same
 way ``otto.memory.models.Fact`` proves it round-trips in that same test.
 
-Two things this boot lane deliberately does NOT do yet, both honest
-gaps named here rather than hidden:
+The model step is live. ``otto.router.core.Router`` executes the task
+against the estate model router through ``LiteLLMClient``, under the
+lane policy, the budget ledger and the bounded retries the router
+already enforces. Before this, the step was a canned payload and every
+reply the founder received read ``unverified: noted: <his own words>``,
+which is an echo, not an answer. He reported that three times.
 
-* it does not call a real model through ``otto.router.core.Router`` —
-  there is no ``ProviderClient`` wired to a live provider in this
-  checkpoint, so the "model" step is the same deterministic,
-  structurally-shaped stand-in the smoke test uses (a canned
-  ``normalise_provider_output`` payload), not a live completion;
-* the memory fact is constructed and round-tripped through
-  ``Fact.to_row``/``Fact.from_row`` (proving the shape is correct) but
-  is not written to the real Postgres store — ``otto.memory.store``
-  needs a live database connection this boot lane has no contract for
-  yet (no env var for it was named in this task).
+One honest gap remains, named here rather than hidden: the memory fact
+is constructed and round-tripped through ``Fact.to_row``/``Fact.from_row``
+(proving the shape is correct) but is not written to the real Postgres
+store — ``otto.memory.store`` needs a live database connection this boot
+lane has no contract for yet (no env var for it was named in this task).
+
+The reply is still marked unverified, and that is correct: the
+Verification Plane is not called here, so P1 holds by omission. An
+unverified answer from a real model is the honest state; an unverified
+echo of the question was not an answer at all.
 
 Security posture (P5, the two-source rule): an unrecognised chat id
 normalises to ``TrustClass.UNTRUSTED``. Its task envelope still crosses
@@ -47,8 +51,12 @@ from otto.gateway.registry import ToolRegistry, ToolSpec
 from otto.gateway.registry import Tier as GatewayTier
 from otto.memory.models import Fact, Provenance
 from otto.obs.core import ObsHandle, TaskContext
+from otto.router.budget import BudgetLedger
+from otto.router.config import RouterConfig
 from otto.router.contract import RouterResponse, normalise_provider_output
-from otto.router.render import render_claims
+from otto.router.core import InMemoryNotifier, OutcomeState, Router, RouterTask
+from otto.router.providers import LiteLLMClient, ProviderClient
+from otto.router.render import render_claim, render_claims
 from otto.spine.envelope import TaskClass, TaskEnvelope, TaskSource, Tier, TrustTag
 from otto.surface.bindings.telegram import TelegramBinding
 from otto.surface.envelope import SurfaceEnvelope, TrustClass
@@ -85,6 +93,60 @@ _NOTE_SCHEMA = {
 
 def _note_handler(args: dict) -> dict:
     return {"noted": args["text"]}
+
+
+#: One Router for the process. The config, ledger and notifier are all
+#: plain dataclasses with working defaults, so this needs no wiring beyond
+#: the lane policy the deployment already sets in the environment.
+_ROUTER: Router | None = None
+
+
+def _router() -> Router:
+    global _ROUTER
+    if _ROUTER is None:
+        config = RouterConfig()
+        _ROUTER = Router(
+            config=config,
+            ledger=BudgetLedger(config=config),
+            notifier=InMemoryNotifier(),
+        )
+    return _ROUTER
+
+
+#: The router's contract (otto/router/contract.py) parses the provider's
+#: output as this JSON object, so the prompt has to ask for exactly it.
+#: Asking in the prompt rather than post-processing keeps the one parser
+#: the only thing that decides whether output is well formed.
+_CONTRACT_PROMPT = """You are Otto, the operator's assistant for this estate.
+
+Answer the message below. Reply with a single JSON object and nothing else:
+
+{{"answer": "<your answer in plain English>",
+  "claims": [{{"text": "<one factual claim>", "evidence_refs": [], "confidence": "high|med|low"}}],
+  "proposed_actions": [],
+  "unknowns": ["<anything you could not establish>"]}}
+
+Put every factual statement in "claims" as well as in "answer". If you are
+not sure of something, say so in "unknowns" rather than asserting it.
+
+Message:
+{message}"""
+
+
+def _prompt_for(message: str) -> str:
+    return _CONTRACT_PROMPT.format(message=message)
+
+
+def _state_sentence(outcome) -> str:
+    """Plain English for a router state that is not a completed answer."""
+    sentences = {
+        OutcomeState.QUEUED_BUDGET: "I have not answered: today's budget for this lane is spent.",
+        OutcomeState.PAUSED_TASK_BUDGET: "I have not answered: this one task ran past its own budget.",
+        OutcomeState.NEEDS_HUMAN: "I could not reach the model, so I have not answered.",
+        OutcomeState.REFUSED_MALFORMED: "The model replied in a shape I refuse to parse, so I have not answered.",
+    }
+    base = sentences.get(outcome.state, "I have not answered.")
+    return f"{base} ({outcome.reason})" if outcome.reason else base
 
 
 def build_registry() -> ToolRegistry:
@@ -175,6 +237,7 @@ def process_update(
     binding: TelegramBinding,
     registry_gateway: ToolGateway,
     obs: ObsHandles,
+    provider_client: ProviderClient | None = None,
 ) -> PipelineOutcome:
     """Run one inbound Telegram update across every lane. Never raises
     for a well-formed but untrusted or empty event — the caller (the
@@ -242,36 +305,59 @@ def process_update(
         )
 
     noted_text = gw_response.output["noted"] if gw_response.output else content
-    with obs.router.task_span(ctx, "router.normalise"):
-        provider_text = json.dumps(
-            {
-                "answer": f"noted: {noted_text}",
-                "claims": [
+    with obs.router.task_span(ctx, "router.execute"):
+        outcome = _router().execute(
+            RouterTask(
+                input=_prompt_for(noted_text),
+                source="telegram",
+                task_class="research",
+                task_id=task_env.task_id,
+            ),
+            provider_client or LiteLLMClient(),
+        )
+        obs.router.info(
+            "router.outcome",
+            ctx,
+            state=outcome.state.value,
+            lane=outcome.lane,
+            attempts=outcome.attempts,
+        )
+        router_resp = outcome.response
+        if outcome.state is not OutcomeState.COMPLETED_UNVERIFIED or router_resp is None:
+            # The router refused, queued or paused the task. Every one of
+            # those states is named, and the sender is told which one in
+            # plain words rather than receiving a manufactured answer.
+            router_resp = normalise_provider_output(
+                json.dumps(
                     {
-                        "text": f"noted: {noted_text}",
-                        "evidence_refs": [
-                            f"tool:{NOTE_TOOL_NAME}:{gw_response.envelope_id}"
+                        "answer": _state_sentence(outcome),
+                        "claims": [
+                            {
+                                "text": _state_sentence(outcome),
+                                "evidence_refs": [],
+                                "confidence": "low",
+                            }
                         ],
-                        "confidence": "high",
+                        "proposed_actions": [],
+                        "unknowns": [outcome.reason or outcome.state.value],
                     }
-                ],
-                "proposed_actions": [],
-                "unknowns": [],
-            }
-        )
-        router_resp = normalise_provider_output(
-            provider_text,
-            lane="boot-note",
-            model="boot-deterministic-stub",
-            task_id=task_env.task_id,
-            cost_usd=0.0,
-            tokens=0,
-        )
+                ),
+                lane=outcome.lane,
+                model="none (router did not complete)",
+                task_id=task_env.task_id,
+                cost_usd=outcome.charged_usd,
+                tokens=0,
+            )
         # P1 holds by construction: normalise_provider_output always mints
         # UNVERIFIED (otto/router/contract.py), and this pipeline never
         # calls the Verification Plane, so render_claims
         # always applies the unverified marker below.
         reply_lines = render_claims(router_resp)
+        if not reply_lines and router_resp.answer:
+            # render_claims renders claims, not the answer. A model that
+            # answers well but lists no claims would otherwise send silence,
+            # which reads exactly like the bot being down.
+            reply_lines = [render_claim(router_resp.answer, has_evidence=False, verified=False)]
 
     with obs.memory.task_span(ctx, "memory.write_fact"):
         fact = Fact(

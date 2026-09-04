@@ -18,12 +18,36 @@ import json
 import os
 import urllib.error
 import urllib.request
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Protocol
 
 _KEY_FILE_RELATIVE = ".config/prospector/secrets.d/LITELLM_API_KEY"
 _DEFAULT_BASE_URL = "https://llm.mumchimp.com/v1"
+
+#: Completion budget for one call, and it has to cover the model's own
+#: thinking as well as its answer. Measured against the estate router on
+#: 2026-09-04: `moonshot/kimi-k3` spent 1,030 reasoning tokens to produce
+#: the three words "kimi is live", and the same lane asked with a 200
+#: token cap returned an empty string -- the whole budget went on thought
+#: and nothing was left for output. This lane's prompt then asks for a
+#: JSON object, so a truncated completion is not merely short, it is
+#: unparseable and arrives at the founder as "the model replied in a
+#: shape I refuse to parse". 8192 leaves room for both halves on a
+#: reasoning model; a lane that does not think spends only what it needs,
+#: because this is a cap and not an allocation.
+_DEFAULT_MAX_TOKENS = 8192
+
+
+def _max_tokens() -> int:
+    raw = os.environ.get("OTTO_ROUTER_MAX_TOKENS")
+    if not raw:
+        return _DEFAULT_MAX_TOKENS
+    try:
+        value = int(raw)
+    except ValueError:
+        return _DEFAULT_MAX_TOKENS
+    return value if value > 0 else _DEFAULT_MAX_TOKENS
 
 
 class ProviderTimeout(Exception):
@@ -94,7 +118,7 @@ def litellm_reachable(timeout_seconds: float = 15.0) -> bool:
 class LiteLLMClient:
     """Concrete client for the estate model router (LiteLLM API shape)."""
 
-    max_tokens: int = 2000
+    max_tokens: int = field(default_factory=_max_tokens)
 
     def complete(
         self, model: str, payload: str, timeout_seconds: float
