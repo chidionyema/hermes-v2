@@ -26,6 +26,8 @@ admission policy refuses a Secret delivered as a pod environment variable.
 
 from __future__ import annotations
 
+import json
+
 import os
 import pathlib
 from typing import Mapping
@@ -48,14 +50,15 @@ DEFAULT_PORT = "5432"
 INSERT_SQL = (
     "INSERT INTO channel_binding "
     "(tenant_id, channel, external_id, secret_ref, token_fingerprint, "
-    "status, outbound_secret_ref) "
-    "VALUES (%s, %s, %s, %s, %s, %s, %s) "
+    "status, outbound_secret_ref, principal_allowlist) "
+    "VALUES (%s, %s, %s, %s, %s, %s, %s, %s::jsonb) "
     "ON CONFLICT (channel, external_id) DO UPDATE SET "
     "tenant_id = excluded.tenant_id, "
     "secret_ref = excluded.secret_ref, "
     "token_fingerprint = excluded.token_fingerprint, "
     "status = excluded.status, "
-    "outbound_secret_ref = excluded.outbound_secret_ref"
+    "outbound_secret_ref = excluded.outbound_secret_ref, "
+    "principal_allowlist = excluded.principal_allowlist"
 )
 
 #: The lookup the gateway runs on every inbound event. ``channel`` is in
@@ -63,7 +66,7 @@ INSERT_SQL = (
 #: credential stolen from one channel would open a binding on another.
 LOOKUP_SQL = (
     "SELECT tenant_id, channel, external_id, secret_ref, status, "
-    "outbound_secret_ref "
+    "outbound_secret_ref, principal_allowlist "
     "FROM channel_binding WHERE channel = %s AND token_fingerprint = %s"
 )
 
@@ -73,7 +76,7 @@ LOOKUP_SQL = (
 #: neither path may become a scan as customers are added.
 TENANT_LOOKUP_SQL = (
     "SELECT tenant_id, channel, external_id, secret_ref, status, "
-    "outbound_secret_ref "
+    "outbound_secret_ref, principal_allowlist "
     "FROM channel_binding WHERE channel = %s AND tenant_id = %s"
 )
 
@@ -171,6 +174,7 @@ class PostgresChannelBindingStore:
                     fingerprint(credential),
                     binding.status,
                     binding.outbound_secret_ref,
+                    json.dumps(dict(binding.principal_allowlist), sort_keys=True),
                 ),
             )
 
@@ -198,6 +202,12 @@ class PostgresChannelBindingStore:
             external_id=row[2],
             secret_ref=row[3],
             status=row[4],
+            # psycopg decodes jsonb to a dict already; the str branch is
+            # for a driver configured without the json adapter, which is
+            # a supported way to run psycopg and not worth crashing on.
+            principal_allowlist=(
+                json.loads(row[6]) if isinstance(row[6], str) else (row[6] or {})
+            ),
             outbound_secret_ref=row[5],
         )
 

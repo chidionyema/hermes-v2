@@ -7,10 +7,18 @@ Routes:
 
 * ``GET /healthz`` — 200, plain text, no auth. A Kubernetes
   liveness/readiness probe target.
-* ``POST /telegram-webhook`` — the webhook Telegram calls. Delegates
-  entirely to ``otto.boot.app.handle_webhook_body``; this class holds no
-  business logic of its own, only the socket plumbing.
-* anything else — 404.
+* anything else — 404, including every POST.
+
+There was a ``POST /telegram-webhook`` here, and its removal is the point
+of this module now. A second door that speaks to a chat platform directly
+is exactly the stitching the one-ingress rule forbids: two places where a
+customer is recognised, two places where a channel secret lives, two
+places to change when a channel changes. Telegram is received in one
+place, ``otto.ingress.gateway``, which authenticates against the binding
+table and puts a neutral task on the bus; this process answers what lands
+there (``otto.worker``). The webhook body handler and its four-case
+failure contract are not deleted, only unbound from a socket here — they
+belong to the door, and are exercised by the door's own suite.
 """
 
 from __future__ import annotations
@@ -18,15 +26,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from otto.boot.app import handle_webhook_body
 from otto.boot.pipeline import ObsHandles
 from otto.boot.transport import TelegramTransport
 from otto.gateway.core import ToolGateway
 from otto.surface.bindings.telegram import TelegramBinding
 
 HEALTHZ_PATH = "/healthz"
-WEBHOOK_PATH = "/telegram-webhook"
-_MAX_BODY_BYTES = 1_000_000  # a Telegram update is a few KB; refuse anything absurd
 
 
 @dataclass(frozen=True)
@@ -63,22 +68,10 @@ def make_handler(deps: ServerDeps) -> type[BaseHTTPRequestHandler]:
             self._respond(404, b"not found")
 
         def do_POST(self) -> None:  # noqa: N802 - stdlib's naming convention
-            if self.path != WEBHOOK_PATH:
-                self._respond(404, b"not found")
-                return
-            length = int(self.headers.get("Content-Length") or 0)
-            if length <= 0 or length > _MAX_BODY_BYTES:
-                self._respond(400, b'{"ok":false,"error":"bad content-length"}')
-                return
-            raw_body = self.rfile.read(length)
-            result = handle_webhook_body(
-                raw_body,
-                binding=deps.binding,
-                gateway=deps.gateway,
-                obs=deps.obs,
-                transport=deps.transport,
-            )
-            self._respond(result.status, result.body)
+            # This process posts nothing and receives nothing. A POST here
+            # is either a stale webhook registration or a probe, and both
+            # deserve the same flat answer.
+            self._respond(404, b"not found")
 
         def _respond(self, status: int, body: bytes) -> None:
             self.send_response(status)

@@ -173,7 +173,10 @@ class EventGateway:
                 BAD_REQUEST, "body is not a JSON object", tenant_id=binding.tenant_id
             )
 
-        surface_env = plugin.binding().normalize(
+        # The allow-list travels with the customer's row, so who counts as
+        # a named principal on this channel is a database fact rather than
+        # a deployment fact.
+        surface_env = plugin.binding(binding.principal_allowlist).normalize(
             native_event, tenant_id=binding.tenant_id
         )
         content = (surface_env.content or "").strip()

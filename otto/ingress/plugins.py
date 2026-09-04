@@ -119,14 +119,28 @@ class TelegramPlugin:
     def verify(self, presented: str, secret: str) -> bool:
         return hmac.compare_digest(presented, secret)
 
-    def binding(self) -> SurfaceAdapter:
-        # An empty allow-list: this gateway authenticates the *channel*,
-        # not the individual person on the far side of it, so every
-        # sender starts untrusted and the taint cap applies. Per-person
-        # trust arrives with the control plane's user mapping; promoting
-        # a sender to operator on the strength of a channel-level secret
-        # would hand one customer's whole workspace the founder's tier.
-        return TelegramBinding(chat_id_allowlist={})
+    def binding(
+        self, principal_allowlist: Mapping[str, str] | None = None
+    ) -> SurfaceAdapter:
+        # The gateway authenticates the *channel*, not the individual
+        # person on the far side of it, so per-person trust cannot come
+        # from the channel secret -- promoting a sender to operator on
+        # the strength of one would hand a customer's whole workspace the
+        # founder's tier. It comes from the binding row instead, which is
+        # the same place the credential reference lives: recognising an
+        # operator is onboarding, and onboarding is a database write.
+        # Absent a row entry the map is empty, every sender is untrusted
+        # and the taint cap applies -- the old behaviour, now a default
+        # rather than the only possibility.
+        chat_ids: dict[int, str] = {}
+        for address, principal in (principal_allowlist or {}).items():
+            try:
+                chat_ids[int(address)] = principal
+            except (TypeError, ValueError):
+                # A malformed key is one unrecognised sender, not a broken
+                # door: skipping it leaves that sender untrusted.
+                continue
+        return TelegramBinding(chat_id_allowlist=chat_ids)
 
     def send_reply(self, secret: str, reply_to: str, text: str) -> None:
         """``secret`` is the customer's bot token. It is held only for
@@ -160,8 +174,10 @@ class HttpPlugin:
     def verify(self, presented: str, secret: str) -> bool:
         return hmac.compare_digest(presented, secret)
 
-    def binding(self) -> SurfaceAdapter:
-        return HttpBinding(principal_allowlist={})
+    def binding(
+        self, principal_allowlist: Mapping[str, str] | None = None
+    ) -> SurfaceAdapter:
+        return HttpBinding(principal_allowlist=dict(principal_allowlist or {}))
 
     def send_reply(self, secret: str, reply_to: str, text: str) -> None:
         raise OutboundNotSupported(
