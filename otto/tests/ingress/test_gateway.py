@@ -22,6 +22,7 @@ from otto.spine.envelope import TaskSource, TrustTag
 from .conftest import (
     ACME,
     ACME_HTTP_TOKEN,
+    ACME_TELEGRAM_REF,
     ACME_TELEGRAM_TOKEN,
     http_body,
     telegram_body,
@@ -211,3 +212,58 @@ def test_an_oversized_body_is_refused_before_it_is_parsed(
     result = gateway.handle("telegram", _telegram_headers(), b"x" * 2_000_000)
     assert result.status == BAD_REQUEST
     assert publisher.published == []
+
+
+def test_a_named_sender_on_the_row_is_recognised_and_an_unlisted_one_is_not(
+    store, secret_env, publisher
+) -> None:
+    """Who counts as a person on a customer's channel is a row, not a deploy.
+
+    The channel secret proves the workspace and nothing about the human on
+    the far side of it, so trust in a sender has to come from somewhere
+    else. It comes from the customer's own binding row, which makes
+    recognising an operator a database write that takes effect on the next
+    message -- the same property that makes connecting a channel a write.
+    A sender who is not on the row stays untrusted and the two-source cap
+    applies to them.
+    """
+    from otto.ingress.store import ChannelBinding
+
+    known_chat = 4242
+    store.register(
+        ChannelBinding(
+            tenant_id=ACME,
+            channel="telegram",
+            external_id="acme-bot",
+            secret_ref=ACME_TELEGRAM_REF,
+            principal_allowlist={str(known_chat): "chidi"},
+        ),
+        credential=ACME_TELEGRAM_TOKEN,
+    )
+    gateway = EventGateway(
+        store=store,
+        secrets=EnvSecretResolver(environ=secret_env),
+        publisher=publisher,
+        obs=instrument("ingress"),
+    )
+
+    known = gateway.handle(
+        "telegram", _telegram_headers(), telegram_body("status", chat_id=known_chat)
+    )
+    stranger = gateway.handle(
+        "telegram", _telegram_headers(), telegram_body("status", chat_id=9999)
+    )
+    assert known.status == ACCEPTED
+    assert stranger.status == ACCEPTED
+
+    by_id = {e.task_id: e for e in publisher.published}
+    recognised = by_id[known.task_id]
+    unlisted = by_id[stranger.task_id]
+    assert "principal:chidi" in recognised.provenance
+    assert TrustTag.untrusted not in recognised.taint
+    assert "principal:unknown" in unlisted.provenance
+    assert TrustTag.untrusted in unlisted.taint
+    # The reply address is minted either way: an unrecognised sender is
+    # still answered, at a lower tier, rather than ignored.
+    assert recognised.reply_to == str(known_chat)
+    assert unlisted.reply_to == "9999"

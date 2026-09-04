@@ -29,9 +29,10 @@ Two implementations, one interface:
 from __future__ import annotations
 
 import hashlib
+import json
 import sqlite3
-from dataclasses import dataclass
-from typing import Protocol
+from dataclasses import dataclass, field
+from typing import Mapping, Protocol
 
 #: The production schema. Deliberately written out rather than generated
 #: from the SQLite one: a reader onboarding a customer needs to see the
@@ -46,6 +47,7 @@ CREATE TABLE IF NOT EXISTS channel_binding (
     status            TEXT        NOT NULL DEFAULT 'active',
     created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
     outbound_secret_ref TEXT,
+    principal_allowlist JSONB NOT NULL DEFAULT '{}'::jsonb,
     PRIMARY KEY (channel, external_id)
 );
 CREATE UNIQUE INDEX IF NOT EXISTS channel_binding_lookup
@@ -57,6 +59,13 @@ CREATE INDEX IF NOT EXISTS channel_binding_tenant
 -- answering side resolves to talk back to the customer, and a door that
 -- can only listen is half a channel.
 ALTER TABLE channel_binding ADD COLUMN IF NOT EXISTS outbound_secret_ref TEXT;
+-- Who, on this customer's channel, is somebody rather than an anonymous
+-- sender. Empty by default, which is the safe reading: a channel-level
+-- secret proves the workspace, never the person, so an unlisted sender
+-- stays untrusted and the two-source cap applies. Recognising the
+-- founder on his own Telegram is one row update here, not a deployment.
+ALTER TABLE channel_binding ADD COLUMN IF NOT EXISTS principal_allowlist JSONB
+    NOT NULL DEFAULT '{}'::jsonb;
 """
 
 _SQLITE_DDL = """
@@ -68,6 +77,7 @@ CREATE TABLE IF NOT EXISTS channel_binding (
     token_fingerprint TEXT NOT NULL,
     status            TEXT NOT NULL DEFAULT 'active',
     outbound_secret_ref TEXT,
+    principal_allowlist TEXT NOT NULL DEFAULT '{}',
     PRIMARY KEY (channel, external_id)
 );
 CREATE UNIQUE INDEX IF NOT EXISTS channel_binding_lookup
@@ -111,6 +121,15 @@ class ChannelBinding:
     #: an inbound password or being unable to answer. ``None`` is a
     #: listen-only connection, which is a legitimate state, not an error.
     outbound_secret_ref: str | None = None
+    #: Which senders on this channel are a named principal, as an
+    #: address-to-principal map (a Telegram chat id to a bound account,
+    #: an API caller id to a person). It lives on the row, not in the
+    #: deployment, for the same reason the credential reference does:
+    #: recognising a customer's operator is onboarding, and onboarding
+    #: is a database write. An empty map -- the default -- means every
+    #: sender on this channel is untrusted, which is what a channel-level
+    #: secret actually proves.
+    principal_allowlist: Mapping[str, str] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         for name in ("tenant_id", "channel", "external_id", "secret_ref"):
@@ -172,14 +191,15 @@ class SqliteChannelBindingStore:
         self._conn.execute(
             "INSERT INTO channel_binding "
             "(tenant_id, channel, external_id, secret_ref, token_fingerprint, "
-            "status, outbound_secret_ref) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?) "
+            "status, outbound_secret_ref, principal_allowlist) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?) "
             "ON CONFLICT (channel, external_id) DO UPDATE SET "
             "tenant_id = excluded.tenant_id, "
             "secret_ref = excluded.secret_ref, "
             "token_fingerprint = excluded.token_fingerprint, "
             "status = excluded.status, "
-            "outbound_secret_ref = excluded.outbound_secret_ref",
+            "outbound_secret_ref = excluded.outbound_secret_ref, "
+            "principal_allowlist = excluded.principal_allowlist",
             (
                 binding.tenant_id,
                 binding.channel,
@@ -188,6 +208,7 @@ class SqliteChannelBindingStore:
                 fingerprint(credential),
                 binding.status,
                 binding.outbound_secret_ref,
+                json.dumps(dict(binding.principal_allowlist), sort_keys=True),
             ),
         )
         self._conn.commit()
@@ -197,7 +218,7 @@ class SqliteChannelBindingStore:
     ) -> ChannelBinding | None:
         row = self._conn.execute(
             "SELECT tenant_id, channel, external_id, secret_ref, status, "
-            "outbound_secret_ref "
+            "outbound_secret_ref, principal_allowlist "
             "FROM channel_binding WHERE channel = ? AND token_fingerprint = ?",
             (channel, fingerprint(credential)),
         ).fetchone()
@@ -206,7 +227,7 @@ class SqliteChannelBindingStore:
     def find_by_tenant(self, channel: str, tenant_id: str) -> ChannelBinding | None:
         row = self._conn.execute(
             "SELECT tenant_id, channel, external_id, secret_ref, status, "
-            "outbound_secret_ref "
+            "outbound_secret_ref, principal_allowlist "
             "FROM channel_binding WHERE channel = ? AND tenant_id = ?",
             (channel, tenant_id),
         ).fetchone()
@@ -223,6 +244,7 @@ class SqliteChannelBindingStore:
             secret_ref=row["secret_ref"],
             status=row["status"],
             outbound_secret_ref=row["outbound_secret_ref"],
+            principal_allowlist=json.loads(row["principal_allowlist"] or "{}"),
         )
 
     def set_status(self, channel: str, external_id: str, status: str) -> None:
