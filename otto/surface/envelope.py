@@ -86,6 +86,13 @@ class SurfaceEnvelope:
     content: str
     received_at: datetime
     correlation_id: str = field(default_factory=_new_correlation_id)
+    #: Where an answer to this event goes back, written in the channel's
+    #: own address space (a Telegram chat id, a Slack channel id) and
+    #: never interpreted here. Before this field existed the gateway
+    #: normalised an event, published a task, and threw the only thing
+    #: that could carry a reply home away -- so the one door could accept
+    #: a customer's message and nothing downstream could ever answer it.
+    reply_to: str | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.tenant_id, str) or not self.tenant_id.strip():

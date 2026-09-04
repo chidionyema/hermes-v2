@@ -1,6 +1,6 @@
 """Per-channel plugins: the only place a channel's name means anything.
 
-A plugin answers three questions about one channel, and nothing else:
+A plugin answers four questions about one channel, and nothing else:
 
 1. *Where does this channel put its credential?* Telegram puts a shared
    secret in the ``X-Telegram-Bot-Api-Secret-Token`` header; a generic
@@ -11,6 +11,10 @@ A plugin answers three questions about one channel, and nothing else:
 3. *Which surface binding turns this channel's payload into the neutral
    envelope?* The existing ``otto.surface.bindings`` are reused as-is;
    this package adds no parsing of its own.
+4. *How does an answer travel back out?* The address came from this
+   channel's own binding and goes back to this channel's own API, so the
+   one module that already knows the channel's shape is the one that
+   sends. Nothing above here learns what a chat id is.
 
 Everything else — looking the customer up, minting the task, publishing
 it, answering the socket — is channel-independent and lives in
@@ -29,6 +33,7 @@ import hmac
 from dataclasses import dataclass
 from typing import Any, Mapping, Protocol
 
+from otto.boot.transport import TelegramHTTPTransport
 from otto.spine.envelope import TaskSource
 from otto.surface.adapter import SurfaceAdapter
 from otto.surface.bindings.http import HttpBinding
@@ -36,6 +41,13 @@ from otto.surface.bindings.telegram import TelegramBinding
 
 TELEGRAM = "telegram"
 HTTP = "http"
+
+
+class OutboundNotSupported(RuntimeError):
+    """This channel cannot begin a message; it can only answer a request
+    while the request is still open. A plain HTTP caller is the example:
+    by the time an answer exists the connection that asked is long gone,
+    so the answer is fetched, not pushed."""
 
 
 class ChannelPlugin(Protocol):
@@ -59,6 +71,16 @@ class ChannelPlugin(Protocol):
 
     def binding(self) -> SurfaceAdapter:
         """The surface binding that normalises this channel's payload."""
+        ...
+
+    def send_reply(self, secret: str, reply_to: str, text: str) -> None:
+        """Deliver one answer back to the address the binding minted.
+
+        ``secret`` is the customer's *outbound* credential, resolved from
+        ``ChannelBinding.outbound_secret_ref`` -- never the inbound one.
+        Raises ``OutboundNotSupported`` on a channel that has no way to
+        start a message of its own.
+        """
         ...
 
 
@@ -106,6 +128,12 @@ class TelegramPlugin:
         # would hand one customer's whole workspace the founder's tier.
         return TelegramBinding(chat_id_allowlist={})
 
+    def send_reply(self, secret: str, reply_to: str, text: str) -> None:
+        """``secret`` is the customer's bot token. It is held only for
+        the length of this call, inside the transport's own field, and
+        the transport never logs it (``otto.boot.transport``)."""
+        TelegramHTTPTransport(token=secret).send_message(int(reply_to), text)
+
 
 @dataclass(frozen=True)
 class HttpPlugin:
@@ -134,6 +162,12 @@ class HttpPlugin:
 
     def binding(self) -> SurfaceAdapter:
         return HttpBinding(principal_allowlist={})
+
+    def send_reply(self, secret: str, reply_to: str, text: str) -> None:
+        raise OutboundNotSupported(
+            "a plain HTTP caller has no address to push an answer to; it "
+            "reads the answer back by task id"
+        )
 
 
 def default_plugins() -> dict[str, Any]:

@@ -84,7 +84,12 @@ def test_two_channels_produce_the_same_envelope_for_the_same_content(
     gateway.handle("http", _http_headers(), http_body("same words"))
 
     telegram_task, http_task = publisher.published
-    ignore = {"task_id", "created_at", "provenance", "source"}
+    # ``reply_to`` joins this set for the same reason ``source`` is in it:
+    # it is the transport's own address for the sender, written in the
+    # channel's address space and never read by a lane. Telegram has one
+    # (a chat id) and a plain HTTP caller has none, and that difference is
+    # the transport differing, which is what this test permits.
+    ignore = {"task_id", "created_at", "provenance", "source", "reply_to"}
     assert {
         k: v
         for k, v in telegram_task.model_dump(mode="json").items()

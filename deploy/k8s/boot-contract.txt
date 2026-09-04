@@ -13,3 +13,4 @@ opentelemetry.exporter.otlp.proto.http  # the exporter the pod points at the col
 edge_tts                                # voice notes; lazy install cannot pip into a read-only pod
 otto.boot.pipeline                      # otto-staging runs python -m otto.boot; pipeline pulls gateway (jsonschema), memory, obs
 otto.ingress.pg_store                   # otto-gateway runs python -m otto.ingress; pg_store opens Postgres through psycopg, which needs a libpq wrapper
+otto.ingress.worker                     # the answering half of the one door: pulls submitted tasks off JetStream and replies on the customer's own channel
