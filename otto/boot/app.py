@@ -24,7 +24,8 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 
-from otto.boot.pipeline import ObsHandles, deliver, process_update
+from otto.boot.pipeline import ObsHandles, deliver, extract_chat_id, process_update
+from otto.boot.presence import typing_while
 from otto.boot.transport import TelegramTransport
 from otto.gateway.core import ToolGateway
 from otto.surface.bindings.telegram import TelegramBinding
@@ -80,9 +81,14 @@ def handle_webhook_body(
         return WebhookResult(400, BAD_REQUEST_RESPONSE)
 
     try:
-        outcome = process_update(
-            native_event, binding=binding, registry_gateway=gateway, obs=obs
-        )
+        # The model call inside process_update blocks for as long as the
+        # lane takes to think -- half a minute on a reasoning lane. Telegram
+        # shows nothing at all meanwhile, so the sender is told the bot is
+        # composing rather than left reading silence (founder, 2026-09-04).
+        with typing_while(transport, extract_chat_id(native_event)):
+            outcome = process_update(
+                native_event, binding=binding, registry_gateway=gateway, obs=obs
+            )
         delivered = deliver(outcome, transport)
     except Exception as exc:  # noqa: BLE001 - a webhook must never crash the process
         obs.boot.error("webhook.pipeline_error", _fallback_ctx(), error=str(exc))

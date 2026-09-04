@@ -14,15 +14,28 @@ from dataclasses import dataclass, field
 
 # Spec section 5 defaults. Named once here; every one is overridable per
 # deployment via environment or the YAML policy document.
-_DEFAULT_DAILY_BUDGET_USD = {"judgment": 15.0, "bulk": 5.0, "verify": 3.0}
-_DEFAULT_MAX_COST_PER_TASK_USD = {"judgment": 0.80, "bulk": 0.10, "verify": 0.10}
+_DEFAULT_DAILY_BUDGET_USD = {"judgment": 15.0, "bulk": 5.0, "verify": 3.0, "deep": 10.0}
+_DEFAULT_MAX_COST_PER_TASK_USD = {
+    "judgment": 0.80,
+    "bulk": 0.10,
+    "verify": 0.10,
+    "deep": 0.50,
+}
 #: Bulk lane is MiniMax (fast raw execution — founder-verified lane); the
 #: judgment lane is deliberately a different model family so bulk-lane
 #: error modes do not correlate with the lane that judges them.
+#: The deep lane is the reasoning lane, reached by name (`kimi`) and not
+#: by vendor path: the estate router resolves it through
+#: `router_settings.model_group_alias` (idp llm/config.base.yaml), so the
+#: day Moonshot ships k4 the rename happens once, at the router, and no
+#: caller changes. The lane exists because the route table cannot tell a
+#: hard question from an easy one; the operator says so with a `/think`
+#: prefix (otto/boot/pipeline.py).
 _DEFAULT_LANE_MODELS = {
     "judgment": "anthropic/claude",
     "bulk": "minimax",
     "verify": "google/gemini",
+    "deep": "kimi",
 }
 #: Family is DERIVED from the model name via this explicit mapping — never
 #: declared alongside it, so a label can never disagree with the model
@@ -38,6 +51,8 @@ _DEFAULT_MODEL_FAMILIES = {
     "google/gemini": "google",
     "gemini": "google",
     "deepseek": "deepseek",
+    "kimi": "moonshot",
+    "moonshot/kimi-k3": "moonshot",
 }
 _DEFAULT_ON_BUDGET_EXHAUSTED = "queue_and_notify"
 _DEFAULT_MAX_RETRIES_5XX = 1
@@ -169,6 +184,7 @@ def _default_lanes() -> dict[str, LaneConfig]:
 def _default_routes() -> tuple[tuple[dict[str, str], str], ...]:
     # Spec section 5 route table, most specific first, default last.
     return (
+        ({"class": "deep"}, "deep"),
         ({"source": "cron"}, "bulk"),
         ({"class": "code"}, "judgment"),
         ({"class": "research", "complexity": "low"}, "bulk"),

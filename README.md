@@ -486,7 +486,8 @@ are tracked, so what you see below is the source they come from.
 | `otto/boot/errors.py` | The one structured refusal shape for the boot lane — a component that cannot start safely raises this, never runs dark. |
 | `otto/boot/pipeline.py` | Crosses the platform lanes for one inbound Telegram update: surface, spine, gateway, router, memory. |
 | `otto/boot/server.py` | The socket: a stdlib `http.server.ThreadingHTTPServer` exposing `/healthz` and `/telegram-webhook`. |
-| `otto/boot/transport.py` | Outbound calls to the Telegram Bot API (`sendMessage`, `setWebhook`) over stdlib `urllib.request`, and the `TelegramTransport` protocol a test fakes. |
+| `otto/boot/presence.py` | The typing indicator kept lit while a model thinks: a daemon thread re-sends `sendChatAction` every 4.5s (Telegram clears it after ~5) so a 30-second reasoning answer does not read as the bot being down. |
+| `otto/boot/transport.py` | Outbound calls to the Telegram Bot API (`sendMessage`, `setWebhook`, `sendChatAction`) over stdlib `urllib.request`, and the `TelegramTransport` protocol a test fakes. |
 | `otto/evals/` | CP0: model evaluations that score a candidate and gate a release; a suite is a folder of YAML cases. |
 | `otto/evals/__init__.py` | Otto CP0 eval harness (crew#768). |
 | `otto/evals/cli.py` | ``otto-eval`` CLI: run a suite, or gate a candidate report against a baseline. |
@@ -668,6 +669,7 @@ are tracked, so what you see below is the source they come from.
 | `otto/tests/cp5/step_defs/test_cp5_router_structured_outputs.py` | Step definitions for ``features/cp5_router_structured_outputs.feature``. |
 | `otto/tests/cp5/test_grounding_casefold.py` | Regression: grounding tokens compare under casefold, not lower. |
 | `otto/tests/cp5/test_live_minimax.py` | Live integration: one real bulk-lane request through the router to lane ``minimax`` on the estate model router (LiteLLM), asserting the response normalises into the universal contract with verification UNVERIFIED. |
+| `otto/tests/cp5/test_reasoning_lane_ux.py` | The three things a 30-second reasoning lane needs from Telegram: the typing indicator fires and is refreshed (and a failing one never costs the sender the answer), `/think` and `/kimi` route to the deep lane with the prefix stripped, and a model that narrates around its JSON still parses. |
 | `otto/tests/cp5/test_provider_completion_budget.py` | The completion budget a request carries: the default covers a reasoning lane's own thinking (`moonshot/kimi-k3` spent 1,030 reasoning tokens on a three-word answer, and a 200-token cap returned an empty string), a deployment sets it with `OTTO_ROUTER_MAX_TOKENS`, and an unusable override falls back to the default. |
 | `otto/tests/cp6obs/` | CP6 observability tests. |
 | `otto/tests/cp6obs/__init__.py` | CP6 observability BDD suite (crew#768). |
