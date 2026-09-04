@@ -585,6 +585,7 @@ are tracked, so what you see below is the source they come from.
 | `otto/tests/boot/__init__.py` | Package marker and scope note for `otto/tests/boot`. |
 | `otto/tests/boot/conftest.py` | `OTTO_OBS_MODE=test` and shared-store hygiene for every test in this folder. |
 | `otto/tests/boot/fakes.py` | The one recording `TelegramTransport` fake every test in this folder uses. |
+| `otto/tests/boot/test_server_routes.py` | The boot process serves health and nothing else: it holds no webhook route and imports no webhook handler, since the estate receives a channel in one place. |
 | `otto/tests/boot/test_app.py` | `handle_webhook_body`'s four required cases: allowlisted delivery, unrecognised-sender drop, malformed payload refusal, and a pipeline exception that never crashes the process. |
 | `otto/tests/boot/test_config.py` | Every environment variable this lane reads, including the missing-token refusal. |
 | `otto/tests/boot/test_main.py` | `python -m otto.boot`'s dispatch: `--set-webhook`, the missing-token refusal before anything boots, and server assembly with a non-blocking fake server. |
