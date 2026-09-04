@@ -518,6 +518,7 @@ are tracked, so what you see below is the source they come from.
 | `otto/memory/__init__.py` | CP4 memory / context-engine core (crew#768). |
 | `otto/memory/audit.py` | Pluggable audit emission for the hygiene job. |
 | `otto/memory/config.py` | Configurable limits for the memory engine. |
+| `otto/memory/hindsight.py` | The estate's memory over its HTTP API: recall before the router, retain after it. One bank for every surface, so context crosses channels; unset or unreachable is a no-op. |
 | `otto/memory/context.py` | Context budgets and compaction (crew#768 board row: "compaction and budgets" - named explicitly on CP4's board row, and no other Otto lane owns them). |
 | `otto/memory/db.py` | Connection and migrations for the memory store. |
 | `otto/memory/embeddings.py` | Pluggable embedding provider interface. |
@@ -589,6 +590,7 @@ are tracked, so what you see below is the source they come from.
 | `otto/tests/boot/test_config.py` | Every environment variable this lane reads, including the missing-token refusal. |
 | `otto/tests/boot/test_main.py` | `python -m otto.boot`'s dispatch: `--set-webhook`, the missing-token refusal before anything boots, and server assembly with a non-blocking fake server. |
 | `otto/tests/boot/test_pipeline.py` | The lane crossing itself: an allowlisted chat gets a reply, an unrecognised chat gets no tool authority and no reply. |
+| `otto/tests/boot/test_memory_hindsight.py` | Proves the door remembers: one bank serves every surface, retain sends the vendor's shape, and an unreachable store never costs the answer. |
 | `otto/tests/cp0/` | CP0 eval tests. |
 | `otto/tests/cp0/__init__.py` | Package marker for `otto/tests/cp0`. |
 | `otto/tests/cp0/conftest.py` | Shared pytest fixtures for this folder. |
