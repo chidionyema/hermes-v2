@@ -23,6 +23,15 @@ source is worse than provenance that admits what it is.
 
 This is a migration, not a service: it runs once, as a Job, against a
 bank. It writes nothing back to hindsight and deletes nothing anywhere.
+
+It also fails when it did not do its job. The first live run exited 0
+having written 4 facts of 693 and marked the other 689 "unusable" -- a
+green Job and an empty store, which is the failure mode this estate
+refuses to ship (founder, 2026-09-05: incident work "is basically
+patching and firefighting"). So a row the store refuses is counted as a
+failure and the process exits 1, and an embedding lane that will not
+answer ends the run at the first refusal rather than filling the table
+with vectorless rows a later run would skip as already present.
 """
 
 from __future__ import annotations
@@ -54,17 +63,35 @@ DEFAULT_TIMEOUT_S = 60.0
 FALLBACK_TIER = "T2"
 
 
+class BackfillIncomplete(RuntimeError):
+    """The run stopped because it could not produce the store it promises.
+
+    Carries the report as it stood, so the operator reading the Job's last
+    line sees how far it got and not only that it stopped.
+    """
+
+    def __init__(self, message: str, report: "BackfillReport") -> None:
+        super().__init__(f"{message} ({report})")
+        self.report = report
+
+
 @dataclass
 class BackfillReport:
     read: int = 0
     written: int = 0
     skipped_existing: int = 0
-    skipped_unusable: int = 0
+    #: A hindsight row with no text in it. Nothing is wrong with the run
+    #: when this is non-zero: there is nothing in the row to remember.
+    skipped_empty: int = 0
+    #: A fact the store refused. Always a defect -- in the row, the schema
+    #: or this bridge -- and what makes the process exit 1.
+    failed: int = 0
 
     def __str__(self) -> str:
         return (
             f"read={self.read} written={self.written} "
-            f"already_present={self.skipped_existing} unusable={self.skipped_unusable}"
+            f"already_present={self.skipped_existing} "
+            f"empty={self.skipped_empty} failed={self.failed}"
         )
 
 
@@ -159,23 +186,36 @@ def run(config: MemoryConfig | None = None) -> BackfillReport:
                 report.read += 1
                 fact = _to_fact(item)
                 if fact is None:
-                    report.skipped_unusable += 1
+                    report.skipped_empty += 1
                     continue
                 if store.get_fact(conn, fact.id) is not None:
                     report.skipped_existing += 1
                     continue
                 if provider is not None:
+                    # The first refusal ends the run, and this is the reason
+                    # it is not logged-and-carried-on. A fact written without
+                    # its vector is not a slightly worse fact: the next run
+                    # sees the row already present and skips it, so the gap is
+                    # permanent and silent, and the hybrid retrieval this store
+                    # exists for is left with one arm forever. Live proof, Job
+                    # otto-memory-store-3 on 2026-09-05: the router answered
+                    # 403 to all 693 embed calls (the virtual key's lane list
+                    # did not carry `embed`) and the run reported success. The
+                    # bridge is idempotent, so stopping costs nothing but the
+                    # rows already correctly written.
                     try:
                         fact = replace(fact, embedding=provider.embed(fact.content))
-                    except Exception:  # noqa: BLE001 - a fact with no vector is
-                        # still found by the full-text arm; store it anyway.
-                        _LOG.warning("embedding failed for %s", fact.id, exc_info=True)
+                    except Exception as exc:  # noqa: BLE001 - re-raised below
+                        raise BackfillIncomplete(
+                            f"the embedding lane refused {fact.id}: {exc}", report
+                        ) from exc
                 try:
                     store.write_fact(conn, fact)
                 except Exception:  # noqa: BLE001 - one bad row never ends a
-                    # migration over several hundred; it is counted instead.
+                    # migration over several hundred; it is counted instead,
+                    # and the count is what makes the process exit 1.
                     _LOG.warning("write failed for %s", fact.id, exc_info=True)
-                    report.skipped_unusable += 1
+                    report.failed += 1
                     continue
                 report.written += 1
             offset += len(items)
@@ -187,8 +227,20 @@ def run(config: MemoryConfig | None = None) -> BackfillReport:
 
 def main() -> int:
     logging.basicConfig(level=logging.INFO)
-    report = run()
+    try:
+        report = run()
+    except BackfillIncomplete as exc:
+        print(exc.report)
+        _LOG.error("%s", exc)
+        return 1
     print(report)
+    if report.failed:
+        _LOG.error(
+            "%d of %d memories were refused by the store; the bridge is not complete",
+            report.failed,
+            report.read,
+        )
+        return 1
     return 0
 
 
