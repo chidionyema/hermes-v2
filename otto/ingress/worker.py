@@ -152,7 +152,15 @@ class Worker:
             await msg.term()
             return
 
-        binding = self._store.find_by_tenant(channel, envelope.tenant_id)
+        # The bot the message came in on answers. Two bots can serve one
+        # tenant on one channel (founder 2026-09-05: both Telegram bots must
+        # answer), and a tenant lookup would send every reply through
+        # whichever row came first. Envelopes minted before the door stamped
+        # the binding fall back to the tenant lookup.
+        if envelope.reply_binding:
+            binding = self._store.find_by_external_id(channel, envelope.reply_binding)
+        else:
+            binding = self._store.find_by_tenant(channel, envelope.tenant_id)
         if binding is None or not binding.outbound_secret_ref:
             # A listen-only connection. Not a fault of this delivery, and
             # not something a retry fixes: the operator adds the outbound

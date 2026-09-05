@@ -185,7 +185,7 @@ class EventGateway:
                 NOTHING_TO_DO, "nothing to act on", tenant_id=binding.tenant_id
             )
 
-        task_env = self._mint(surface_env, plugin, content)
+        task_env = self._mint(surface_env, plugin, content, binding.external_id)
         subject = self._publisher.publish_submitted(task_env)
         return IngressResult(
             ACCEPTED,
@@ -196,7 +196,11 @@ class EventGateway:
         )
 
     def _mint(
-        self, surface_env: SurfaceEnvelope, plugin: ChannelPlugin, content: str
+        self,
+        surface_env: SurfaceEnvelope,
+        plugin: ChannelPlugin,
+        content: str,
+        reply_binding: str | None = None,
     ) -> TaskEnvelope:
         """The neutral task the agent lanes will read. It carries the
         channel as provenance only — a lane that changes behaviour on the
@@ -229,4 +233,5 @@ class EventGateway:
             # minted by the channel's binding and handed back to the same
             # binding to send keeps that true while still closing the loop.
             reply_to=surface_env.reply_to,
+            reply_binding=reply_binding,
         )

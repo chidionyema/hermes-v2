@@ -337,3 +337,75 @@ def test_the_telegram_plugin_sends_through_the_bot_api(monkeypatch) -> None:
     )
     TelegramPlugin().send_reply(BOT_TOKEN, str(CHAT_ID), "answered")
     assert sent == [(BOT_TOKEN, CHAT_ID, "answered")]
+
+
+SECOND_WEBHOOK_SECRET = "alerts-inbound-shared-secret"
+SECOND_BOT_TOKEN = "alerts-outbound-bot-token"
+SECOND_SECRET_REF = "vault://otto/acme/alerts"
+SECOND_OUTBOUND_REF = "vault://otto/acme/alerts-bot"
+
+
+def test_two_bots_on_one_tenant_each_answer_as_themselves(monkeypatch) -> None:
+    """Founder 2026-09-05: both Telegram bots must answer. A message that
+    came in on the second bot's webhook secret goes back out with the
+    second bot's token, not with whichever row the tenant lookup finds
+    first."""
+    import json
+
+    store = _store()
+    store.register(
+        ChannelBinding(
+            tenant_id=TENANT,
+            channel=TELEGRAM,
+            external_id="alerts-bot:acme-workspace",
+            secret_ref=SECOND_SECRET_REF,
+            outbound_secret_ref=SECOND_OUTBOUND_REF,
+        ),
+        credential=SECOND_WEBHOOK_SECRET,
+    )
+    publisher = RecordingPublisher()
+    gateway = EventGateway(
+        store=store,
+        secrets=FakeSecrets(
+            {SECRET_REF: WEBHOOK_SECRET, SECOND_SECRET_REF: SECOND_WEBHOOK_SECRET}
+        ),
+        publisher=publisher,
+        obs=SilentObs(),
+    )
+    result = gateway.handle(
+        TELEGRAM,
+        {"X-Telegram-Bot-Api-Secret-Token": SECOND_WEBHOOK_SECRET},
+        json.dumps(UPDATE).encode("utf-8"),
+    )
+    assert result.status == ACCEPTED, result.reason
+    envelope = publisher.envelopes[0]
+    assert envelope.reply_binding == "alerts-bot:acme-workspace"
+
+    plugin = RecordingPlugin()
+    worker, fake = _worker(
+        store,
+        FakeSecrets({OUTBOUND_REF: BOT_TOKEN, SECOND_OUTBOUND_REF: SECOND_BOT_TOKEN}),
+        plugin,
+        answer=_answer("from the second bot"),
+    )
+    msg = FakeMsg(data=envelope.canonical_json())
+
+    _run(worker, msg, fake, monkeypatch)
+
+    assert plugin.sent == [(SECOND_BOT_TOKEN, str(CHAT_ID), "from the second bot")]
+    assert msg.acked and not msg.naked and not msg.termed
+
+
+def test_an_envelope_naming_no_binding_still_answers_by_tenant(monkeypatch) -> None:
+    """A task minted before the door stamped the binding is answered the
+    old way, not dropped."""
+    envelope = _accepted_envelope().model_copy(update={"reply_binding": None})
+    plugin = RecordingPlugin()
+    worker, fake = _worker(
+        _store(), FakeSecrets({OUTBOUND_REF: BOT_TOKEN}), plugin, answer=_answer("ok")
+    )
+    msg = FakeMsg(data=envelope.canonical_json())
+
+    _run(worker, msg, fake, monkeypatch)
+
+    assert plugin.sent == [(BOT_TOKEN, str(CHAT_ID), "ok")]

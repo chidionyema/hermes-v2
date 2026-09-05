@@ -90,7 +90,16 @@ def test_two_channels_produce_the_same_envelope_for_the_same_content(
     # channel's address space and never read by a lane. Telegram has one
     # (a chat id) and a plain HTTP caller has none, and that difference is
     # the transport differing, which is what this test permits.
-    ignore = {"task_id", "created_at", "provenance", "source", "reply_to"}
+    # ``reply_binding`` is the same kind of thing: which connection row on
+    # that transport the message came in on, so the answer leaves by it.
+    ignore = {
+        "task_id",
+        "created_at",
+        "provenance",
+        "source",
+        "reply_to",
+        "reply_binding",
+    }
     assert {
         k: v
         for k, v in telegram_task.model_dump(mode="json").items()
