@@ -16,11 +16,23 @@ already enforces. Before this, the step was a canned payload and every
 reply the founder received read ``unverified: noted: <his own words>``,
 which is an echo, not an answer. He reported that three times.
 
-One honest gap remains, named here rather than hidden: the memory fact
-is constructed and round-tripped through ``Fact.to_row``/``Fact.from_row``
-(proving the shape is correct) but is not written to the real Postgres
-store — ``otto.memory.store`` needs a live database connection this boot
-lane has no contract for yet (no env var for it was named in this task).
+Memory is two tiers, and the split is measured rather than assumed. The
+read is synchronous and local: ``otto.memory.fast_recall`` runs pgvector
+and Postgres full-text search over ``otto_facts`` and fuses them by
+reciprocal rank fusion — two indexed queries, no model call. The write is
+both: the fact lands in that same Postgres store, and the same text is
+handed to hindsight, which does entity extraction, consolidation and the
+knowledge graph out of band where its cross-encoder can take as long as
+it needs. Reading through hindsight instead was measured at 31.87s per
+recall on 2026-09-05 (its own trace: no LLM on that path, ~31.7s of it a
+local cross-encoder rerank on a one-CPU limit), which is why the
+synchronous side no longer goes there.
+
+The store connection comes from ``OTTO_MEMORY_DATABASE_URL`` or libpq's
+own ``PG*`` variables (``otto.memory.db``, env only, LAW 46). When
+neither is set both tiers are no-ops and this lane answers exactly as it
+did before memory existed — an unconfigured memory never costs a sender
+their answer, and neither does a broken one.
 
 The reply is still marked unverified, and that is correct: the
 Verification Plane is not called here, so P1 holds by omission. An
@@ -42,13 +54,15 @@ for it.
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+import logging
+from dataclasses import dataclass, replace
 
 from otto.boot.transport import TelegramTransport
 from otto.gateway.core import Envelope as GatewayEnvelope
 from otto.gateway.core import GatewayResponse, ToolGateway
 from otto.gateway.registry import ToolRegistry, ToolSpec
 from otto.gateway.registry import Tier as GatewayTier
+from otto.memory import fast_recall
 from otto.memory import hindsight as memory_api
 from otto.memory.models import Fact, Provenance
 from otto.obs.core import ObsHandle, TaskContext
@@ -58,6 +72,8 @@ from otto.router.contract import RouterResponse, normalise_provider_output
 from otto.router.core import InMemoryNotifier, OutcomeState, Router, RouterTask
 from otto.router.providers import LiteLLMClient, ProviderClient
 from otto.router.render import render_claim, render_claims
+
+_LOG = logging.getLogger(__name__)
 from otto.spine.envelope import TaskClass, TaskEnvelope, TaskSource, Tier, TrustTag
 from otto.surface.bindings.telegram import TelegramBinding
 from otto.surface.envelope import SurfaceEnvelope, TrustClass
@@ -160,6 +176,44 @@ def _with_memory(message: str, recalled: str) -> str:
         f"{recalled}\n\n"
         f"{message}"
     )
+
+
+def _store_fact(fact: Fact) -> bool:
+    """Write one fact to the Postgres store the recall path reads.
+
+    Returns whether the row landed, and never raises. The embedding is
+    computed here, on the write, because that is the only place it can be
+    paid for out of band: a recall must never wait on an embedding call
+    for a fact it is about to search past. When no embedding provider is
+    configured the row is still written with a null vector and is still
+    fully searchable — retrieval.py's full-text arm indexes ``content``
+    regardless, which is what makes an unconfigured embedder a degraded
+    mode rather than an outage.
+    """
+    from otto.memory import db, fast_recall, store
+    from otto.memory.embeddings_litellm import provider_from_env
+
+    if not fast_recall.configured():
+        return False
+    embedded = fact
+    provider = provider_from_env()
+    if provider is not None:
+        try:
+            embedded = replace(fact, embedding=provider.embed(fact.content))
+        except Exception:  # noqa: BLE001 - a pluggable vendor provider (LAW 34)
+            # fails in ways this lane cannot enumerate; a fact with no vector
+            # is still a fact, so store it rather than dropping it.
+            _LOG.warning(
+                "embedding failed; storing fact without a vector", exc_info=True
+            )
+    try:
+        with db.connect() as conn:
+            store.write_fact(conn, embedded)
+    except Exception:  # noqa: BLE001 - see the docstring: the store is best
+        # effort on this path and its failure is never the sender's problem.
+        _LOG.warning("fact write to the memory store failed", exc_info=True)
+        return False
+    return True
 
 
 #: Typing one of these first sends the message to the reasoning lane
@@ -347,12 +401,14 @@ def answer_envelope(
     noted_text = gw_response.output["noted"] if gw_response.output else content
     task_class, asked = route_hint(noted_text)
 
-    # What the estate already knows about this. One bank for every surface, so
-    # a person who asked over one channel is remembered on the next
-    # (otto/memory/hindsight.py). Empty when memory is off or unreachable, and
-    # a memory that cannot be reached never costs the sender their answer.
+    # What the estate already knows about this, read from the estate's own
+    # Postgres: dense pgvector search fused with full-text search by
+    # reciprocal rank fusion (otto/memory/fast_recall.py). One store for
+    # every surface, so a person who asked over one channel is remembered on
+    # the next. Empty when memory is off or unreachable, and a memory that
+    # cannot be reached never costs the sender their answer.
     with obs.memory.task_span(ctx, "memory.recall"):
-        recalled = memory_api.recall(asked or noted_text)
+        recalled = fast_recall.recall(asked or noted_text)
         obs.memory.info("memory.recalled", ctx, chars=len(recalled))
     with obs.router.task_span(ctx, "router.execute"):
         outcome = _router().execute(
@@ -426,10 +482,14 @@ def answer_envelope(
             value=gw_response.envelope_id,
         )
         restored = Fact.from_row(fact.to_row())
-        # The fact used to end here -- built, round-tripped, dropped. It now
-        # reaches the estate's memory, which is what makes an answer on one
-        # channel available to the next one (module docstring, and the daily
-        # write counts in otto/memory/hindsight.py).
+        # Tier 2, the store the next recall actually reads. Best effort by
+        # design: a database that is down loses this fact, and must not lose
+        # the sender their answer, so the failure is logged and counted and
+        # nothing propagates.
+        stored = _store_fact(fact)
+        # Tier 3. The same text goes to hindsight, which extracts entities,
+        # consolidates and maintains the knowledge graph out of band. It is no
+        # longer on the answering path, so the time it takes is its own.
         written = memory_api.retain(
             content,
             context=reply_lines[0] if reply_lines else None,
@@ -445,6 +505,7 @@ def answer_envelope(
             "memory.fact_round_tripped",
             ctx,
             fact_id=restored.id,
+            stored=stored,
             retained=written,
         )
 

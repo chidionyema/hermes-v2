@@ -67,13 +67,34 @@ def _try_embed_within_deadline(
 def _lexical_search(
     conn: psycopg.Connection, query_text: str, limit: int
 ) -> list[Fact]:
+    # Any term, not every term. ``plainto_tsquery`` ANDs its lexemes
+    # together, which is right for a search box and wrong for the thing
+    # this arm is actually given: a sentence somebody typed at a chat bot.
+    # "what colour is the sky" against a stored "the sky is green" matched
+    # nothing under AND, because the fact does not contain the word
+    # "colour" -- so the lexical half of the hybrid returned empty for
+    # almost every real question, and the fusion had one arm to fuse.
+    # Rewriting the same lexemes with ``|`` makes it a proper ranked
+    # retrieval: a fact matching one term is a weak hit, a fact matching
+    # four is a strong one, and ``ts_rank`` is what tells them apart. That
+    # ranking is the signal reciprocal rank fusion consumes; an AND filter
+    # gives it nothing to rank.
     with conn.cursor(row_factory=dict_row) as cur:
         cur.execute(
             """
-            SELECT *, ts_rank(content_tsv, plainto_tsquery('english', %(q)s)) AS _score
-            FROM otto_facts
-            WHERE content_tsv @@ plainto_tsquery('english', %(q)s)
-              AND superseded_by IS NULL
+            WITH q AS (
+                SELECT to_tsquery(
+                    'english',
+                    array_to_string(
+                        tsvector_to_array(to_tsvector('english', %(q)s)), ' | '
+                    )
+                ) AS tsq
+            )
+            SELECT f.*, ts_rank(f.content_tsv, q.tsq) AS _score
+            FROM otto_facts f, q
+            WHERE q.tsq IS NOT NULL
+              AND f.content_tsv @@ q.tsq
+              AND f.superseded_by IS NULL
             ORDER BY _score DESC
             LIMIT %(limit)s
             """,
