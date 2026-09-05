@@ -517,13 +517,17 @@ are tracked, so what you see below is the source they come from.
 | `otto/memory/` | CP4: facts with provenance that survive a restart; the Postgres store and its migrations. |
 | `otto/memory/__init__.py` | CP4 memory / context-engine core (crew#768). |
 | `otto/memory/audit.py` | Pluggable audit emission for the hygiene job. |
+| `otto/memory/backfill.py` | The one-way bridge that stops the fact store being empty: hindsight's existing memories, copied into `otto_facts` keeping each memory's own id, so an interrupted run is simply re-run. |
 | `otto/memory/config.py` | Configurable limits for the memory engine. |
 | `otto/memory/hindsight.py` | The estate's memory over its HTTP API: recall before the router, retain after it. One bank for every surface, so context crosses channels; unset or unreachable is a no-op. |
 | `otto/memory/context.py` | Context budgets and compaction (crew#768 board row: "compaction and budgets" - named explicitly on CP4's board row, and no other Otto lane owns them). |
 | `otto/memory/db.py` | Connection and migrations for the memory store. |
 | `otto/memory/embeddings.py` | Pluggable embedding provider interface. |
+| `otto/memory/embeddings_litellm.py` | The one concrete embedding provider, and still not a vendor: the OpenAI embeddings wire format spoken to the estate's own router. Every request carries the width the fact table was built at and a response of any other width is refused. Unset variables mean full-text search alone, which is a tested mode. |
+| `otto/memory/fast_recall.py` | The synchronous read: pgvector and Postgres full-text search fused by reciprocal rank fusion, in place of a cross-encoder that took 31.87s per question. Never raises; a failure costs the sender no memory, never their answer. |
 | `otto/memory/hygiene.py` | The hygiene job: expires facts past their TTL and compacts duplicate facts for the same (entity, attribute), keeping the most recent. |
 | `otto/memory/migrations/` | Numbered SQL migrations for the memory store, applied in order. |
+| `otto/memory/migrate.py` | `python -m otto.memory.migrate`: applies the migrations against the env-configured database and prints what it applied, or the reason it could not. |
 | `otto/memory/migrations/0001_facts_core.sql` | CP4 memory engine core schema (crew#768). |
 | `otto/memory/migrations/0002_cp4_hardening.sql` | CP4 hardening pass (crew#768, independent-verifier fixes). |
 | `otto/memory/models.py` | The Fact model. |
@@ -660,6 +664,8 @@ are tracked, so what you see below is the source they come from.
 | `otto/tests/cp4/test_cp4_hardening.py` | Step definitions for `cp4_hardening.feature`, plus regression tests for the independent verifier's findings on crew#768 (comment 5485606405). |
 | `otto/tests/cp4/test_cp4_memory_engine.py` | Step definitions for otto/tests/cp4/features/cp4_memory_engine.feature. |
 | `otto/tests/cp4/test_dangling_reference.py` | Regression: a fact referencing a missing row aborts loudly, as its own error class, and stores nothing. |
+| `otto/tests/cp4/test_embedding_lane.py` | The vector arm's one wire, driven against a real loopback HTTP server: the request carries the store's width, a wrong width is refused, the key rides in the header, a `file:` endpoint never reaches urllib, and a router that is down still lets the sender have their answer. |
+| `otto/tests/cp4/test_l2_sync_recall.py` | The synchronous read path against a real Postgres: it returns what was stored, and it returns fast. |
 | `otto/tests/cp5/` | CP5 router tests. |
 | `otto/tests/cp5/__init__.py` | CP5 router and structured-outputs BDD suite (crew#768). |
 | `otto/tests/cp5/conftest.py` | Shared fixtures for the CP5 router BDD suite. |
