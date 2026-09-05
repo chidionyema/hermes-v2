@@ -27,6 +27,7 @@ bank. It writes nothing back to hindsight and deletes nothing anywhere.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import os
@@ -39,6 +40,7 @@ from otto.memory.config import MemoryConfig, load_config
 from otto.memory.embeddings_litellm import provider_from_env, require_http
 from otto.memory.hindsight import BANK_ENV, DEFAULT_BANK, ORG, URL_ENV
 from otto.memory.models import VALID_TIERS, Fact, Provenance
+from otto.obs.ulid import _CROCKFORD, is_ulid
 
 _LOG = logging.getLogger(__name__)
 
@@ -74,6 +76,30 @@ def _page(base: str, bank: str, limit: int, offset: int, timeout: float) -> dict
         return json.loads(resp.read().decode("utf-8"))
 
 
+def envelope_ulid_for(source: str) -> str:
+    """The envelope ULID a backfilled fact is attributed to.
+
+    ``otto_facts.source_envelope_ulid`` is CHECKed to the 26-character
+    Crockford shape (migrations/0002_cp4_hardening.sql), and a hindsight
+    memory carries no such thing: its own id is a UUID and a cron task id
+    is ``cron_<hex>_<stamp>``. The first live run (Job otto-memory-store-3,
+    2026-09-05) wrote 4 of 693 facts for exactly that reason. A source that
+    is already a ULID is kept as it is. Anything else is mapped to one
+    deterministically: the top 128 bits of blake2b over the source string,
+    with the high bit cleared so the first character stays in ``0-7`` as a
+    standard ULID's does. Same source, same ULID, on every run, so the
+    bridge stays idempotent and the origin can be recomputed from the
+    hindsight row at any time.
+    """
+    if is_ulid(source):
+        return source
+    value = int.from_bytes(
+        hashlib.blake2b(source.encode(), digest_size=16).digest(), "big"
+    )
+    value &= (1 << 127) - 1
+    return "".join(_CROCKFORD[(value >> shift) & 0x1F] for shift in range(125, -1, -5))
+
+
 def _to_fact(item: dict) -> Fact | None:
     """One hindsight memory as a ``Fact``, or ``None`` when it carries no
     text worth storing. Never raises on a shape the vendor changes."""
@@ -91,7 +117,7 @@ def _to_fact(item: dict) -> Fact | None:
     tier = meta.get("tier")
     if tier not in VALID_TIERS:
         tier = FALLBACK_TIER
-    source = meta.get("task_id") or f"hindsight:{item.get('id')}"
+    source = envelope_ulid_for(meta.get("task_id") or f"hindsight:{item.get('id')}")
     taint = str(meta.get("taint_capped", "")).lower() == "true"
 
     try:
