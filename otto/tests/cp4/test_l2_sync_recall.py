@@ -11,8 +11,12 @@ regression of two orders of magnitude, not to measure a laptop.
 
 from __future__ import annotations
 
+import contextlib
+import http.server
+import json
 import os
 import re
+import threading
 import time
 from dataclasses import replace
 
@@ -214,3 +218,118 @@ def test_backfill_provenance_always_fits_the_ulid_check(db_conn):
 
 def test_backfill_skips_a_memory_with_no_text():
     assert backfill._to_fact({"id": "abc", "text": "   "}) is None
+
+
+# --- the bridge reports what it actually did ------------------------------
+#
+# Job otto-memory-store-3 (idp, 2026-09-05 12:09Z) exited 0 after writing 4
+# facts of 693 and calling the other 689 "unusable". Two separate defects
+# produced that line, and only one of them was in the data: the estate's
+# router refused all 693 embed calls with 403 because the virtual key's lane
+# list did not carry `embed`. A run that cannot embed and reports success is
+# the masking the founder ruled out of this estate on the same day, so these
+# scenarios hold the exit code, not the prose.
+#
+# Nothing here is stubbed. A real HTTP server answers as hindsight and as a
+# router that refuses, and the facts are written to the real scratch Postgres
+# through the real migrations.
+
+
+class _FakeEstate(http.server.BaseHTTPRequestHandler):
+    """Hindsight's list endpoint, and a router that answers 403 the way the
+    live one did."""
+
+    memories: list[dict] = []
+
+    def _json(self, code: int, payload: dict) -> None:
+        body = json.dumps(payload).encode()
+        self.send_response(code)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def do_GET(self) -> None:  # noqa: N802 - BaseHTTPRequestHandler's name
+        if "/memories/list" in self.path:
+            offset = int(re.search(r"offset=(\d+)", self.path).group(1))
+            items = self.memories[offset:]
+            self._json(200, {"items": items, "total": len(self.memories)})
+            return
+        self._json(404, {"error": "no such path"})
+
+    def do_POST(self) -> None:  # noqa: N802 - same
+        # What the estate's LiteLLM actually returned to the Job.
+        self._json(403, {"error": {"message": "key not allowed to access model"}})
+
+    def log_message(self, *args) -> None:  # noqa: ANN002 - silence the test log
+        return
+
+
+@contextlib.contextmanager
+def _fake_estate(memories):
+    _FakeEstate.memories = memories
+    server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), _FakeEstate)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        yield f"http://127.0.0.1:{server.server_address[1]}"
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+
+
+@pytest.fixture()
+def backfill_env(db_conn, monkeypatch):
+    """Points the bridge at a fake estate and returns its base URL setter."""
+
+    def _point_at(base: str, *, with_router: bool) -> None:
+        monkeypatch.setenv("OTTO_MEMORY_HINDSIGHT_URL", base)
+        monkeypatch.setenv("OTTO_MEMORY_BANK", "hermes")
+        monkeypatch.setenv("OTTO_MEMORY_BACKFILL_TIMEOUT_S", "10")
+        if with_router:
+            monkeypatch.setenv("OTTO_MEMORY_EMBEDDING_URL", f"{base}/v1")
+            monkeypatch.setenv("OTTO_MEMORY_EMBEDDING_MODEL", "embed")
+            monkeypatch.setenv("OTTO_MEMORY_EMBEDDING_TIMEOUT_S", "10")
+        else:
+            monkeypatch.delenv("OTTO_MEMORY_EMBEDDING_URL", raising=False)
+            monkeypatch.delenv("OTTO_MEMORY_EMBEDDING_MODEL", raising=False)
+
+    return _point_at
+
+
+def test_a_router_that_refuses_ends_the_run_instead_of_writing_vectorless_rows(
+    db_conn, backfill_env
+):
+    memories = [
+        {"id": f"2576940d-7f87-4569-a82c-f822950634{n:02d}", "text": f"memory {n}"}
+        for n in range(5)
+    ]
+    with _fake_estate(memories) as base:
+        backfill_env(base, with_router=True)
+        with pytest.raises(backfill.BackfillIncomplete) as raised:
+            backfill.run()
+        # The Job's own exit code, which is the half that was wrong live.
+        assert backfill.main() == 1
+
+    # It stopped on the first refusal rather than on the 693rd, and it left
+    # nothing behind: a row written without its vector is skipped as
+    # already-present by every later run, so the gap would never close.
+    assert raised.value.report.written == 0
+    assert db_conn.execute("SELECT count(*) FROM otto_facts").fetchone()[0] == 0
+
+
+def test_an_empty_hindsight_row_is_not_a_failure(db_conn, backfill_env):
+    memories = [
+        {"id": "2576940d-7f87-4569-a82c-f82295063401", "text": "a real memory"},
+        {"id": "2576940d-7f87-4569-a82c-f82295063402", "text": "   "},
+    ]
+    with _fake_estate(memories) as base:
+        backfill_env(base, with_router=False)
+        report = backfill.run()
+        assert backfill.main() == 0
+
+    # One had nothing to remember; that is not a defect and must not turn a
+    # completed migration red. The other is in the table, once, after two runs.
+    assert (report.written, report.skipped_empty, report.failed) == (1, 1, 0)
+    assert db_conn.execute("SELECT count(*) FROM otto_facts").fetchone()[0] == 1
