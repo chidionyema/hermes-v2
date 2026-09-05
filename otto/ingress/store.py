@@ -156,10 +156,20 @@ class ChannelBindingStore(Protocol):
         or ``None``. One indexed read."""
         ...
 
+    def find_by_external_id(
+        self, channel: str, external_id: str
+    ) -> ChannelBinding | None:
+        """One connection row by its own key. This is the read the
+        answering side does when the envelope names the binding the door
+        matched: with two bots serving one tenant on one channel, the
+        tenant lookup below cannot say which bot must answer."""
+        ...
+
     def find_by_tenant(self, channel: str, tenant_id: str) -> ChannelBinding | None:
         """The customer's connection on this channel, looked up by who
         they are rather than by what they presented. This is the read the
-        answering side does: it holds a task envelope naming a tenant, and
+        answering side does when the envelope names no binding: it holds a
+        task envelope naming a tenant, and
         needs that tenant's outbound credential reference."""
         ...
 
@@ -221,6 +231,17 @@ class SqliteChannelBindingStore:
             "outbound_secret_ref, principal_allowlist "
             "FROM channel_binding WHERE channel = ? AND token_fingerprint = ?",
             (channel, fingerprint(credential)),
+        ).fetchone()
+        return self._row_to_binding(row)
+
+    def find_by_external_id(
+        self, channel: str, external_id: str
+    ) -> ChannelBinding | None:
+        row = self._conn.execute(
+            "SELECT tenant_id, channel, external_id, secret_ref, status, "
+            "outbound_secret_ref, principal_allowlist "
+            "FROM channel_binding WHERE channel = ? AND external_id = ?",
+            (channel, external_id),
         ).fetchone()
         return self._row_to_binding(row)
 

@@ -80,6 +80,15 @@ TENANT_LOOKUP_SQL = (
     "FROM channel_binding WHERE channel = %s AND tenant_id = %s"
 )
 
+#: The read the answering side runs when the envelope names the binding
+#: the door matched: the primary key, so two bots on one tenant each
+#: answer as themselves.
+EXTERNAL_ID_LOOKUP_SQL = (
+    "SELECT tenant_id, channel, external_id, secret_ref, status, "
+    "outbound_secret_ref, principal_allowlist "
+    "FROM channel_binding WHERE channel = %s AND external_id = %s"
+)
+
 STATUS_SQL = (
     "UPDATE channel_binding SET status = %s WHERE channel = %s AND external_id = %s"
 )
@@ -184,6 +193,15 @@ class PostgresChannelBindingStore:
         with self._connect() as conn:
             row = conn.execute(
                 LOOKUP_SQL, (channel, fingerprint(credential))
+            ).fetchone()
+        return self._row_to_binding(row)
+
+    def find_by_external_id(
+        self, channel: str, external_id: str
+    ) -> ChannelBinding | None:
+        with self._connect() as conn:
+            row = conn.execute(
+                EXTERNAL_ID_LOOKUP_SQL, (channel, external_id)
             ).fetchone()
         return self._row_to_binding(row)
 

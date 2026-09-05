@@ -125,6 +125,12 @@ class TaskEnvelope(BaseModel):
     # plugin that minted it. Optional because a task with no reply address
     # (a cron tick, a subtask) is a normal task, not a malformed one.
     reply_to: str | None = None
+    # Which connection row on that channel the door matched (its
+    # ``external_id``). Two bots can serve one tenant on one channel; the
+    # answer must leave through the bot the message came in on, and the
+    # tenant alone cannot say which that was. Optional for the same reason
+    # ``reply_to`` is.
+    reply_binding: str | None = None
 
     @field_serializer("taint")
     def _serialize_taint(self, taint: frozenset[TrustTag]) -> list[str]:
