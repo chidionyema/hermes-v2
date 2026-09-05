@@ -15,6 +15,14 @@ unset, ``provider_from_env`` returns ``None`` and
 full-text search over the same rows. That is a real answer, not a
 failure: it is the BM25 half of the hybrid, and it is why memory keeps
 working before an embedding model is wired up.
+
+The estate wires it to the `embed` lane on its own router
+(idp platform/otto-gateway/deployment.yaml), which resolves to
+gemini-embedding-001 at 1536 dimensions -- the width
+``MemoryConfig.embedding_dim`` templates into the fact table. Every
+request asks for that width and every response is checked against it, so
+a lane that silently changes shape fails loudly on the first call instead
+of erroring on every insert afterwards.
 """
 
 from __future__ import annotations
@@ -26,6 +34,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
+from otto.memory.config import MemoryConfig, load_config
 from otto.memory.embeddings import EmbeddingProvider, EmbeddingUnavailableError
 
 _LOG = logging.getLogger(__name__)
@@ -74,14 +83,24 @@ class LiteLLMEmbeddingProvider:
         model: str,
         api_key: str | None = None,
         timeout_s: float = DEFAULT_TIMEOUT_S,
+        dimensions: int | None = None,
     ) -> None:
+        require_http(url, URL_ENV)
         self._url = url.rstrip("/") + "/embeddings"
         self._model = model
         self._api_key = api_key
         self._timeout_s = timeout_s
+        self._dimensions = dimensions
 
     def embed(self, text: str) -> list[float]:
-        body = json.dumps({"model": self._model, "input": text}).encode("utf-8")
+        request: dict[str, object] = {"model": self._model, "input": text}
+        if self._dimensions is not None:
+            # The OpenAI embeddings parameter, which LiteLLM forwards to whichever
+            # vendor is behind the lane. Asked for on every call rather than left to
+            # the proxy's config, so this process gets the width its fact table was
+            # created at even if the router's row is edited.
+            request["dimensions"] = self._dimensions
+        body = json.dumps(request).encode("utf-8")
         headers = {"Content-Type": "application/json"}
         if self._api_key:
             headers["Authorization"] = f"Bearer {self._api_key}"
@@ -106,10 +125,21 @@ class LiteLLMEmbeddingProvider:
             raise EmbeddingUnavailableError(
                 "embedding response carried an empty vector"
             )
+        if self._dimensions is not None and len(vector) != self._dimensions:
+            # A vector of the wrong width cannot be stored in, or compared against,
+            # a pgvector column of a fixed dimension -- Postgres refuses it. Caught
+            # here it is one warning and a lexical answer; missed, it is an insert
+            # error on every write and a query error on every read. The most likely
+            # cause is a router lane that ignored `dimensions`, and this message is
+            # what names it.
+            raise EmbeddingUnavailableError(
+                f"embedding lane {self._model!r} returned {len(vector)} dimensions, "
+                f"but this store is built for {self._dimensions}"
+            )
         return [float(x) for x in vector]
 
 
-def provider_from_env() -> EmbeddingProvider | None:
+def provider_from_env(config: MemoryConfig | None = None) -> EmbeddingProvider | None:
     """The provider this process should use, or ``None`` when no endpoint
     and model are configured.
 
@@ -122,8 +152,34 @@ def provider_from_env() -> EmbeddingProvider | None:
     model = os.environ.get(MODEL_ENV)
     if not url or not model:
         return None
+    try:
+        return _build(url, model, config)
+    except (ValueError, TypeError):
+        # A malformed endpoint or timeout is a configuration defect, and it is
+        # loud in the log -- but it is not worth an exception on the answering
+        # path. Every caller here already treats "no provider" as the lexical-only
+        # mode, so the degradation is one that is tested rather than a new one.
+        _LOG.error(
+            "embedding provider is misconfigured; recall will use full-text search "
+            "alone. Check %s and %s.",
+            URL_ENV,
+            TIMEOUT_ENV,
+            exc_info=True,
+        )
+        return None
+
+
+def _build(url: str, model: str, config: MemoryConfig | None) -> EmbeddingProvider:
     raw_timeout = os.environ.get(TIMEOUT_ENV)
     timeout = float(raw_timeout) if raw_timeout else DEFAULT_TIMEOUT_S
+    config = config or load_config()
     return LiteLLMEmbeddingProvider(
-        url=url, model=model, api_key=os.environ.get(API_KEY_ENV), timeout_s=timeout
+        url=url,
+        model=model,
+        api_key=os.environ.get(API_KEY_ENV),
+        timeout_s=timeout,
+        # One number, read from one place: the same MemoryConfig field the migration
+        # templates otto_facts.embedding with. The column and the request cannot
+        # disagree because neither of them carries its own copy of the width.
+        dimensions=config.embedding_dim,
     )

@@ -119,7 +119,7 @@ def run(config: MemoryConfig | None = None) -> BackfillReport:
     bank = os.environ.get(BANK_ENV, DEFAULT_BANK)
     limit = int(os.environ.get(PAGE_SIZE_ENV) or DEFAULT_PAGE_SIZE)
     timeout = float(os.environ.get(TIMEOUT_ENV) or DEFAULT_TIMEOUT_S)
-    provider = provider_from_env()
+    provider = provider_from_env(config)
 
     report = BackfillReport()
     offset = 0

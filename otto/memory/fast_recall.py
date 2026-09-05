@@ -98,7 +98,9 @@ def recall(
     if not configured(config):
         return ""
     provider = (
-        embedding_provider if embedding_provider is not None else provider_from_env()
+        embedding_provider
+        if embedding_provider is not None
+        else provider_from_env(config)
     )
     try:
         with db.connect(config) as conn:
