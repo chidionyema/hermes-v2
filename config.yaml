@@ -155,3 +155,14 @@ mcp_servers:
 compression:
   threshold_tokens: 150000
   context_timeout_seconds: 300
+
+# ADR 0022 - Founder Override, "The Bleeding Edge Mandate" (founder 2026-09-05).
+# Overrides PR #1876 decision 1 ("voice stays off by default"): a bleeding-edge model
+# in 2026 is voice-first. auto_tts:true makes the gateway's global default voice-ON
+# (hermes-agent gateway/run.py _sync_voice_mode_state_to_adapter reads this key;
+# _should_auto_tts_for_chat falls back to this default when a chat has no per-chat
+# mode). The per-chat opt-out stays intact: a chat that ran `/voice off` is held in
+# _auto_tts_disabled_chats and wins over this default (run.py:22175-22190). So this is
+# opt-OUT voice, matching the founder's stated preference.
+voice:
+  auto_tts: true

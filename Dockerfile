@@ -3,8 +3,15 @@ FROM python:3.12-slim AS base
 # hermes-agent runtime container — first real build, crew#290/crew#286 (Oracle OKE standby).
 # Entry point matches ai.architect.gateway.plist exactly: `python -m hermes_cli.main gateway run`.
 
+# ADR 0022 (2026-09-05): ffmpeg + audio codec libs. Local faster-whisper STT needs
+# a real ffmpeg/ffprobe in the PATH to decode Opus/OGG voice notes, and edge-tts output
+# must be resampled/encoded to Telegram's Opus spec. Without these the pod falls back
+# to a cloud STT provider or `none` (transcription_tools.py local-first chain, which
+# checks _HAS_FASTER_WHISPER then _has_local_command). libgomp1 is a ctranslate2 runtime
+# dep faster-whisper loads by default; libsndfile1 is a soundfile/audio-codec runtime dep.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     git curl ca-certificates openssh-client netcat-openbsd \
+    ffmpeg libgomp1 libsndfile1 \
     && rm -rf /var/lib/apt/lists/*
 
 RUN pip install --no-cache-dir uv==0.12.5
@@ -54,7 +61,12 @@ WORKDIR /app/hermes-agent
 # `crane export --platform linux/arm64 ... | tar -tv`). The interpreter lives in a world-readable
 # directory instead.
 ENV UV_PYTHON_INSTALL_DIR=/opt/uv/python
-RUN uv sync --frozen --no-dev --extra messaging --extra hindsight --extra otlp --extra anthropic --extra edge-tts \
+# ADR 0022 (2026-09-05): the fork's `voice` extra installs faster-whisper==1.2.1
+# (+ sounddevice, numpy). That is what flips `_HAS_FASTER_WHISPER` true in
+# transcription_tools.py and engages the already-native local-first STT chain, with
+# the estate router as the fallback only when local decode fails. Same pattern as the
+# other extras below: config.yaml names a capability, the extra that backs it is here.
+RUN uv sync --frozen --no-dev --extra messaging --extra hindsight --extra otlp --extra anthropic --extra edge-tts --extra voice \
     && chmod -R a+rX /opt/uv \
     && test -x "$(readlink -f .venv/bin/python)" \
     && case "$(readlink -f .venv/bin/python)" in /root/*) echo "python under /root" >&2; exit 1;; esac
