@@ -56,7 +56,9 @@ from __future__ import annotations
 import json
 import logging
 import os
+import time
 from dataclasses import dataclass, replace
+from typing import Callable
 
 from otto.boot.transport import TelegramTransport
 from otto.gateway.core import Envelope as GatewayEnvelope
@@ -290,6 +292,91 @@ def build_registry() -> ToolRegistry:
     return registry
 
 
+def _json_or_empty(raw: str) -> dict:
+    """Parse a model tool-arguments string into a dict; never let malformed
+    argument JSON raise inside the executor. Empty/malformed -> {}."""
+    if not raw:
+        return {}
+    try:
+        parsed = json.loads(raw)
+    except (TypeError, ValueError):
+        return {}
+    return parsed if isinstance(parsed, dict) else {}
+
+
+def _tool_schema(tool: ToolSpec) -> dict:
+    """The OpenAI-style tool schema the model router expects for one
+    registered tool (function name + its strict JSON input schema)."""
+    return {
+        "type": "function",
+        "function": {
+            "name": tool.name,
+            "parameters": tool.input_schema,
+        },
+    }
+
+
+def _build_tool_loop(
+    *, ceiling: GatewayTier, registry_gateway: ToolGateway, obs, ctx
+) -> tuple[list[dict], Callable[[str, str], str]]:
+    """Assemble the runtime tool list and the gateway-backed executor.
+
+    ``ceiling`` is the task's effective tier (already P5-capped by the
+    caller). A tool whose tier exceeds that ceiling is filtered out of the
+    definitions the model sees — an untrusted sender never learns ``terminal``
+    exists, let alone gets to call it. The executor routes each model tool call
+    through the gateway on a fresh envelope at that same ceiling so a denial
+    (under-tier, unknown tool, no human gate) comes back as ``denied:
+    <reason>`` text for the model to relay, never as silence pretending the
+    tool ran. Every turn, denied or not, emits one ``router.tool_turn``
+    observability line via the ObsHandle the caller already holds.
+    """
+    tools: list[dict] = []
+
+    def execute(name: str, arguments: str) -> str:
+        start = time.perf_counter()
+        # The ceiling used to gate this call is the same Capped one the tool
+        # list was built under, so a write refused once stays refused.
+        env = GatewayEnvelope(
+            task_id=ctx.task_ulid,
+            authority_ceiling=ceiling.value,
+            untrusted=(ceiling < GatewayTier.T2),
+        )
+        resp = registry_gateway.call(env, name, _json_or_empty(arguments))
+        elapsed_ms = int((time.perf_counter() - start) * 1000)
+        if resp.denied:
+            reason = resp.denial.reason.value if resp.denial else "unknown"
+            obs.router.info(
+                "router.tool_turn",
+                ctx,
+                tool=name,
+                denied=True,
+                reason=reason,
+                elapsed_ms=elapsed_ms,
+            )
+            return f"denied: {reason}"
+        result = (resp.output or {}).get("result")
+        obs.router.info(
+            "router.tool_turn",
+            ctx,
+            tool=name,
+            denied=False,
+            elapsed_ms=elapsed_ms,
+        )
+        return result if isinstance(result, str) else str(result)
+
+    for tool_name in registry_gateway.registry.names():
+        spec = registry_gateway.registry.get(tool_name)
+        if spec is None or spec.tier > ceiling:
+            continue
+        if tool_name == NOTE_TOOL_NAME:
+            # The boot lane's own gateway probe, not a fork tool the model
+            # should ever be offered as a callable function.
+            continue
+        tools.append(_tool_schema(spec))
+    return tools, execute
+
+
 @dataclass(frozen=True)
 class ObsHandles:
     """One ``ObsHandle`` per lane this pipeline touches, booted once at
@@ -427,6 +514,18 @@ def answer_envelope(
         recalled = fast_recall.recall(asked or noted_text)
         obs.memory.info("memory.recalled", ctx, chars=len(recalled))
     with obs.router.task_span(ctx, "router.execute"):
+        # P5: an untrusted task is capped at the gateway's taint ceiling no
+        # matter what tier it claims, so the tools the model may see are the
+        # ones at or below that effective ceiling. ``terminal`` never exists
+        # for a tainted sender.
+        raw_ceiling = GatewayTier.parse(task_env.effective_tier.value)
+        taint_ceiling = GatewayTier.parse(registry_gateway.config.taint_ceiling)
+        ceiling = (
+            min(raw_ceiling, taint_ceiling) if task_env.is_taint_capped else raw_ceiling
+        )
+        tools, executor = _build_tool_loop(
+            ceiling=ceiling, registry_gateway=registry_gateway, obs=obs, ctx=ctx
+        )
         outcome = _router().execute(
             RouterTask(
                 input=_prompt_for(_with_memory(asked or noted_text, recalled)),
@@ -435,6 +534,8 @@ def answer_envelope(
                 task_id=task_env.task_id,
             ),
             provider_client or LiteLLMClient(),
+            tools=tools or None,
+            tool_executor=executor if tools else None,
         )
         obs.router.info(
             "router.outcome",

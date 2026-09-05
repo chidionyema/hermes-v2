@@ -20,7 +20,7 @@ import urllib.error
 import urllib.request
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Protocol
+from typing import Callable, Protocol
 
 _KEY_FILE_RELATIVE = ".config/prospector/secrets.d/LITELLM_API_KEY"
 _DEFAULT_BASE_URL = "https://llm.mumchimp.com/v1"
@@ -37,6 +37,20 @@ _DEFAULT_BASE_URL = "https://llm.mumchimp.com/v1"
 #: reasoning model; a lane that does not think spends only what it needs,
 #: because this is a cap and not an allocation.
 _DEFAULT_MAX_TOKENS = 8192
+_DEFAULT_TOOL_MAX_TURNS = 12
+
+
+def _tool_max_turns() -> int:
+    """Bounded tool loop budget (default 12). An env real-config override so
+    a deployment can tighten it without a code change; never zero."""
+    raw = os.environ.get("OTTO_ROUTER_TOOL_MAX_TURNS")
+    if not raw:
+        return _DEFAULT_TOOL_MAX_TURNS
+    try:
+        value = int(raw)
+    except ValueError:
+        return _DEFAULT_TOOL_MAX_TURNS
+    return value if value > 0 else _DEFAULT_TOOL_MAX_TURNS
 
 
 def _max_tokens() -> int:
@@ -75,10 +89,21 @@ class ProviderResult:
 
 
 class ProviderClient(Protocol):
-    """One call to one model. Raises the three failure classes above."""
+    """One call to one model. Raises the three failure classes above.
+
+    ``tools``/``tool_executor`` are the tool-call loop's two inputs and
+    default to None so every existing caller and fake is unchanged: a client
+    given no tools does a single plain completion, exactly as before.
+    """
 
     def complete(
-        self, model: str, payload: str, timeout_seconds: float
+        self,
+        model: str,
+        payload: str,
+        timeout_seconds: float,
+        *,
+        tools: list[dict] | None = None,
+        tool_executor: Callable[[str, str], str] | None = None,
     ) -> ProviderResult: ...
 
 
@@ -121,21 +146,96 @@ class LiteLLMClient:
     max_tokens: int = field(default_factory=_max_tokens)
 
     def complete(
-        self, model: str, payload: str, timeout_seconds: float
+        self,
+        model: str,
+        payload: str,
+        timeout_seconds: float,
+        *,
+        tools: list[dict] | None = None,
+        tool_executor: Callable[[str, str], str] | None = None,
     ) -> ProviderResult:
+        """One logical completion, possibly several HTTP turns (tool loop).
+
+        When ``tools`` and ``tool_executor`` are given, the call starts with
+        the user payload and the tool schema, then keeps POSTing while the
+        reply carries ``tool_calls``: the assistant message is appended, each
+        tool call runs through ``tool_executor(name, argstring)`` and its
+        result is appended as a ``role=tool`` message, then the client asks
+        again. The loop stops at ``OTTO_ROUTER_TOOL_MAX_TURNS`` (12) or at
+        the first text-only reply. The per-turn observability line
+        (``router.tool_turn``) is emitted by the caller-supplied executor
+        wrapper in ``answer_envelope``, which is the one place an ``ObsHandle``
+        actually reaches a model call.
+        """
         key = _read_key()
         if not key:
             raise EgressDenied("no LITELLM_API_KEY in environment or secrets.d")
-        body = json.dumps(
-            {
-                "model": model,
-                "max_tokens": self.max_tokens,
-                "messages": [{"role": "user", "content": payload}],
-            }
-        ).encode()
+        if tools and tool_executor is None:
+            raise ValueError("tool_executor is required when tools are given")
+
+        messages: list[dict] = [{"role": "user", "content": payload}]
+        accumulated_tokens = 0
+        turns = 0
+        limit = _tool_max_turns()
+
+        while True:
+            obj = self._round_trip(
+                key, model, messages, timeout_seconds, tools=tools or None
+            )
+            usage = obj.get("usage") or {}
+            accumulated_tokens += int(usage.get("total_tokens") or 0)
+            message = (obj.get("choices") or [{}])[0].get("message") or {}
+            tool_calls = message.get("tool_calls") or []
+            text = message.get("content") or ""
+
+            if not tools or not tool_executor or not tool_calls:
+                # Plain completion (no tool path) or the model stopped
+                # calling tools: the text is the answer.
+                return ProviderResult(text=text, tokens=accumulated_tokens)
+
+            # One tool round: append the assistant's tool_calls, run each,
+            # then loop for the next model turn.
+            assistant_msg = dict(message)
+            assistant_msg.setdefault("role", "assistant")
+            messages.append(assistant_msg)
+            for call in tool_calls:
+                function = call.get("function") or {}
+                name = function.get("name") or ""
+                arguments = function.get("arguments") or "{}"
+                result = tool_executor(name, arguments)
+                messages.append(
+                    {
+                        "role": "tool",
+                        "tool_call_id": call.get("id") or "",
+                        "content": result,
+                    }
+                )
+            turns += 1
+            if turns >= limit:
+                # A runaway tool loop is refused, not fed forever: hand back
+                # the last text under the cap rather than looping forever.
+                return ProviderResult(text=text, tokens=accumulated_tokens)
+
+    def _round_trip(
+        self,
+        key: str,
+        model: str,
+        messages: list[dict],
+        timeout_seconds: float,
+        *,
+        tools: list[dict] | None = None,
+    ) -> dict:
+        """One HTTP POST to the chat completions endpoint; returns parsed JSON."""
+        body: dict = {
+            "model": model,
+            "max_tokens": self.max_tokens,
+            "messages": messages,
+        }
+        if tools is not None:
+            body["tools"] = tools
         req = urllib.request.Request(  # noqa: S310 - https only, estate router
             f"{litellm_base_url()}/chat/completions",
-            data=body,
+            data=json.dumps(body).encode(),
             headers={
                 "Authorization": f"Bearer {key}",
                 "Content-Type": "application/json",
@@ -144,7 +244,7 @@ class LiteLLMClient:
         )
         try:
             with urllib.request.urlopen(req, timeout=timeout_seconds) as r:  # noqa: S310
-                obj = json.loads(r.read() or b"{}")
+                return json.loads(r.read() or b"{}")
         except urllib.error.HTTPError as exc:
             raise ProviderHTTPError(exc.code) from exc
         except TimeoutError as exc:
@@ -154,9 +254,3 @@ class LiteLLMClient:
             if isinstance(reason, TimeoutError):
                 raise ProviderTimeout(str(reason)) from exc
             raise EgressDenied(str(reason)) from exc
-        text = ((obj.get("choices") or [{}])[0].get("message") or {}).get(
-            "content"
-        ) or ""
-        usage = obj.get("usage") or {}
-        tokens = int(usage.get("total_tokens") or 0)
-        return ProviderResult(text=text, tokens=tokens)
