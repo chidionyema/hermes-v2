@@ -48,11 +48,22 @@ approvals:
 command_allowlist:
   - execute_code
 _config_version: 38
-aux:
-  model: claude-fast
+# The runtime reads `auxiliary.*` (hermes-agent agent/auxiliary_client.py); a root `aux:` key
+# is read by nothing, and `claude-fast` is not an alias the estate router serves, so the lane
+# this block named was never in force: every aux task fell back to the main provider, and a
+# photo was described by a text-only model. That is the "no confirmed vision capability" the
+# bot reported on 2026-09-05. gemini is the router's vision-capable alias; the vision task
+# names it explicitly because the aux default is a text lane.
+auxiliary:
   provider: custom
+  model: gemini
   base_url: https://llm.mumchimp.com/v1
   key_env: LITELLM_API_KEY
+  vision:
+    provider: custom
+    model: gemini
+    base_url: https://llm.mumchimp.com/v1
+    key_env: LITELLM_API_KEY
 limits:
   max_cost_usd_per_task: 5
   budget_hard_stop: true
