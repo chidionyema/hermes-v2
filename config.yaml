@@ -110,6 +110,31 @@ plugins:
     - sovereign
     - guide
 
+# The estate MCP server: the one place Otto reads estate state and asks the estate's
+# investigator (idp ADR 0006, "the platform answers for itself over one MCP"). The gateway in
+# front of it is agentgateway in the mcp namespace, stateless, so a plain HTTP request is a
+# complete call and nothing here holds a session.
+#
+# Founder 2026-09-05, on HolmesGPT: "no i would need to be able to aks it fron telegrn and
+# backstage also". The Backstage half is the portal's /investigate page; this is the Telegram
+# half. idp mcp/plugins/estate_holmes.py registers the ask_holmes tool on that server, so Otto
+# gets it the moment the plugin lands -- and every later tool on the same server the same way,
+# with nothing to change here.
+#
+# The key was already in the pod and unusable: idp platform/hermes-agent/mcp-key.yaml has
+# projected ESTATE_MCP_KEY from the vault since crew#561 CP3, but this file never named the
+# server, so nothing ever read it. ${ESTATE_MCP_KEY} is resolved at start from the process
+# environment (tools/mcp_tool.py); the key itself is never written here.
+#
+# 180s because an investigation is several Kubernetes and Prometheus queries plus a model call,
+# and the 120s default cuts a real answer off mid-way.
+mcp_servers:
+  estate:
+    url: http://agentgateway.mcp.svc.cluster.local:3000/estate/mcp
+    headers:
+      Authorization: "Bearer ${ESTATE_MCP_KEY}"
+    timeout: 180
+
 # crew#496 2026-08-27 14:10Z: the founder's Telegram session reached ~500k tokens
 # because compaction fired only at 50% of a 1M window and its summary model
 # (claude-sonnet-5 on the OAuth lane) timed out at 120s on every attempt, so
