@@ -48,8 +48,19 @@ DEFAULT_BANK = "hermes"
 #: The vendor's path carries an org segment; `default` on a self-host.
 ORG = "default"
 
-RECALL_TIMEOUT_S = 3.0
-RETAIN_TIMEOUT_S = 3.0
+#: How long a recall may hold the answer up, and how long a retain may hold
+#: the worker. Three seconds was the original figure and it was never once
+#: met: hindsight logged `[RECALL CANCELLED] reason=client disconnected` for
+#: every request this gateway made on 2026-09-05, and its own consolidation
+#: timings that hour read `recall=96.951s` and `recall=1.886s` -- a spread no
+#: single hardcoded number survives. So the value is a setting, and the
+#: default is what a person waiting in a chat will tolerate rather than what
+#: the slowest recall needs. A recall that overruns still costs nobody their
+#: answer: _post swallows the timeout and the lane answers with no memory.
+RECALL_TIMEOUT_ENV = "OTTO_MEMORY_RECALL_TIMEOUT_S"
+RETAIN_TIMEOUT_ENV = "OTTO_MEMORY_RETAIN_TIMEOUT_S"
+DEFAULT_RECALL_TIMEOUT_S = 10.0
+DEFAULT_RETAIN_TIMEOUT_S = 5.0
 #: Recall is prompt budget, not a database dump: the model has to read it.
 RECALL_MAX_TOKENS = 1200
 
@@ -80,6 +91,30 @@ def config(env: dict[str, str] | None = None) -> MemoryConfig:
         )
         url = None
     return MemoryConfig(url=url, bank=(src.get(BANK_ENV) or DEFAULT_BANK).strip())
+
+
+def _timeout(name: str, default: float, env: dict[str, str] | None = None) -> float:
+    """Seconds from ``name``, falling back to ``default``. A value that is not
+    a positive number is the same as unset: a zero or negative timeout means
+    urllib gives up before it has sent anything, which would silently turn
+    memory off rather than bound it."""
+    src = env if env is not None else os.environ
+    raw = (src.get(name) or "").strip()
+    if not raw:
+        return default
+    try:
+        value = float(raw)
+    except ValueError:
+        _LOG.warning(
+            "memory.bad_timeout: %s=%r is not a number; using %s", name, raw, default
+        )
+        return default
+    if value <= 0:
+        _LOG.warning(
+            "memory.bad_timeout: %s=%s is not positive; using %s", name, value, default
+        )
+        return default
+    return value
 
 
 def _post(url: str, payload: dict[str, Any], timeout: float) -> dict[str, Any] | None:
@@ -115,7 +150,7 @@ def recall(query: str, *, cfg: MemoryConfig | None = None) -> str:
     data = _post(
         cfg.endpoint("/recall"),
         {"query": query, "max_tokens": RECALL_MAX_TOKENS, "prefer_observations": True},
-        RECALL_TIMEOUT_S,
+        _timeout(RECALL_TIMEOUT_ENV, DEFAULT_RECALL_TIMEOUT_S),
     )
     if not isinstance(data, dict):
         return ""
@@ -156,6 +191,10 @@ def retain(
         # The vendor's schema types metadata values as strings.
         item["metadata"] = {k: str(v) for k, v in metadata.items() if v is not None}
     return (
-        _post(cfg.endpoint(""), {"items": [item], "async": True}, RETAIN_TIMEOUT_S)
+        _post(
+            cfg.endpoint(""),
+            {"items": [item], "async": True},
+            _timeout(RETAIN_TIMEOUT_ENV, DEFAULT_RETAIN_TIMEOUT_S),
+        )
         is not None
     )
