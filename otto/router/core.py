@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Protocol
+from typing import Callable, Protocol
 
 from otto.router.budget import BudgetLedger
 from otto.router.config import RouterConfig
@@ -111,7 +111,14 @@ class Router:
 
     # -- execution under policy ---------------------------------------------
 
-    def execute(self, task: RouterTask, client: ProviderClient) -> RouterOutcome:
+    def execute(
+        self,
+        task: RouterTask,
+        client: ProviderClient,
+        *,
+        tools: list[dict] | None = None,
+        tool_executor: Callable[[str, str], str] | None = None,
+    ) -> RouterOutcome:
         lane = self.route(task)
         lane_cfg = self.config.lanes[lane]
 
@@ -139,9 +146,21 @@ class Router:
             attempts += 1
             models_called.append(lane_cfg.model)
             try:
-                result = client.complete(
-                    lane_cfg.model, task.input, self.config.retry.timeout_seconds
-                )
+                # Only a caller that actually asked for tools receives the
+                # tool kwargs, so a plain client (or a test fake that
+                # predates the loop) is called exactly as before.
+                if tools:
+                    result = client.complete(
+                        lane_cfg.model,
+                        task.input,
+                        self.config.retry.timeout_seconds,
+                        tools=tools,
+                        tool_executor=tool_executor,
+                    )
+                else:
+                    result = client.complete(
+                        lane_cfg.model, task.input, self.config.retry.timeout_seconds
+                    )
             except ProviderTimeout:
                 # The founder's word: a timeout is budget-charged — the
                 # provider did work and the bandwidth is gone.
