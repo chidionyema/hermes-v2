@@ -495,6 +495,7 @@ are tracked, so what you see below is the source they come from.
 | `otto/gateway/denial.py` | Structured denial — a refusal is data, never silence. |
 | `otto/gateway/errors.py` | Exceptions raised at registration time (not call time). |
 | `otto/gateway/registry.py` | Tool registry: at most ``config.max_tools`` tools, each with a strict JSON Schema for its input (spec section 6). |
+| `otto/gateway/bridge.py` | Step 1 (door-hands): register the fork's toolset (``model_tools``) behind the same gateway, at the spec tier, with a synthetic ``terminal_irreversible`` T3 spec so a destructive ``terminal`` command is human-gated, never run. |
 | `otto/ingress/` | The Universal Event Gateway: one door for every channel and every customer; the founder's 2026-09-03 directive that onboarding a channel is a database write, never a deployment. |
 | `otto/ingress/__init__.py` | Package docstring: what the gateway is, the multi-tenant directive it implements, and its boundaries. |
 | `otto/ingress/__main__.py` | `python -m otto.ingress`: the process the deployment runs, booting the collector, the binding database and the bus before the socket opens. |
@@ -628,6 +629,7 @@ are tracked, so what you see below is the source they come from.
 | `otto/tests/cp2/step_defs/` | pytest-bdd step definitions for CP2. |
 | `otto/tests/cp2/step_defs/__init__.py` | Package marker for `otto/tests/cp2/step_defs`. |
 | `otto/tests/cp2/step_defs/test_cp2_gateway_core.py` | Step definitions for ``features/cp2_gateway_core.feature``. |
+| `otto/tests/cp2/test_bridge.py` | CP2: the bridge registers the stubbed fork toolset, T2 ``terminal`` never runs a destructive command, ``terminal_irreversible`` carries T3+irreversible so the gate declines it, unknown tools deny. |
 | `otto/tests/cp2b/` | CP2b surface-contract tests. |
 | `otto/tests/cp2b/__init__.py` | CP2b surface-contract test suite (crew#768). |
 | `otto/tests/cp2b/conftest.py` | Shared fixtures for the CP2b surface-contract BDD suite. |
