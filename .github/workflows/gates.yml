@@ -51,7 +51,7 @@ jobs:
   # so the runner needs hermes-agent at the exact commit PINNED_VERSION names.
   # The founder's fork holds that commit; upstream carries no tag for it.
   # Runs on the same checkout the laptop runs, not on whatever main is today.
-  incident-tests:
+  flow-tests:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
