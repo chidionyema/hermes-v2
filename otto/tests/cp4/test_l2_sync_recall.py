@@ -12,6 +12,7 @@ regression of two orders of magnitude, not to measure a laptop.
 from __future__ import annotations
 
 import os
+import re
 import time
 from dataclasses import replace
 
@@ -169,9 +170,46 @@ def test_backfill_never_borrows_a_task_id_it_does_not_have():
     fact = backfill._to_fact({"id": "abc", "text": "written by the architect"})
 
     assert fact is not None
-    assert fact.provenance.source_envelope_ulid == "hindsight:abc"
+    assert fact.provenance.source_envelope_ulid == backfill.envelope_ulid_for(
+        "hindsight:abc"
+    )
+    assert fact.provenance.source_envelope_ulid != backfill.envelope_ulid_for(
+        "hindsight:abd"
+    )
     assert fact.provenance.tier_at_capture == backfill.FALLBACK_TIER
     assert fact.provenance.taint is False
+
+
+def test_backfill_provenance_always_fits_the_ulid_check(db_conn):
+    """The live table CHECKs source_envelope_ulid to the ULID shape. The
+    first live backfill wrote 4 of 693 facts because hindsight ids are
+    UUIDs and cron task ids are ``cron_<hex>_<stamp>``; neither passed. A
+    real ULID is kept, anything else maps to one deterministically, and
+    the row must actually land in Postgres, which is where the shape is
+    enforced."""
+    ulid_re = re.compile(r"^[0-9A-HJKMNP-TV-Z]{26}$")
+    for source in (
+        "01M1RD03B7MEB3Q2KSS315E0ZQ",
+        "cron_b6b4ccf3134d_20260830_020105",
+        "hindsight:2576940d-7f87-4569-a82c-f8229506343d",
+    ):
+        got = backfill.envelope_ulid_for(source)
+        assert ulid_re.match(got), (source, got)
+        assert got == backfill.envelope_ulid_for(source)
+    assert (
+        backfill.envelope_ulid_for("01M1RD03B7MEB3Q2KSS315E0ZQ")
+        == "01M1RD03B7MEB3Q2KSS315E0ZQ"
+    )
+
+    fact = backfill._to_fact(
+        {
+            "id": "2576940d-7f87-4569-a82c-f8229506343d",
+            "text": "User ran estate-map skill as scheduled cron job",
+            "metadata": {"tier": "T2", "task_id": "cron_b6b4ccf3134d_20260830_020105"},
+        }
+    )
+    store.write_fact(db_conn, fact)
+    assert store.get_fact(db_conn, fact.id) is not None
 
 
 def test_backfill_skips_a_memory_with_no_text():
