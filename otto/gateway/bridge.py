@@ -117,9 +117,7 @@ def _model_tools() -> Any:
     return model_tools
 
 
-def register_fork_tools(
-    registry: ToolRegistry, *, enabled_toolsets: list[str], task_id: str | None = None
-) -> int:
+def register_fork_tools(registry: ToolRegistry, *, enabled_toolsets: list[str]) -> int:
     """Register the enabled fork tools behind ``registry``; return the count.
 
     ``terminal`` is T2 and executes ordinary (non-destructive) commands.  A
@@ -146,7 +144,7 @@ def register_fork_tools(
                 name=name,
                 tier=tier,
                 input_schema=schema,
-                handler=_terminal_handler(task_id=task_id),
+                handler=_terminal_handler(),
                 idempotent=False,
             )
         else:
@@ -154,7 +152,7 @@ def register_fork_tools(
                 name=name,
                 tier=tier,
                 input_schema=schema,
-                handler=_fork_handler(name, task_id=task_id),
+                handler=_fork_handler(name),
                 irreversible=False,
                 idempotent=True,
             )
@@ -178,7 +176,7 @@ def register_fork_tools(
                     },
                     "required": ["command"],
                 },
-                handler=_terminal_irreversible_handler(task_id=task_id),
+                handler=_terminal_irreversible_handler(),
                 irreversible=True,
                 idempotent=False,
             )
@@ -195,9 +193,7 @@ def _schema(definition: dict[str, Any]) -> dict[str, Any]:
     return {"type": "object", "properties": {}, "required": []}
 
 
-def _run_fork(
-    name: str, args: dict[str, Any], *, task_id: str | None
-) -> dict[str, Any]:
+def _run_fork(name: str, args: dict[str, Any]) -> dict[str, Any]:
     """Execute one fork tool and return the ``{"result": <string>}`` shape.
 
     The fork's ``handle_function_call`` returns a JSON string; the bridge
@@ -205,15 +201,13 @@ def _run_fork(
     is stringified so the contract stays ``{"result": str}``.
     """
     mt = _model_tools()
-    raw = mt.handle_function_call(name, args, task_id=task_id or "")
+    raw = mt.handle_function_call(name, args)
     if not isinstance(raw, str):
         raw = str(raw)
     return {"result": raw}
 
 
-def _terminal_handler(
-    *, task_id: str | None = None
-) -> Callable[[dict[str, Any]], dict[str, Any]]:
+def _terminal_handler() -> Callable[[dict[str, Any]], dict[str, Any]]:
     """T2 terminal. Executes ordinary commands; hard-refuses a destructive one."""
 
     def _handle(args: dict[str, Any]) -> dict[str, Any]:
@@ -223,31 +217,27 @@ def _terminal_handler(
                 f"command {command!r} matched the un-undoable set; route it to "
                 f"{TERMINAL_IRREVERSIBLE} (T3) for the human gate."
             )
-        return _run_fork(TERMINAL, args, task_id=task_id)
+        return _run_fork(TERMINAL, args)
 
     return _handle
 
 
-def _terminal_irreversible_handler(
-    *, task_id: str | None = None
-) -> Callable[[dict[str, Any]], dict[str, Any]]:
+def _terminal_irreversible_handler() -> Callable[[dict[str, Any]], dict[str, Any]]:
     """T3 + irreversible terminal body. Reached only through the human gate."""
 
     def _handle(args: dict[str, Any]) -> dict[str, Any]:
         # Executes the (approved) destructive command: still routed through
         # the fork's own terminal underneath the T3 name/tier.
-        return _run_fork(TERMINAL, args, task_id=task_id)
+        return _run_fork(TERMINAL, args)
 
     return _handle
 
 
-def _fork_handler(
-    name: str, *, task_id: str | None = None
-) -> Callable[[dict[str, Any]], dict[str, Any]]:
+def _fork_handler(name: str) -> Callable[[dict[str, Any]], dict[str, Any]]:
     """Handler for every non-terminal fork tool."""
 
     def _handle(args: dict[str, Any]) -> dict[str, Any]:
-        return _run_fork(name, args, task_id=task_id)
+        return _run_fork(name, args)
 
     return _handle
 
