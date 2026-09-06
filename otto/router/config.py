@@ -48,11 +48,26 @@ _DEFAULT_MODEL_FAMILIES = {
     "claude": "anthropic",
     "minimax": "minimax",
     "minimax/minimax-01": "minimax",
+    "minimax_m27": "minimax",
     "google/gemini": "google",
     "gemini": "google",
     "deepseek": "deepseek",
     "kimi": "moonshot",
     "moonshot/kimi-k3": "moonshot",
+    # The estate router's neutral aliases. A lane is configured with a name on
+    # the router, never a vendor path (LAW 34), so every name idp's
+    # llm/config.yaml serves has to derive to a family or this class of refusal
+    # comes back the next time a lane is pointed at one. On 2026-09-05 the two
+    # Otto doors had their bulk lane on "fast"; it was in no mapping, so
+    # family_of refused the whole configuration and the gateway answered
+    # nothing on every inbound message. The family is the vendor the alias
+    # currently resolves to in that file, which is what the distinct-family
+    # guard is actually asking about: correlated error modes.
+    "fast": "google",  # gemini/gemini-2.5-flash
+    "default": "google",  # gemini/gemini-2.5-pro
+    "vision": "google",  # gemini/gemini-2.5-flash
+    "image": "google",  # gemini/gemini-3.1-flash-image
+    "embed": "google",  # gemini/gemini-embedding-001
 }
 _DEFAULT_ON_BUDGET_EXHAUSTED = "queue_and_notify"
 _DEFAULT_MAX_RETRIES_5XX = 1

@@ -51,7 +51,7 @@ jobs:
   # so the runner needs hermes-agent at the exact commit PINNED_VERSION names.
   # The founder's fork holds that commit; upstream carries no tag for it.
   # Runs on the same checkout the laptop runs, not on whatever main is today.
-  incident-tests:
+  flow-tests:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -76,8 +76,23 @@ jobs:
 
       # The live-gateway half of CP2 SKIPs here: there is no gateway.pid on a
       # runner, and SKIP is a result. Everything else must pass.
+      # crew751's file was deleted on 2026-09-05: it opened config.yaml, the Dockerfile and a
+      # plugin.yaml and asserted what they said, which is the class bin/test-executes-gate now
+      # refuses. The two that remain each load a module of this repository and call it.
       - name: crew incident tests
-        run: python -m pytest -q -rs tests/test_incident_crew182_phone_flow.py tests/test_incident_crew751_architect_stays_on_the_router.py tests/test_incident_20260831_the_evolution_lane_never_installed_a_job.py
+        run: python -m pytest -q -rs tests/test_incident_crew182_phone_flow.py tests/test_incident_20260831_the_evolution_lane_never_installed_a_job.py
+
+  # A test that executes nothing is not a test. Nine files here read this repository's own YAML
+  # and asserted it back; idp swept the same class twice and has refused new ones since
+  # (bin/test-executes-gate, idp 519d59e8 and 02d0abe8). This job is that guard, in this repo, so
+  # the class cannot come back the way it came back in idp within the hour.
+  executes-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }   # the gate diffs the pull request against its base
+      - name: every new test file runs something
+        run: ./bin/test-executes-gate "origin/${{ github.base_ref || 'main' }}"
 
   # crew#620 CP3: strict shell practice, estate-wide, immediate effect. Every
   # *.sh/*.bash file (or a file whose first line is an sh/bash shebang) must

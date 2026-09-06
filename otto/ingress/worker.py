@@ -152,7 +152,15 @@ class Worker:
             await msg.term()
             return
 
-        binding = self._store.find_by_tenant(channel, envelope.tenant_id)
+        # The bot the message came in on answers. Two bots can serve one
+        # tenant on one channel (founder 2026-09-05: both Telegram bots must
+        # answer), and a tenant lookup would send every reply through
+        # whichever row came first. Envelopes minted before the door stamped
+        # the binding fall back to the tenant lookup.
+        if envelope.reply_binding:
+            binding = self._store.find_by_external_id(channel, envelope.reply_binding)
+        else:
+            binding = self._store.find_by_tenant(channel, envelope.tenant_id)
         if binding is None or not binding.outbound_secret_ref:
             # A listen-only connection. Not a fault of this delivery, and
             # not something a retry fixes: the operator adds the outbound
@@ -204,6 +212,20 @@ class Worker:
             self._obs.info("worker.send_failed", ctx, error=str(exc))
             await msg.nak()
             return
+
+        # Step 3: the inbound was speech, so the answer goes out as a voice
+        # note too (ADR 0022). Best-effort, never a retry trigger: the text
+        # reply above already reached the customer, and a door that cannot
+        # speak (no wired speaker) must not cost them their answer.
+        if envelope.wants_voice_reply:
+            send_voice = getattr(plugin, "send_voice", None)
+            if callable(send_voice):
+                try:
+                    send_voice(secret, envelope.reply_to, answer.reply_text)
+                except OutboundNotSupported as exc:
+                    self._obs.info("worker.voice_unsupported", ctx, error=str(exc))
+                except Exception as exc:  # noqa: BLE001 - audio upload refused
+                    self._obs.info("worker.voice_failed", ctx, error=str(exc))
 
         self._obs.info("worker.answered", ctx, channel=channel)
         await msg.ack()

@@ -31,6 +31,19 @@ _DIST_FOR_IMPORT = {
     "opentelemetry": "opentelemetry-sdk",
 }
 
+# import name -> the sibling *fork* that owns it, never a pip dependency here.
+#
+# ``model_tools`` is hermes-agent's own ``/app`` module (see
+# ``patches/hermes-agent/``): it mounts in the same image it already ships and
+# is git-ignored in a bare checkout, so it can never appear in
+# ``otto/requirements.txt``. The gate exists to refuse an *undeclared real
+# dependency*; a module a repository's own fork installs alongside it is not
+# one. Carrying the fork name in the table (not a bare exemption) keeps the
+# reason on the record for the next reader.
+_FORK_OWNED_MODULES = {
+    "model_tools": "hermes-agent (/app)",
+}
+
 
 def _requirement_lines() -> list[str]:
     lines = []
@@ -55,6 +68,15 @@ def _third_party_imports() -> set[str]:
     return {m for m in found if m not in stdlib and m != "otto"}
 
 
+def _declared() -> set[str]:
+    """Distribution names the manifest pins, plus fork-owned names the guard
+    acknowledges instead of demanding a pip pin for."""
+    declared = {re.split(r"[\[=]", line)[0].casefold() for line in _requirement_lines()}
+    # A fork-owned module is declared by its owner, not by a pip line.
+    declared |= {m.casefold() for m in _FORK_OWNED_MODULES}
+    return declared
+
+
 def test_requirements_file_exists() -> None:
     assert REQUIREMENTS.is_file(), (
         "otto/requirements.txt is the dependency manifest for the otto "
@@ -71,12 +93,14 @@ def test_every_requirement_line_is_an_exact_pin() -> None:
 
 
 def test_every_third_party_import_is_declared() -> None:
-    declared = {re.split(r"[\[=]", line)[0].casefold() for line in _requirement_lines()}
+    declared = _declared()
     missing = []
     for module in sorted(_third_party_imports()):
         dist = _DIST_FOR_IMPORT.get(module, module)
         if dist.casefold() not in declared:
-            missing.append(f"{module} (distribution {dist})")
+            owner = _FORK_OWNED_MODULES.get(module)
+            note = f" (owned by {owner})" if owner else f" (distribution {dist})"
+            missing.append(f"{module}{note}")
     assert missing == [], (
         f"otto/ imports these packages but otto/requirements.txt does not "
         f"pin them: {missing}"

@@ -3,7 +3,10 @@
 Every answer-producing model call is normalised into ``RouterResponse``.
 Malformed provider output is REFUSED with ``MalformedProviderOutput`` —
 never coerced silently: a missing key is not defaulted, a wrong type is
-not cast, an invalid confidence is not rounded to the nearest legal value.
+not cast, an unknown confidence is not guessed. Spelling is not meaning:
+``"Medium"``, ``" med "`` and ``0.6`` all say one thing and are read as
+``"med"`` (founder 2026-09-05, after a fallback model wrote ``"medium"``
+and every answer was refused); a value outside that table still refuses.
 Silent green is the defect class this refusal exists to kill.
 
 Verification status is minted UNVERIFIED here, always. The router holds no
@@ -18,6 +21,35 @@ from dataclasses import dataclass
 from enum import Enum
 
 _CONFIDENCE_VALUES = ("high", "med", "low")
+#: Spellings a model may use for the three legal values. Anything not in
+#: this table is refused, never rounded to the nearest neighbour.
+_CONFIDENCE_SYNONYMS = {
+    "high": "high",
+    "hi": "high",
+    "med": "med",
+    "medium": "med",
+    "mid": "med",
+    "moderate": "med",
+    "low": "low",
+}
+
+
+def normalise_confidence(value: object) -> str | None:
+    """The legal confidence ``value`` spells, or ``None`` when it spells none.
+
+    A string is matched case-insensitively after stripping whitespace; a
+    number in [0, 1] is banded (>= 0.75 high, >= 0.4 med, else low), which
+    is how models that were asked for a word reply with a score.
+    """
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, str):
+        return _CONFIDENCE_SYNONYMS.get(value.strip().lower())
+    if isinstance(value, (int, float)) and 0 <= value <= 1:
+        return "high" if value >= 0.75 else "med" if value >= 0.4 else "low"
+    return None
+
+
 _TIER_VALUES = ("T0", "T1", "T2", "T3")
 _REQUIRED_KEYS = ("answer", "claims", "proposed_actions", "unknowns")
 
@@ -147,12 +179,12 @@ def _parse_claims(raw: object) -> tuple[Claim, ...]:
             raise _refuse(f"claims[{i}] is not an object")
         text = row.get("text")
         refs = row.get("evidence_refs")
-        confidence = row.get("confidence")
+        confidence = normalise_confidence(row.get("confidence"))
         if not isinstance(text, str):
             raise _refuse(f"claims[{i}].text missing or not a string")
         if not isinstance(refs, list) or not all(isinstance(r, str) for r in refs):
             raise _refuse(f"claims[{i}].evidence_refs missing or not string array")
-        if confidence not in _CONFIDENCE_VALUES:
+        if confidence is None:
             raise _refuse(f"claims[{i}].confidence not one of {_CONFIDENCE_VALUES}")
         claims.append(
             Claim(text=text, evidence_refs=tuple(refs), confidence=confidence)

@@ -290,6 +290,7 @@ are tracked, so what you see below is the source they come from.
 | `bin/verify-sovereign-plugin` | Loads `plugins/sovereign` the way the gateway does and exits 0 only when the seven `sb-*` commands and the photo hook are registered. `bin/verify` reads it as one row (crew#284 CP1). |
 | `bin/verify-consult` | The same probe for the consult service (§16): daemon, loopback bind, 401 without a token, a live round-trip timed cold and warm, and the token never appearing in a log. Rows that cannot apply on this machine SKIP rather than fail, so it still runs off the founder's laptop. |
 | `bin/shell-strict` | The estate shell standard (crew#620 CP3), checked by hand instead of trusted on faith: every `*.sh`/`*.bash` file (or a file starting `#!...sh`) must pass `shellcheck -S warning`, be `shfmt -d` clean, set `set -euo pipefail`, and install a `trap`. `bin/verify` and `bin/verify-consult` are the one named exception, kept on `set -uo pipefail` without `-e`: both are pass/fail report harnesses that must run every row even after one FAILs, and `-e` was verified to abort on a bare `[ ... ]`. |
+| `bin/test-executes-gate` | Refuses a new file under `tests/` that runs nothing: a test that only opens this repository's own YAML and asserts what it says is the same statement written twice, and cannot catch a defect. Runs as the `executes-gate` job on every pull request. |
 | `ci/` | The gates that run on a pull request. Each one refuses a mistake rather than reporting it. |
 | `ci/EVIDENCE_GATE_PROOF.md` | The evidence gate refusing ten dishonest pull request bodies and passing three honest ones, with the output. A gate nobody has watched refuse anything is a claim. |
 | `ci/evidence-gate.js` | Reads the pull request body and rejects a claim with no command output behind it. Placeholder blocks, and blocks that only repeat the claim, are rejected too. |
@@ -297,7 +298,6 @@ are tracked, so what you see below is the source they come from.
 | `.github/workflows/` | Five workflows. Everything a runner can honestly answer runs here on every pull request. |
 | `.github/workflows/gates.yml` | Four jobs that mean the same thing away from the founder's laptop. `gates`: every template renders from `estate.example.yaml`, `check-readme.py`, and `verify-consult`. `bin/verify` is left out on purpose — it asks about the gateway, the venv and a credential, and a runner has none of them, so it would be red for being in the wrong place. `incident-tests`: the crew#182 phone-flow incidents against the pinned `hermes-agent` commit. `shell-strict`: crew#620 CP3's shell standard over every tracked shell file. `otto-tests`: `bin/otto-demo` runs the whole Otto v1 conformance suite (`otto/tests/`) fresh, with a real `nats-server` and a real Postgres+pgvector provisioned for the two sections that need one. This repo is public, so the minutes are free. |
 | `.github/workflows/security-scan.yml` | The estate security gate, the same composite action every active repo runs (`chidionyema/idp/.github/actions/security-scan@main`): gitleaks over the full history, pip-audit, and npm audit at High+ on shipped dependencies only. It is installed by `idp/bin/estate-security-rollout`, so this file is the rollout's, not this repo's; edit it in idp. |
-| `.github/workflows/operating-model-gate.yml` | The estate operating-model gate, called by name from idp (`chidionyema/idp/.github/workflows/operating-model-gate.yml@main`): grades the PR body against `idp/policy/operating_model.rego` and comments every refusal. The policy lives in idp; this file is a caller, so a rule change lands here without a commit. |
 | `.github/workflows/stale.yml` | A copy of idp's `platform/github/workflows/stale.yml` (crew#504): an open pull request idle for a day is closed in the same hourly run, branch kept, with a message naming `gh pr reopen` and `Blocked-by:` as the two ways back. Issues are untouched. |
 | `.github/workflows/wake-blocked.yml` | A copy of idp's `platform/github/workflows/wake-blocked.yml` (crew#504): every hour, a pull request closed by stale whose `Blocked-by:` line now points at a merged PR is reopened. |
 | `ci/evidence-gate.yml` | The workflow that runs the gate: first the body check, then the check that a screenshot of the run is committed under `docs/evidence/pr-<n>/`. |
@@ -439,14 +439,8 @@ are tracked, so what you see below is the source they come from.
 | `templates/skills/screenshot-to-story/SKILL.md.tmpl` | Turn a photo the founder sends into a well-formed issue, for the message that is an image and almost no words. |
 | `templates/skills/verify-to-prod/` | The verify-to-prod skill. |
 | `templates/skills/verify-to-prod/SKILL.md.tmpl` | Prove a merged change is actually running in production, from two angles, before anything is called done. |
-| `tests/test_incident_crew736_cp2_boot_contract.py` | Proves every Dockerfile extra is named in `boot-contract.txt`, that the build workflow runs `boot-contract.sh` against the built tar before signing, and that the contract stays secretless, uid 10001 and read-only — so a compiled image that cannot execute can never ship (crew#736 CP2). |
 | `tests/test_incident_crew182_idea_flow.py` | Proves the phone idea flow cannot write the board without the confirmation prompt, that exploratory phrasing builds nothing, and that Icebox is labelled so the dispatcher never claims it (crew#182). |
 | `tests/test_incident_otto_guide.py` | Proves the `/guide` card names every skill and job on disk and forgets a removed one without a prose edit, and that a topic returns the skill's own text. |
-| `tests/test_incident_crew278_fallback_is_another_provider.py` | Proves `config.yaml` names a fallback provider that is a different vendor from the primary, so one vendor's outage is not Otto's outage (crew#278 CP3). |
-| `tests/test_incident_crew496_fallback_names_its_credential.py` | Proves every `fallback_providers` entry in `config.yaml` carries `base_url` and `key_env`, so a fallback can never be a name with no credential behind it; that gap turned a primary refusal into 27 minutes of silence on 2026-08-27 (crew#496). |
-| `tests/test_incident_founder_summary_card_is_rich.py` | Proves `config.yaml` opts Telegram into rich messages and that the pinned hermes-agent still reads that switch, so the `/summary` card keeps its collapsible sections; upstream turned rich off by default and the card went flat unnoticed (founder, 2026-08-30). |
-| `tests/test_incident_crew506_cp1_fallback_is_one_router_hop.py` | Proves `fallback_providers` in `config.yaml` is exactly one entry and it is the estate router: the chain behind it (minimax -> deepseek, window limits) is the router's own, so Otto never re-walks it a second time on a bad minute (crew#506 CP1). |
-| `tests/test_incident_crew506_cp3_compaction_trigger_fits_the_fallback_window.py` | Proves `compression.threshold_tokens` in `config.yaml` plus the measured 45k tool/system overhead fits inside the smallest fallback window on the router (minimax `max_input_tokens` 204,800 from `/model/info`); main's 200,000 trigger did not, so a long Telegram session hit the fallback with 373k–412k input tokens and was refused (crew#506 CP3). |
 | `tests/test_incident_20260831_the_evolution_lane_never_installed_a_job.py` | Proves every `cron/*.jobs` file parses with `bin/install-cron.py`'s own loader, so a lane file written in the wrong format (crontab rows instead of JSON Lines) can never again install nothing silently; the evolution lane shipped that way and created no job from day one (2026-08-31). |
 | `tests/test_verify_sovereign_plugin_row.py` | Proves `bin/verify-sovereign-plugin` passes on the real plugin and fails, naming the gap, on a plugin that registers less (crew#284 CP1). |
 | `tests/test_incident_crew284_one_gateway_label.py` | Incident test: `bin/verify` row 12b fails on any launchd gateway label loaded on this Mac and on a retired plist left on disk. Uses a `launchctl` shim and a scratch HOME. |
@@ -460,10 +454,7 @@ are tracked, so what you see below is the source they come from.
 | `tests/test_incident_crew182_phone_flow.py` | Rung 4, named for crew #182: a message from the phone must never touch a laptop session, and the model behind the flow must be a `config.yaml` choice. Drives the real gateway `_handle_message` with only the agent run stubbed and proves a laptop transcript and working tree stay byte-identical (CP1), every write lands under `HERMES_HOME` and the live gateway holds no laptop session file open (CP2), swapping `model.provider` changes nothing in the confirmation gate (CP12), and no flow module imports a vendor SDK, with the provider layer as the positive control (CP13). CI clones hermes-agent at `PINNED_VERSION` to run it. |
 | `tests/test_evidence_gate_checks_screenshots.py` | Refuses an evidence gate that reads pasted text and not the committed screenshot. Pasted text reads the same whether the command ran or not. |
 | `tests/test_incident_crew516_cp4_image_carries_the_estate.py` | Both ways: the image COPYs this repo to `/app/estate` and boots through `deploy/k8s/entrypoint.sh`; the entrypoint never overwrites a live `auth.json` (run for real against a temp volume); `.dockerignore` keeps state and credentials out; every main image carries a `main-<run>-<sha>` tag Flux can order. |
-| `tests/test_incident_crew751_architect_stays_on_the_router.py` | The Architect's primary and aux models are router lanes on the one router key, never Cursor ACP or a vendor SDK, and the Dockerfile pipes no unpinned Cursor installer (crew#751). Rescued from the 2026-09-03 dirty tree and run in `gates.yml`. |
 | `tests/test_incident_crew561_the_image_can_reach_the_mac_and_keeps_its_exec_bits.py` | crew#561: the entrypoint copies the build without `--no-preserve=mode` and refuses to boot when `bin/hermes` is not executable (the 58-restart crash of oke-check run 33272111128); the Dockerfile installs `openssh-client` and `netcat-openbsd` so idp's mac-run can reach the founder's Mac. |
-| `tests/test_incident_crew561_pod_has_gh_and_knows_the_mac.py` | crew#561: the image installs `gh`, the founder-mac skill names `mac-run`, and no skill or approval row names a fly command (R1) — the two reasons Otto said he had no access to GitHub or the Mac. |
-| `tests/test_incident_crew570_the_signature_is_findable_by_a_third_party.py` | cosign v3 stores signatures as OCI referrers, and GHCR serves no referrers API -- so `hermes-agent` had 16 tags and zero `.sig`, and the run went green because cosign was verifying its own output. Every `cosign sign`/`verify` in `.github/workflows` must carry `--new-bundle-format=false`, and a witness that is NOT cosign must resolve the legacy `.sig` tag in the same step. |
 | `tests/test_incident_r1_no_fly_in_estate.py` | Both ways for `bin/check-platform.py`: a Fly URL or `kind: fly` is refused, a kubernetes estate passes. |
 | `tests/test_shell_strict_gate.py` | `bin/shell-strict` both ways: a clean file passes; each of the four rules refuses on its own with its reason; the `bin/verify`/`bin/verify-consult` exemption is by exact path, not by content, so a same-shaped file elsewhere is still refused; the `shell-strict` job is named in `.github/workflows/gates.yml`. |
 | `tests/test_incident_crew282_urls_pinned.py` | Both ways for the URL card: estate https links listed, localhost and Resources not; first tick sends and pins, same card is silent, a change edits the pinned message. |
@@ -504,26 +495,34 @@ are tracked, so what you see below is the source they come from.
 | `otto/gateway/denial.py` | Structured denial — a refusal is data, never silence. |
 | `otto/gateway/errors.py` | Exceptions raised at registration time (not call time). |
 | `otto/gateway/registry.py` | Tool registry: at most ``config.max_tools`` tools, each with a strict JSON Schema for its input (spec section 6). |
+| `otto/gateway/bridge.py` | Step 1 (door-hands): register the fork's toolset (``model_tools``) behind the same gateway, at the spec tier, with a synthetic ``terminal_irreversible`` T3 spec so a destructive ``terminal`` command is human-gated, never run. |
 | `otto/ingress/` | The Universal Event Gateway: one door for every channel and every customer; the founder's 2026-09-03 directive that onboarding a channel is a database write, never a deployment. |
 | `otto/ingress/__init__.py` | Package docstring: what the gateway is, the multi-tenant directive it implements, and its boundaries. |
 | `otto/ingress/__main__.py` | `python -m otto.ingress`: the process the deployment runs, booting the collector, the binding database and the bus before the socket opens. |
 | `otto/ingress/gateway.py` | The request pipeline every channel and every customer shares: nine steps, none of which names a channel. |
+| `otto/ingress/media.py` | Hands & senses 3+4 core: pure, channel-neutral media models and detectors; a voice note or photo becomes prefixed words, the Telegram-coupled bolts live in `plugins.py`. |
 | `otto/ingress/pg_store.py` | The binding table on PostgreSQL, the store the running gateway holds; the connection details come from the deployment and the password from a mounted file. |
 | `otto/ingress/plugins.py` | Per-channel plugins — the only place a channel's name means anything; the Telegram verifier lives here, behind the channel-blind door. |
 | `otto/ingress/publisher.py` | Hands the normalised task envelope to the spine; the gateway's job ends when the envelope is on the bus. |
 | `otto/ingress/secrets.py` | Resolves a secret reference to a secret value at request time; the binding table stores references, never material. |
 | `otto/ingress/server.py` | The socket: `GET /healthz` and `POST /webhook/{channel}`, for every channel and every customer. |
 | `otto/ingress/store.py` | The `channel_binding` table: which customer owns which channel — the whole of channel onboarding. |
+| `otto/ingress/thread.py` | Hands & senses 8: the door's conversation thread — one per principal, short-term, carrying across surfaces; `thread_messages` projects recent turns plus memory plus the current question. |
 | `otto/ingress/worker.py` | The answering half of the one door: a durable pull consumer on `OTTO_TASKS` that runs the shared answering path and replies on the customer's own channel, with its own token. |
 | `otto/memory/` | CP4: facts with provenance that survive a restart; the Postgres store and its migrations. |
 | `otto/memory/__init__.py` | CP4 memory / context-engine core (crew#768). |
 | `otto/memory/audit.py` | Pluggable audit emission for the hygiene job. |
+| `otto/memory/backfill.py` | The one-way bridge that stops the fact store being empty: hindsight's existing memories, copied into `otto_facts` keeping each memory's own id, so an interrupted run is simply re-run. |
 | `otto/memory/config.py` | Configurable limits for the memory engine. |
+| `otto/memory/hindsight.py` | The estate's memory over its HTTP API: recall before the router, retain after it. One bank for every surface, so context crosses channels; unset or unreachable is a no-op. |
 | `otto/memory/context.py` | Context budgets and compaction (crew#768 board row: "compaction and budgets" - named explicitly on CP4's board row, and no other Otto lane owns them). |
 | `otto/memory/db.py` | Connection and migrations for the memory store. |
 | `otto/memory/embeddings.py` | Pluggable embedding provider interface. |
+| `otto/memory/embeddings_litellm.py` | The one concrete embedding provider, and still not a vendor: the OpenAI embeddings wire format spoken to the estate's own router. Every request carries the width the fact table was built at and a response of any other width is refused. Unset variables mean full-text search alone, which is a tested mode. |
+| `otto/memory/fast_recall.py` | The synchronous read: pgvector and Postgres full-text search fused by reciprocal rank fusion, in place of a cross-encoder that took 31.87s per question. Never raises; a failure costs the sender no memory, never their answer. |
 | `otto/memory/hygiene.py` | The hygiene job: expires facts past their TTL and compacts duplicate facts for the same (entity, attribute), keeping the most recent. |
 | `otto/memory/migrations/` | Numbered SQL migrations for the memory store, applied in order. |
+| `otto/memory/migrate.py` | `python -m otto.memory.migrate`: applies the migrations against the env-configured database and prints what it applied, or the reason it could not. |
 | `otto/memory/migrations/0001_facts_core.sql` | CP4 memory engine core schema (crew#768). |
 | `otto/memory/migrations/0002_cp4_hardening.sql` | CP4 hardening pass (crew#768, independent-verifier fixes). |
 | `otto/memory/models.py` | The Fact model. |
@@ -585,10 +584,14 @@ are tracked, so what you see below is the source they come from.
 | `otto/tests/boot/__init__.py` | Package marker and scope note for `otto/tests/boot`. |
 | `otto/tests/boot/conftest.py` | `OTTO_OBS_MODE=test` and shared-store hygiene for every test in this folder. |
 | `otto/tests/boot/fakes.py` | The one recording `TelegramTransport` fake every test in this folder uses. |
+| `otto/tests/boot/test_server_routes.py` | The boot process serves health and nothing else: it holds no webhook route and imports no webhook handler, since the estate receives a channel in one place. |
 | `otto/tests/boot/test_app.py` | `handle_webhook_body`'s four required cases: allowlisted delivery, unrecognised-sender drop, malformed payload refusal, and a pipeline exception that never crashes the process. |
 | `otto/tests/boot/test_config.py` | Every environment variable this lane reads, including the missing-token refusal. |
 | `otto/tests/boot/test_main.py` | `python -m otto.boot`'s dispatch: `--set-webhook`, the missing-token refusal before anything boots, and server assembly with a non-blocking fake server. |
+| `otto/tests/boot/test_reply_verdict.py` | The verify lane's verdict decides which reply lines carry the unverified marker: a greeting renders clean, an unsupported fact keeps it, and a garbage or timed-out verdict marks every line without losing the answer. |
 | `otto/tests/boot/test_pipeline.py` | The lane crossing itself: an allowlisted chat gets a reply, an unrecognised chat gets no tool authority and no reply. |
+| `otto/tests/boot/test_memory_hindsight.py` | Proves the door remembers: one bank serves every surface, retain sends the vendor's shape, and an unreachable store never costs the answer. |
+| `otto/tests/boot/test_presence.py` | Hands & senses 7: the long-answer progress seam — one phase name past eight seconds, a single-shot reporter that edits in place once, never a running commentary. |
 | `otto/tests/cp0/` | CP0 eval tests. |
 | `otto/tests/cp0/__init__.py` | Package marker for `otto/tests/cp0`. |
 | `otto/tests/cp0/conftest.py` | Shared pytest fixtures for this folder. |
@@ -630,6 +633,7 @@ are tracked, so what you see below is the source they come from.
 | `otto/tests/cp2/step_defs/` | pytest-bdd step definitions for CP2. |
 | `otto/tests/cp2/step_defs/__init__.py` | Package marker for `otto/tests/cp2/step_defs`. |
 | `otto/tests/cp2/step_defs/test_cp2_gateway_core.py` | Step definitions for ``features/cp2_gateway_core.feature``. |
+| `otto/tests/cp2/test_bridge.py` | CP2: the bridge registers the stubbed fork toolset, T2 ``terminal`` never runs a destructive command, ``terminal_irreversible`` carries T3+irreversible so the gate declines it, unknown tools deny. |
 | `otto/tests/cp2b/` | CP2b surface-contract tests. |
 | `otto/tests/cp2b/__init__.py` | CP2b surface-contract test suite (crew#768). |
 | `otto/tests/cp2b/conftest.py` | Shared fixtures for the CP2b surface-contract BDD suite. |
@@ -658,6 +662,9 @@ are tracked, so what you see below is the source they come from.
 | `otto/tests/cp4/test_cp4_hardening.py` | Step definitions for `cp4_hardening.feature`, plus regression tests for the independent verifier's findings on crew#768 (comment 5485606405). |
 | `otto/tests/cp4/test_cp4_memory_engine.py` | Step definitions for otto/tests/cp4/features/cp4_memory_engine.feature. |
 | `otto/tests/cp4/test_dangling_reference.py` | Regression: a fact referencing a missing row aborts loudly, as its own error class, and stores nothing. |
+| `otto/tests/cp4/test_embedding_lane.py` | The vector arm's one wire, driven against a real loopback HTTP server: the request carries the store's width, a wrong width is refused, the key rides in the header, a `file:` endpoint never reaches urllib, and a router that is down still lets the sender have their answer. |
+| `otto/tests/cp4/test_l2_sync_recall.py` | The synchronous read path against a real Postgres: it returns what was stored, and it returns fast. |
+| `otto/tests/cp4/test_thread.py` | Hands & senses 8: three envelopes from one principal produce a messages list holding the earlier turns, and another principal holds none — proven on the real SQLite store path. |
 | `otto/tests/cp5/` | CP5 router tests. |
 | `otto/tests/cp5/__init__.py` | CP5 router and structured-outputs BDD suite (crew#768). |
 | `otto/tests/cp5/conftest.py` | Shared fixtures for the CP5 router BDD suite. |
@@ -669,9 +676,12 @@ are tracked, so what you see below is the source they come from.
 | `otto/tests/cp5/step_defs/test_cp5_network_and_contract.py` | Step definitions for ``features/cp5_network_and_contract.feature``. |
 | `otto/tests/cp5/step_defs/test_cp5_router_structured_outputs.py` | Step definitions for ``features/cp5_router_structured_outputs.feature``. |
 | `otto/tests/cp5/test_grounding_casefold.py` | Regression: grounding tokens compare under casefold, not lower. |
+| `otto/tests/cp5/test_confidence_spelling.py` | Regression: a model's spelling of a confidence ("Medium", " med ", 0.6) reads as the value it spells; a value outside the table still refuses. |
 | `otto/tests/cp5/test_live_minimax.py` | Live integration: one real bulk-lane request through the router to lane ``minimax`` on the estate model router (LiteLLM), asserting the response normalises into the universal contract with verification UNVERIFIED. |
 | `otto/tests/cp5/test_reasoning_lane_ux.py` | The three things a 30-second reasoning lane needs from Telegram: the typing indicator fires and is refreshed (and a failing one never costs the sender the answer), `/think` and `/kimi` route to the deep lane with the prefix stripped, and a model that narrates around its JSON still parses. |
 | `otto/tests/cp5/test_provider_completion_budget.py` | The completion budget a request carries: the default covers a reasoning lane's own thinking (`moonshot/kimi-k3` spent 1,030 reasoning tokens on a three-word answer, and a 200-token cap returned an empty string), a deployment sets it with `OTTO_ROUTER_MAX_TOKENS`, and an unusable override falls back to the default. |
+| `otto/tests/cp5/test_repair_reask.py` | A malformed provider reply is asked again once, on the same lane, with the parser's reason appended; a second bad shape is refused and both attempts are charged. |
+| `otto/tests/cp5/test_tool_loop.py` | Step 2 (door-hands): the provider tool loop — a tool-call reply runs through the executor and its `role=tool` result feeds the next turn until text or `OTTO_ROUTER_TOOL_MAX_TURNS`; a gateway-denied call returns `denied: <reason>` to the model; no-tools calls stay byte-identical. |
 | `otto/tests/cp6obs/` | CP6 observability tests. |
 | `otto/tests/cp6obs/__init__.py` | CP6 observability BDD suite (crew#768). |
 | `otto/tests/cp6obs/conftest.py` | Shared fixtures for the CP6 observability BDD suite. |
@@ -694,6 +704,8 @@ are tracked, so what you see below is the source they come from.
 | `otto/tests/ingress/conftest.py` | Shared fixtures: `OTTO_OBS_MODE=test`, in-memory binding store and recorded publisher. |
 | `otto/tests/ingress/test_entrypoint.py` | The boot contract the deployment depends on: the port, the database, and the refusal to listen before the collector and the table are proved. |
 | `otto/tests/ingress/test_gateway.py` | The one door: routing, refusals, and channel independence. |
+| `otto/tests/ingress/test_photo.py` | Hands & senses 4: a photo update, sensed through the seam to `[image] <caption>\n<description>` content, offline with a stub describer. |
+| `otto/tests/ingress/test_voice.py` | Hands & senses 3: a voice note, transcribed to `[voice] ...` content with `VOICE_IN`, and the worker answering with both text and voice. |
 | `otto/tests/ingress/test_registry_as_data.py` | Onboarding a customer is a database write, not a deployment — the point of the gateway, proved. |
 | `otto/tests/ingress/test_routes.py` | Path routing: `channel_from_path` is the whole of the routing surface, and no route names a channel. |
 | `otto/tests/ingress/test_store_and_secrets.py` | The binding table and the secret resolver alone: the table holds no secret material, and resolution happens at request time. |
@@ -725,6 +737,7 @@ are tracked, so what you see below is the source they come from.
 | `otto/verify/model.py` | Data model: claims, claim envelopes, and Ed25519-signed verdicts. |
 | `otto/verify/store.py` | Verdict store: durable record of every verdict, fail closed when down. |
 | `otto/verify/verifier.py` | Verifier core: checks a claimed-work envelope, signs a verdict. |
+| `otto/verify/reply_judge.py` | Per-line verdict from the verify lane (a different model on a different lane, never the one that answered): conversational or supported renders clean; anything unreadable, over budget or timed out fails closed to marked. |
 | `pyproject.toml` | Python project metadata for the `otto` packages and the pytest configuration the suite runs under. |
 
 <!-- /tracked -->

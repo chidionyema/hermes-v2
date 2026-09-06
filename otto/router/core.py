@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Protocol
+from typing import Callable, Protocol
 
 from otto.router.budget import BudgetLedger
 from otto.router.config import RouterConfig
@@ -27,6 +27,16 @@ from otto.router.providers import (
     ProviderTimeout,
 )
 from otto.router.ulid import new_ulid
+
+
+#: Appended to the task input on the one repair re-ask after a refused reply.
+REPAIR_NOTE = """
+
+Your previous reply was refused by the parser: {reason}.
+Reply again with exactly the JSON object the instructions describe and
+nothing else. Every proposed action needs all three keys "tool" (a string),
+"args" (an object) and "tier" (one of T0, T1, T2, T3); if you are not
+naming a tool, send "proposed_actions": []."""
 
 
 class OutcomeState(str, Enum):
@@ -111,7 +121,14 @@ class Router:
 
     # -- execution under policy ---------------------------------------------
 
-    def execute(self, task: RouterTask, client: ProviderClient) -> RouterOutcome:
+    def execute(
+        self,
+        task: RouterTask,
+        client: ProviderClient,
+        *,
+        tools: list[dict] | None = None,
+        tool_executor: Callable[[str, str], str] | None = None,
+    ) -> RouterOutcome:
         lane = self.route(task)
         lane_cfg = self.config.lanes[lane]
 
@@ -134,14 +151,36 @@ class Router:
         models_called: list[str] = []
         timeout_retries = self.config.retry.max_retries_timeout
         http_retries = self.config.retry.max_retries_5xx
+        # The parser's reason the last reply was refused, when there was one.
+        # The same lane is asked once more with that reason appended; a second
+        # refusal is final. Never a different lane, never a coerced parse.
+        repair_reason: str | None = None
 
         while True:
             attempts += 1
             models_called.append(lane_cfg.model)
+            prompt = (
+                task.input
+                if repair_reason is None
+                else task.input + REPAIR_NOTE.format(reason=repair_reason)
+            )
             try:
-                result = client.complete(
-                    lane_cfg.model, task.input, self.config.retry.timeout_seconds
-                )
+                # Only a caller that actually asked for tools receives the
+                # tool kwargs, so a plain client (or a test fake that
+                # predates the loop) is called exactly as before. The prompt
+                # is the repair-annotated one either way (#92).
+                if tools:
+                    result = client.complete(
+                        lane_cfg.model,
+                        prompt,
+                        self.config.retry.timeout_seconds,
+                        tools=tools,
+                        tool_executor=tool_executor,
+                    )
+                else:
+                    result = client.complete(
+                        lane_cfg.model, prompt, self.config.retry.timeout_seconds
+                    )
             except ProviderTimeout:
                 # The founder's word: a timeout is budget-charged — the
                 # provider did work and the bandwidth is gone.
@@ -194,6 +233,17 @@ class Router:
                     tokens=result.tokens,
                 )
             except MalformedProviderOutput as exc:
+                if repair_reason is None:
+                    # First bad shape: the same model is told exactly what the
+                    # parser refused and asked once more (2026-09-06 02:30Z: a
+                    # proposed action with no tool name cost the founder his
+                    # answer). The spend for both replies stays on the ledger.
+                    repair_reason = str(exc)
+                    self.notifier.notify(
+                        f"malformed provider output on lane '{lane}', "
+                        f"task {task.task_id}: {exc}; asking once more"
+                    )
+                    continue
                 # Refused, never coerced. No RouterResponse exists for this
                 # output; a human decides, the spend stays on the ledger.
                 self.notifier.notify(
