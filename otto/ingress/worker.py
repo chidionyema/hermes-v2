@@ -41,7 +41,7 @@ from otto.boot.pipeline import (
     boot_obs_handles,
     build_registry,
 )
-from otto.gateway.core import ToolGateway
+from otto.gateway.core import ToolGateway, fail_closed_gate
 from otto.ingress.plugins import OutboundNotSupported, default_plugins
 from otto.ingress.secrets import SecretNotFound, SecretResolver
 from otto.ingress.store import ChannelBindingStore
@@ -259,7 +259,7 @@ def start_worker_thread(
             secrets=secrets,
             obs=obs,
             lanes=boot_obs_handles(),
-            gateway=ToolGateway(registry=build_registry()),
+            gateway=ToolGateway(registry=build_registry(), human_gate=fail_closed_gate),
         )
         loop.run_until_complete(worker.run_forever())
 

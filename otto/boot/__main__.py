@@ -24,7 +24,7 @@ from otto.boot.errors import BootRefused
 from otto.boot.pipeline import boot_obs_handles, build_registry
 from otto.boot.server import ServerDeps, build_server
 from otto.boot.transport import TelegramHTTPTransport, TelegramTransport
-from otto.gateway.core import ToolGateway
+from otto.gateway.core import ToolGateway, fail_closed_gate
 from otto.surface.bindings.telegram import TelegramBinding
 
 TransportFactory = Callable[[str, str], TelegramTransport]
@@ -73,7 +73,7 @@ def _run_server(
         # build_registry raises BootRefused when the deployment asked for fork
         # tools and none registered — a loud non-zero boot, never a silent
         # tool-less gateway.
-        gateway = ToolGateway(registry=build_registry())
+        gateway = ToolGateway(registry=build_registry(), human_gate=fail_closed_gate)
     except BootRefused as exc:
         print(_refusal_line(exc), file=sys.stderr)
         return 2

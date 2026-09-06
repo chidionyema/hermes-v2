@@ -28,7 +28,12 @@ from otto.gateway.bridge import (
     register_fork_tools,
 )
 from otto.gateway.config import GatewayConfig
-from otto.gateway.core import ApprovalToken, Envelope, ToolGateway
+from otto.gateway.core import (
+    ApprovalToken,
+    Envelope,
+    ToolGateway,
+    fail_closed_gate,
+)
 from otto.gateway.registry import Tier, ToolRegistry
 
 # A hand-built fork definition adequate for tier resolution and the spec's
@@ -279,3 +284,65 @@ def test_tool_schema_never_ships_an_empty_description() -> None:
     assert _tool_schema(named)["function"]["description"] == (
         "Append one task to the list."
     )
+
+
+def test_fail_closed_gate_emits_human_gate_observability(
+    registry: ToolRegistry,
+) -> None:
+    """The default ``fail_closed_gate`` refuses every human-gated call and
+    the answering lane's executor turns that into the proof row's
+    ``gateway.denied ... reason=human_gate`` observability line, while the
+    gateway's structured denial keeps ``HUMAN_APPROVAL_REFUSED``.
+
+    This is the contract behind the founder proof row
+    ("delete the otto-gateway deployment" -> ``reason=human_gate``): a real
+    gate is wired at boot/worker, it returns no token for a T3/irreversible
+    call, and nothing runs --- but the operator can grep the door log for the
+    exact reason the spec names.
+    """
+    from contextlib import nullcontext as _nullcontext
+
+    from otto.boot.pipeline import _build_tool_loop
+    from otto.gateway.registry import Tier as GatewayTier
+    from otto.obs.core import TaskContext
+
+    class Recording:
+        def __init__(self) -> None:
+            self.calls: list[tuple] = []
+
+        def info(self, event: str, ctx: TaskContext, **fields: object) -> None:
+            self.calls.append((event, dict(fields)))
+
+        def task_span(self, *_a: object, **_k: object):
+            return _nullcontext()
+
+    router = Recording()
+    lane = Recording()
+    obs = type("Obs", (), {"router": router, "gateway": lane})()
+
+    gateway = ToolGateway(registry=registry, human_gate=fail_closed_gate)
+    tools, executor = _build_tool_loop(
+        ceiling=GatewayTier.T3,
+        registry_gateway=gateway,
+        obs=obs,
+        ctx=TaskContext(task_ulid="task-gate-1"),
+    )
+
+    outcome = executor(TERMINAL_IRREVERSIBLE, '{"command": "rm -rf /"}')
+
+    # The tool-turn line reports the gateway's structured reason.
+    assert any(
+        e == "router.tool_turn"
+        and f.get("denied") is True
+        and f.get("reason") == "HUMAN_APPROVAL_REFUSED"
+        for e, f in router.calls
+    )
+    # The door log's human-gate line reads exactly what the proof row greps.
+    assert any(
+        e == "gateway.denied"
+        and f.get("reason") == "human_gate"
+        and f.get("tool") == TERMINAL_IRREVERSIBLE
+        for e, f in lane.calls
+    )
+    # Nothing ran, and the model was told the structured reason.
+    assert outcome == "denied: HUMAN_APPROVAL_REFUSED"

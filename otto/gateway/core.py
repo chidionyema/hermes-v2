@@ -66,6 +66,24 @@ class HumanGate(Protocol):
     def __call__(self, envelope: Envelope, tool: ToolSpec) -> ApprovalToken | None: ...
 
 
+def fail_closed_gate(envelope: Envelope, tool: ToolSpec) -> ApprovalToken | None:
+    """The default human gate: refuse every human-gated call.
+
+    This is the honest production posture until a real out-of-band approval
+    flow (the Telegram approval card) lands. A T3 or irreversible tool cannot
+    be approved by the same model that wants to run it, and no separate human
+    signal reaches this process yet, so the only safe answer is ``None`` --
+    the gateway turns that into ``HUMAN_APPROVAL_REFUSED`` (never a silent
+    execute), and the answering lane's observability reads the proof row's
+    ``reason=human_gate``. When the Telegram approval card exists, it replaces
+    this default at the same two wiring points (boot/__main__ and
+    ingress/worker) and returns a minted ``ApprovalToken`` only after a human
+    confirms, keeping everything downstream unchanged.
+    """
+
+    return None
+
+
 @dataclass(frozen=True)
 class GatewayResponse:
     """What every ``ToolGateway.call`` returns. Never raises for an
