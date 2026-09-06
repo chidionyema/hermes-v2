@@ -587,6 +587,7 @@ are tracked, so what you see below is the source they come from.
 | `otto/tests/boot/test_app.py` | `handle_webhook_body`'s four required cases: allowlisted delivery, unrecognised-sender drop, malformed payload refusal, and a pipeline exception that never crashes the process. |
 | `otto/tests/boot/test_config.py` | Every environment variable this lane reads, including the missing-token refusal. |
 | `otto/tests/boot/test_main.py` | `python -m otto.boot`'s dispatch: `--set-webhook`, the missing-token refusal before anything boots, and server assembly with a non-blocking fake server. |
+| `otto/tests/boot/test_reply_verdict.py` | The verify lane's verdict decides which reply lines carry the unverified marker: a greeting renders clean, an unsupported fact keeps it, and a garbage or timed-out verdict marks every line without losing the answer. |
 | `otto/tests/boot/test_pipeline.py` | The lane crossing itself: an allowlisted chat gets a reply, an unrecognised chat gets no tool authority and no reply. |
 | `otto/tests/boot/test_memory_hindsight.py` | Proves the door remembers: one bank serves every surface, retain sends the vendor's shape, and an unreachable store never costs the answer. |
 | `otto/tests/boot/test_presence.py` | Hands & senses 7: the long-answer progress seam — one phase name past eight seconds, a single-shot reporter that edits in place once, never a running commentary. |
@@ -677,6 +678,7 @@ are tracked, so what you see below is the source they come from.
 | `otto/tests/cp5/test_live_minimax.py` | Live integration: one real bulk-lane request through the router to lane ``minimax`` on the estate model router (LiteLLM), asserting the response normalises into the universal contract with verification UNVERIFIED. |
 | `otto/tests/cp5/test_reasoning_lane_ux.py` | The three things a 30-second reasoning lane needs from Telegram: the typing indicator fires and is refreshed (and a failing one never costs the sender the answer), `/think` and `/kimi` route to the deep lane with the prefix stripped, and a model that narrates around its JSON still parses. |
 | `otto/tests/cp5/test_provider_completion_budget.py` | The completion budget a request carries: the default covers a reasoning lane's own thinking (`moonshot/kimi-k3` spent 1,030 reasoning tokens on a three-word answer, and a 200-token cap returned an empty string), a deployment sets it with `OTTO_ROUTER_MAX_TOKENS`, and an unusable override falls back to the default. |
+| `otto/tests/cp5/test_repair_reask.py` | A malformed provider reply is asked again once, on the same lane, with the parser's reason appended; a second bad shape is refused and both attempts are charged. |
 | `otto/tests/cp6obs/` | CP6 observability tests. |
 | `otto/tests/cp6obs/__init__.py` | CP6 observability BDD suite (crew#768). |
 | `otto/tests/cp6obs/conftest.py` | Shared fixtures for the CP6 observability BDD suite. |
@@ -732,6 +734,7 @@ are tracked, so what you see below is the source they come from.
 | `otto/verify/model.py` | Data model: claims, claim envelopes, and Ed25519-signed verdicts. |
 | `otto/verify/store.py` | Verdict store: durable record of every verdict, fail closed when down. |
 | `otto/verify/verifier.py` | Verifier core: checks a claimed-work envelope, signs a verdict. |
+| `otto/verify/reply_judge.py` | Per-line verdict from the verify lane (a different model on a different lane, never the one that answered): conversational or supported renders clean; anything unreadable, over budget or timed out fails closed to marked. |
 | `pyproject.toml` | Python project metadata for the `otto` packages and the pytest configuration the suite runs under. |
 
 <!-- /tracked -->
