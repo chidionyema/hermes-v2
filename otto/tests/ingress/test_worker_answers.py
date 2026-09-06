@@ -11,6 +11,7 @@ reply is sent with.
 from __future__ import annotations
 
 import asyncio
+import threading
 from dataclasses import dataclass, field
 
 import pytest
@@ -409,3 +410,69 @@ def test_an_envelope_naming_no_binding_still_answers_by_tenant(monkeypatch) -> N
     _run(worker, msg, fake, monkeypatch)
 
     assert plugin.sent == [(BOT_TOKEN, str(CHAT_ID), "ok")]
+
+
+@dataclass
+class TypingPlugin(RecordingPlugin):
+    """A Telegram-shaped plugin: it can also show "typing"."""
+
+    actions: list[tuple[str, str]] = field(default_factory=list)
+    first_action: threading.Event = field(default_factory=threading.Event)
+
+    def send_chat_action(self, secret: str, reply_to: str) -> None:
+        self.actions.append((secret, reply_to))
+        self.first_action.set()
+
+
+def test_the_typing_indicator_shows_while_the_answer_is_being_written(
+    monkeypatch,
+) -> None:
+    """The founder could not tell whether Otto was answering or down
+    (2026-09-06): the boot path showed Telegram's typing indicator, the bus
+    path every real message takes showed nothing. The indicator is sent with
+    the customer's own token to the chat being answered, before the answer
+    exists, and stops once the reply is out."""
+    envelope = _accepted_envelope()
+    plugin = TypingPlugin()
+    worker, _unused = _worker(
+        _store(), FakeSecrets({OUTBOUND_REF: BOT_TOKEN}), plugin, answer=_answer("x")
+    )
+
+    def slow_answer(envelope, **kwargs):
+        # The model is "thinking": the indicator must already be on screen.
+        assert plugin.first_action.wait(2.0), "no typing indicator while answering"
+        return _answer("6.9 cores.")
+
+    msg = FakeMsg(data=envelope.canonical_json())
+    _run(worker, msg, slow_answer, monkeypatch)
+
+    assert plugin.actions[0] == (BOT_TOKEN, str(CHAT_ID))
+    assert plugin.sent == [(BOT_TOKEN, str(CHAT_ID), "6.9 cores.")]
+    sent_after = len(plugin.actions)
+    assert not any(
+        t.name == "otto-typing" and t.is_alive() for t in threading.enumerate()
+    )
+    assert len(plugin.actions) == sent_after
+
+
+def test_a_refused_typing_indicator_never_costs_the_answer(monkeypatch) -> None:
+    envelope = _accepted_envelope()
+    plugin = TypingPlugin()
+
+    def refuse(secret: str, reply_to: str) -> None:
+        plugin.first_action.set()
+        raise RuntimeError("telegram: 429")
+
+    plugin.send_chat_action = refuse  # type: ignore[method-assign]
+    worker, fake = _worker(
+        _store(),
+        FakeSecrets({OUTBOUND_REF: BOT_TOKEN}),
+        plugin,
+        answer=_answer("still here"),
+    )
+    msg = FakeMsg(data=envelope.canonical_json())
+
+    _run(worker, msg, fake, monkeypatch)
+
+    assert plugin.first_action.is_set()
+    assert plugin.sent == [(BOT_TOKEN, str(CHAT_ID), "still here")]

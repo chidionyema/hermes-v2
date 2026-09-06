@@ -65,6 +65,36 @@ BATCH = 8
 FETCH_TIMEOUT_S = 5.0
 
 
+#: Telegram clears its typing indicator after about five seconds
+#: (otto.boot.presence keeps the same cadence on the boot path).
+TYPING_REFRESH_S = 4.0
+
+
+def _typing_keepalive(plugin: Any, secret: str, reply_to: str) -> threading.Event:
+    """Show "typing" on ``plugin`` until the returned event is set.
+
+    A plugin without ``send_chat_action`` (HTTP) gets no thread. The first
+    refused call ends the courtesy quietly: presence never costs an answer.
+    """
+    done = threading.Event()
+    action = getattr(plugin, "send_chat_action", None)
+    if not callable(action):
+        done.set()
+        return done
+
+    def _run() -> None:
+        while not done.is_set():
+            try:
+                action(secret, reply_to)
+            except Exception:  # noqa: BLE001 - a courtesy may never raise
+                return
+            if done.wait(TYPING_REFRESH_S):
+                return
+
+    threading.Thread(target=_run, name="otto-typing", daemon=True).start()
+    return done
+
+
 class Worker:
     """Pull submitted tasks, answer them, reply on the customer's channel."""
 
@@ -174,6 +204,20 @@ class Worker:
             await msg.term()
             return
 
+        # The founder could not tell whether Otto was answering or down
+        # (2026-09-06): the boot path shows Telegram's typing indicator
+        # (otto.boot.presence) but this lane, the one every Telegram message
+        # actually takes, showed nothing for the tens of seconds a reasoning
+        # lane needs. The indicator lives as long as the answer does.
+        try:
+            secret = self._secrets.resolve(binding.outbound_secret_ref)
+        except SecretNotFound as exc:
+            # The platform's fault, and a fixable one: retry.
+            self._obs.info("worker.secret_unavailable", ctx, error=str(exc))
+            await msg.nak()
+            return
+
+        typing_done = _typing_keepalive(plugin, secret, envelope.reply_to)
         try:
             answer = answer_envelope(
                 envelope,
@@ -185,6 +229,8 @@ class Worker:
             self._obs.info("worker.answer_failed", ctx, error=str(exc))
             await msg.nak()
             return
+        finally:
+            typing_done.set()
 
         if not answer.reply_text:
             # The gateway denied the task, or there was nothing to say.
@@ -192,14 +238,6 @@ class Worker:
             # designed answer to an unauthorised sender.
             self._obs.info("worker.no_reply", ctx, channel=channel)
             await msg.ack()
-            return
-
-        try:
-            secret = self._secrets.resolve(binding.outbound_secret_ref)
-        except SecretNotFound as exc:
-            # The platform's fault, and a fixable one: retry.
-            self._obs.info("worker.secret_unavailable", ctx, error=str(exc))
-            await msg.nak()
             return
 
         try:
