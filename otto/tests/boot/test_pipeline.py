@@ -10,8 +10,18 @@ is ever sent.
 
 from __future__ import annotations
 
-from otto.boot.pipeline import boot_obs_handles, build_registry, deliver, process_update
+from types import SimpleNamespace
+
+from otto.boot.pipeline import (
+    _build_tool_loop,
+    boot_obs_handles,
+    build_registry,
+    deliver,
+    process_update,
+)
+from otto.gateway.bridge import ForkToolDenied
 from otto.gateway.core import ToolGateway
+from otto.gateway.registry import Tier
 from otto.surface.bindings.telegram import TelegramBinding
 from otto.tests.boot.fakes import FakeProviderClient, FakeTransport
 
@@ -123,3 +133,50 @@ def test_empty_text_produces_no_reply_and_does_not_cross_the_gateway() -> None:
     finally:
         for handle in (obs.boot, obs.spine, obs.gateway, obs.router, obs.memory):
             handle.shutdown()
+
+
+class _RecordingRouter:
+    def __init__(self) -> None:
+        self.lines: list[tuple[str, dict]] = []
+
+    def info(self, event: str, ctx, **fields) -> None:
+        self.lines.append((event, fields))
+
+
+class _RecordingObs:
+    def __init__(self) -> None:
+        self.router = _RecordingRouter()
+
+
+class _RefusingGateway(ToolGateway):
+    """The registry's terminal handler, as ``otto.gateway.bridge`` refuses at T2."""
+
+    def call(self, env, name, args):
+        raise ForkToolDenied(
+            f"command {args['command']!r} matched the un-undoable set; route it to "
+            "terminal_irreversible (T3) for the human gate."
+        )
+
+
+def test_a_refused_irreversible_command_is_a_denied_turn_the_model_reads() -> None:
+    """The T2 terminal guard refuses ``rm -rf`` before it runs (``otto.gateway.bridge``).
+    That refusal used to escape the tool loop as an exception; the ingress worker
+    nak'd the task, JetStream redelivered it, and the founder's 21:54Z message on
+    2026-09-06 restarted 31 times before it was answered. The refusal is a denied
+    turn: text the model reads, one ``router.tool_turn`` line, no exception."""
+    obs = _RecordingObs()
+    _tools, execute = _build_tool_loop(
+        ceiling=Tier.T2,
+        registry_gateway=_RefusingGateway(registry=build_registry()),
+        obs=obs,
+        ctx=SimpleNamespace(task_ulid="01TESTDENIEDTURN"),
+    )
+
+    result = execute("terminal", '{"command": "rm -rf /tmp/otto-scratch"}')
+
+    assert result.startswith("denied: ")
+    assert "rm -rf" in result
+    turns = [f for e, f in obs.router.lines if e == "router.tool_turn"]
+    assert len(turns) == 1
+    assert turns[0]["denied"] is True
+    assert turns[0]["reason"] == "irreversible_command"

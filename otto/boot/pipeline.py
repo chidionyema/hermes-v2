@@ -61,6 +61,7 @@ from dataclasses import dataclass, replace
 from typing import Callable
 
 from otto.boot.transport import TelegramTransport
+from otto.gateway.bridge import ForkToolDenied
 from otto.gateway.core import Envelope as GatewayEnvelope
 from otto.gateway.core import GatewayResponse, ToolGateway
 from otto.gateway.denial import DenialReason
@@ -377,7 +378,28 @@ def _build_tool_loop(
             authority_ceiling=ceiling,
             untrusted=(ceiling < GatewayTier.T2),
         )
-        resp = registry_gateway.call(env, name, _json_or_empty(arguments))
+        try:
+            resp = registry_gateway.call(env, name, _json_or_empty(arguments))
+        except ForkToolDenied as exc:
+            # The T2 terminal handler refused an un-undoable command before it
+            # ran (otto.gateway.bridge). Until 2026-09-06 that refusal escaped
+            # this loop as an exception: the ingress worker logged
+            # worker.answer_failed, nak'd the task, JetStream redelivered it,
+            # and the whole answer started again from the first model call.
+            # The founder's 21:54Z Telegram message looped 31 times on
+            # ``rm -rf /tmp/...`` clean-ups and was answered at 22:00:16Z. A
+            # refusal is a denied turn like any other: the model reads it and
+            # writes a command without the destructive part, or relays it.
+            elapsed_ms = int((time.perf_counter() - start) * 1000)
+            obs.router.info(
+                "router.tool_turn",
+                ctx,
+                tool=name,
+                denied=True,
+                reason="irreversible_command",
+                elapsed_ms=elapsed_ms,
+            )
+            return f"denied: {exc}"
         elapsed_ms = int((time.perf_counter() - start) * 1000)
         if resp.denied:
             reason = resp.denial.reason.value if resp.denial else "unknown"

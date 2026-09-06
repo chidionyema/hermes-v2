@@ -185,6 +185,12 @@ class TelegramPlugin:
         the transport never logs it (``otto.boot.transport``)."""
         TelegramHTTPTransport(token=secret).send_message(int(reply_to), text)
 
+    def send_chat_action(self, secret: str, reply_to: str) -> None:
+        """Telegram's "Otto is typing..." for ``reply_to``. The worker
+        re-sends it every few seconds while a model thinks (Telegram clears
+        it after about five); a channel without the method shows nothing."""
+        TelegramHTTPTransport(token=secret).send_chat_action(int(reply_to), "typing")
+
 
 @dataclass(frozen=True)
 class HttpPlugin:
