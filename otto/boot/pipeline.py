@@ -55,6 +55,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 from dataclasses import dataclass, replace
 
 from otto.boot.transport import TelegramTransport
@@ -274,6 +275,18 @@ def build_registry() -> ToolRegistry:
             handler=_note_handler,
         )
     )
+    # Spec step 1: when the deployment names a toolset set (comma list), the
+    # fork-world tools are bridged in after ``note`` so the gateway enforces
+    # the same tiers on them. The fork import stays closed inside
+    # ``register_fork_tools`` so a bare checkout without ``model_tools``
+    # still builds the registry (the unit suites never set OTTO_TOOLSETS).
+    toolsets = os.environ.get("OTTO_TOOLSETS")
+    if toolsets:
+        from otto.gateway.bridge import register_fork_tools
+
+        register_fork_tools(
+            registry, enabled_toolsets=[t for t in toolsets.split(",") if t.strip()]
+        )
     return registry
 
 
