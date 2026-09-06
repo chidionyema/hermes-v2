@@ -38,6 +38,7 @@ from dataclasses import dataclass
 from typing import Any, Mapping
 
 from otto.ingress.plugins import ChannelPlugin, default_plugins
+from otto.ingress.media import MediaEnrichment, detect_media
 from otto.ingress.publisher import EventPublisher
 from otto.ingress.secrets import SecretNotFound, SecretResolver
 from otto.ingress.store import ChannelBindingStore
@@ -92,12 +93,18 @@ class EventGateway:
         publisher: EventPublisher,
         obs: ObsHandle,
         plugins: Mapping[str, ChannelPlugin] | None = None,
+        media: "MediaEnrichment | None" = None,
     ) -> None:
         self._store = store
         self._secrets = secrets
         self._publisher = publisher
         self._obs = obs
         self._plugins = dict(plugins) if plugins is not None else default_plugins()
+        #: The media seam that turns voice/photo into words (steps 3 and
+        #: 4). ``None`` means a text-only door: a media update whose only
+        #: reachable content is audio/pixels is gated as nothing-to-do,
+        #: exactly as before this capability existed.
+        self._media = media
 
     @property
     def channels(self) -> tuple[str, ...]:
@@ -179,13 +186,48 @@ class EventGateway:
         surface_env = plugin.binding(binding.principal_allowlist).normalize(
             native_event, tenant_id=binding.tenant_id
         )
-        content = (surface_env.content or "").strip()
+        # Step 3 (voice) and step 4 (photo): a media update whose only
+        # reachable content is a voice note or pixels is still a message the
+        # door can answer, so media is sensed before the text gate. ``message``
+        # is the same dict the binding normalised; the seam is given the
+        # already-resolved bot token (the one place network + fork live, and
+        # exactly the token ``verify`` above proved). A door with no media
+        # seam stays text-only: a media-only update it cannot sense is nothing
+        # to act on, as before.
+        media_content: str | None = None
+        wants_voice_reply = False
+        if self._media is not None:
+            message = native_event.get("message", native_event)
+            if isinstance(message, dict) and detect_media(message).is_media:
+                try:
+                    enriched = self._media.process(message, secret)
+                    media_content = enriched.content.strip()
+                    wants_voice_reply = enriched.wants_voice_reply
+                except Exception as exc:  # noqa: BLE001 - sensing refused/missing
+                    # A media the door cannot sense (the transcriber/describer
+                    # is down, the file will not fetch) is not a message this
+                    # delivery can act on, and retrying the webhook will not
+                    # fix it: terminate the request quietly rather than loop.
+                    return IngressResult(
+                        UNAVAILABLE,
+                        f"media could not be sensed: {type(exc).__name__}",
+                        tenant_id=binding.tenant_id,
+                    )
+        content = (
+            media_content if media_content is not None else (surface_env.content or "")
+        ).strip()
         if not surface_env.is_instruction_bearing or not content:
             return IngressResult(
                 NOTHING_TO_DO, "nothing to act on", tenant_id=binding.tenant_id
             )
 
-        task_env = self._mint(surface_env, plugin, content, binding.external_id)
+        task_env = self._mint(
+            surface_env,
+            plugin,
+            content,
+            binding.external_id,
+            wants_voice_reply=wants_voice_reply,
+        )
         subject = self._publisher.publish_submitted(task_env)
         return IngressResult(
             ACCEPTED,
@@ -201,6 +243,8 @@ class EventGateway:
         plugin: ChannelPlugin,
         content: str,
         reply_binding: str | None = None,
+        *,
+        wants_voice_reply: bool = False,
     ) -> TaskEnvelope:
         """The neutral task the agent lanes will read. It carries the
         channel as provenance only — a lane that changes behaviour on the
@@ -234,4 +278,8 @@ class EventGateway:
             # binding to send keeps that true while still closing the loop.
             reply_to=surface_env.reply_to,
             reply_binding=reply_binding,
+            # Step 3: the answering lane needs to know this inbound was
+            # speech, so its reply is sent as audio as well as text (ADR
+            # 0022). Carried opaquely, like ``reply_to``.
+            wants_voice_reply=wants_voice_reply,
         )
