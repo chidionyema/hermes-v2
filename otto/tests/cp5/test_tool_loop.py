@@ -37,6 +37,11 @@ def _attach(monkeypatch: pytest.MonkeyPatch, responses: list[dict]) -> list[dict
         "choices": [{"message": {"content": "final"}}],
         "usage": {"total_tokens": 3},
     }
+    # ``complete`` refuses to egress without a key (``_read_key``), and CI
+    # has none in its environment — but these tests never egress, they
+    # monkeypatch ``urlopen`` below. A fixed fake key satisfies the guard so
+    # every HTTP turn is answered by the stub above, not refused first.
+    monkeypatch.setenv("LITELLM_API_KEY", "test-old-do-not-use")
 
     class _Resp:
         def read(self) -> bytes:
