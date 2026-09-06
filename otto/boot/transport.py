@@ -33,9 +33,11 @@ class TelegramAPIError(Exception):
 
 
 class TelegramTransport(Protocol):
-    def send_message(self, chat_id: int, text: str) -> None: ...
+    def send_message(self, chat_id: int, text: str) -> int: ...
 
     def set_webhook(self, url: str) -> None: ...
+
+    def edit_message(self, chat_id: int, message_id: int, text: str) -> None: ...
 
     def send_chat_action(self, chat_id: int, action: str = "typing") -> None: ...
 
@@ -81,11 +83,41 @@ class TelegramHTTPTransport:
             )
         return obj
 
-    def send_message(self, chat_id: int, text: str) -> None:
-        self._post("sendMessage", {"chat_id": chat_id, "text": text})
+    def send_message(self, chat_id: int, text: str) -> int:
+        """Send a message and return the ``message_id`` Telegram assigned it.
+
+        Editing a message requires naming it with its own id (crew#892 CP2:
+        Otto sends one placeholder and edits it up as the turn proceeds, so
+        the founder watches the actual steps). ``sendMessage``'s reply
+        carries ``result.message_id``; that id is what ``edit_message``
+        posts back, so it is returned here instead of being discarded.
+        """
+        reply = self._post("sendMessage", {"chat_id": chat_id, "text": text})
+        result = reply.get("result") or {}
+        message_id = result.get("message_id")
+        if not isinstance(message_id, int):
+            # A send that Telegram accepted but answered without an id cannot
+            # be edited later; callers treat the missing id as "no in-place
+            # edit available" rather than crashing the answer.
+            return -1
+        return message_id
 
     def set_webhook(self, url: str) -> None:
         self._post("setWebhook", {"url": url})
+
+    def edit_message(self, chat_id: int, message_id: int, text: str) -> None:
+        """Replace the text of a message this bot already sent.
+
+        Telegram's ``editMessageText`` names the message by ``chat_id`` and
+        ``message_id``. An edit is a courtesy on top of an answer that is
+        already guaranteed to have been sent once, so failures raise
+        ``TelegramAPIError`` like every other call here; the caller decides
+        whether a lost interim edit is worth the sender's answer.
+        """
+        self._post(
+            "editMessageText",
+            {"chat_id": chat_id, "message_id": message_id, "text": text},
+        )
 
     def send_chat_action(self, chat_id: int, action: str = "typing") -> None:
         """Telegram's own "the other side is composing" indicator.
