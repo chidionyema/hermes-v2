@@ -29,6 +29,16 @@ from otto.router.providers import (
 from otto.router.ulid import new_ulid
 
 
+#: Appended to the task input on the one repair re-ask after a refused reply.
+REPAIR_NOTE = """
+
+Your previous reply was refused by the parser: {reason}.
+Reply again with exactly the JSON object the instructions describe and
+nothing else. Every proposed action needs all three keys "tool" (a string),
+"args" (an object) and "tier" (one of T0, T1, T2, T3); if you are not
+naming a tool, send "proposed_actions": []."""
+
+
 class OutcomeState(str, Enum):
     """First-class outcomes. COMPLETED is deliberately absent: the router
     can finish a call, but only the Verification Plane completes a task."""
@@ -134,13 +144,22 @@ class Router:
         models_called: list[str] = []
         timeout_retries = self.config.retry.max_retries_timeout
         http_retries = self.config.retry.max_retries_5xx
+        # The parser's reason the last reply was refused, when there was one.
+        # The same lane is asked once more with that reason appended; a second
+        # refusal is final. Never a different lane, never a coerced parse.
+        repair_reason: str | None = None
 
         while True:
             attempts += 1
             models_called.append(lane_cfg.model)
+            prompt = (
+                task.input
+                if repair_reason is None
+                else task.input + REPAIR_NOTE.format(reason=repair_reason)
+            )
             try:
                 result = client.complete(
-                    lane_cfg.model, task.input, self.config.retry.timeout_seconds
+                    lane_cfg.model, prompt, self.config.retry.timeout_seconds
                 )
             except ProviderTimeout:
                 # The founder's word: a timeout is budget-charged — the
@@ -194,6 +213,17 @@ class Router:
                     tokens=result.tokens,
                 )
             except MalformedProviderOutput as exc:
+                if repair_reason is None:
+                    # First bad shape: the same model is told exactly what the
+                    # parser refused and asked once more (2026-09-06 02:30Z: a
+                    # proposed action with no tool name cost the founder his
+                    # answer). The spend for both replies stays on the ledger.
+                    repair_reason = str(exc)
+                    self.notifier.notify(
+                        f"malformed provider output on lane '{lane}', "
+                        f"task {task.task_id}: {exc}; asking once more"
+                    )
+                    continue
                 # Refused, never coerced. No RouterResponse exists for this
                 # output; a human decides, the spend stays on the ledger.
                 self.notifier.notify(

@@ -72,6 +72,7 @@ from otto.router.contract import RouterResponse, normalise_provider_output
 from otto.router.core import InMemoryNotifier, OutcomeState, Router, RouterTask
 from otto.router.providers import LiteLLMClient, ProviderClient
 from otto.router.render import render_claim, render_claims
+from otto.verify import reply_judge
 
 _LOG = logging.getLogger(__name__)
 from otto.spine.envelope import TaskClass, TaskEnvelope, TaskSource, Tier, TrustTag
@@ -146,11 +147,13 @@ Answer the message below. Reply with a single JSON object and nothing else:
 
 {{"answer": "<your answer in plain English>",
   "claims": [{{"text": "<one factual claim>", "evidence_refs": [], "confidence": "high|med|low"}}],
-  "proposed_actions": [],
+  "proposed_actions": [{{"tool": "<tool name>", "args": {{}}, "tier": "T0|T1|T2|T3"}}],
   "unknowns": ["<anything you could not establish>"]}}
 
 Put every factual statement in "claims" as well as in "answer". If you are
 not sure of something, say so in "unknowns" rather than asserting it.
+"proposed_actions" is [] unless you are naming a tool you were given; an
+action must carry all three keys or the whole reply is refused.
 
 Message:
 {message}"""
@@ -255,7 +258,7 @@ def _state_sentence(outcome) -> str:
         OutcomeState.QUEUED_BUDGET: "I have not answered: today's budget for this lane is spent.",
         OutcomeState.PAUSED_TASK_BUDGET: "I have not answered: this one task ran past its own budget.",
         OutcomeState.NEEDS_HUMAN: "I could not reach the model, so I have not answered.",
-        OutcomeState.REFUSED_MALFORMED: "The model replied in a shape I refuse to parse, so I have not answered.",
+        OutcomeState.REFUSED_MALFORMED: "The model answered twice in a shape I could not read, so I have not answered. Your message is kept; please ask again.",
     }
     base = sentences.get(outcome.state, "I have not answered.")
     return f"{base} ({outcome.reason})" if outcome.reason else base
@@ -456,18 +459,43 @@ def answer_envelope(
                 cost_usd=outcome.charged_usd,
                 tokens=0,
             )
-        # P1 holds by construction: normalise_provider_output always mints
-        # UNVERIFIED (otto/router/contract.py), and this pipeline never
-        # calls the Verification Plane, so render_claims
-        # always applies the unverified marker below.
-        reply_lines = render_claims(router_resp)
-        if not reply_lines and router_resp.answer:
-            # render_claims renders claims, not the answer. A model that
-            # answers well but lists no claims would otherwise send silence,
-            # which reads exactly like the bot being down.
-            reply_lines = [
-                render_claim(router_resp.answer, has_evidence=False, verified=False)
-            ]
+    # P1: normalise_provider_output always mints UNVERIFIED, so the marker
+    # is on every line until a verdict says otherwise. The verdict is the
+    # verify lane's (otto/verify/reply_judge.py): a different model, asked
+    # whether each line is conversational or a fact the context supports.
+    # No verdict (lane off, budget spent, timeout, unreadable) leaves every
+    # line marked; a refused or queued task is never judged at all.
+    statements = [c.text for c in router_resp.claims] or (
+        [router_resp.answer] if router_resp.answer else []
+    )
+    verdicts: tuple[bool, ...] | None = None
+    if outcome.state is OutcomeState.COMPLETED_UNVERIFIED and statements:
+        with obs.router.task_span(ctx, "verify.judge"):
+            router = _router()
+            verdicts = reply_judge.judge(
+                statements,
+                context=_with_memory(asked or noted_text, recalled),
+                config=router.config,
+                ledger=router.ledger,
+                client=provider_client or LiteLLMClient(),
+            )
+            obs.router.info(
+                "verify.judged",
+                ctx,
+                judged=verdicts is not None,
+                clean=sum(verdicts) if verdicts else 0,
+                total=len(statements),
+            )
+    reply_lines = render_claims(router_resp, verdicts)
+    if not reply_lines and router_resp.answer:
+        # render_claims renders claims, not the answer. A model that
+        # answers well but lists no claims would otherwise send silence,
+        # which reads exactly like the bot being down.
+        reply_lines = [
+            router_resp.answer
+            if verdicts and verdicts[0]
+            else render_claim(router_resp.answer, has_evidence=False, verified=False)
+        ]
 
     with obs.memory.task_span(ctx, "memory.write_fact"):
         fact = Fact(
