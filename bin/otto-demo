@@ -201,6 +201,13 @@ def run_section(entry: dict) -> Row:
             section, claim, path_text, False, 0, 0, "RED - no tests cover this section"
         )
     if result.returncode != 0:
+        # DIAGNOSTIC (delete before merge): surface the swallowed pytest
+        # detail so a red section can be read from the CI log.
+        _tail = (
+            "SECTION=" + section + "\n---STDOUT---\n"
+            + result.stdout[-3000:] + "\n---STDERR---\n" + result.stderr[-3000:]
+        )
+        print("DIAGFIASCO\n" + _tail, flush=True)
         detail = f"RED - {failed} failed, {passed} passed"
         return Row(section, claim, path_text, False, passed, failed, detail)
     return Row(
