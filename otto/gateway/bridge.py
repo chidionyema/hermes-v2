@@ -33,10 +33,26 @@ not even an un-routed call executes it.
 
 from __future__ import annotations
 
+import logging
 import re
 from typing import Any, Callable
 
 from otto.gateway.registry import Tier, ToolRegistry, ToolSpec
+
+_LOG = logging.getLogger("otto.gateway.bridge")
+
+
+#: The bridge's tools may arrive in either the flat fork shape ({"name":
+#: ...}) or the OpenAI function shape ({"type": "function", "function":
+#: {..., "name": ...}}). Read a key across both without guesswork.
+def _field(defn: dict[str, Any], key: str):
+    if key in defn:
+        return defn.get(key)
+    body = defn.get("function")
+    if isinstance(body, dict):
+        return body.get(key)
+    return None
+
 
 TERMINAL = "terminal"
 TERMINAL_IRREVERSIBLE = "terminal_irreversible"
@@ -131,19 +147,27 @@ def register_fork_tools(registry: ToolRegistry, *, enabled_toolsets: list[str]) 
     definitions = mt.get_tool_definitions(enabled_toolsets=enabled_toolsets)
 
     registered = 0
+    real_registered = 0
+    skipped: list[str] = []
     for definition in definitions:
-        name = definition.get("name")
+        name = _field(definition, "name")
         if not name or name in registry.names():
-            continue  # ``note`` and friends are already registered; never dup
+            # ``note`` and friends are already registered; never dup. A
+            # skipped tool is never silent — it is named below.
+            if name:
+                skipped.append(name)
+            continue
         toolset = _toolset(name)
         tier = _tier_for(name, toolset)
         schema = _schema(definition)
+        description = str(_field(definition, "description") or "")
         if name == TERMINAL:
             # Register the per-call gated spec alongside the T2 one.
             spec = ToolSpec(
                 name=name,
                 tier=tier,
                 input_schema=schema,
+                description=description,
                 handler=_terminal_handler(),
                 idempotent=False,
             )
@@ -152,12 +176,14 @@ def register_fork_tools(registry: ToolRegistry, *, enabled_toolsets: list[str]) 
                 name=name,
                 tier=tier,
                 input_schema=schema,
+                description=description,
                 handler=_fork_handler(name),
                 irreversible=False,
                 idempotent=True,
             )
         registry.register(spec)
         registered += 1
+        real_registered += 1
 
     # The synthetic T3 spec: destructive-terminal calls route here. The
     # human gate fires on T3 or ``irreversible``, so this never auto-runs.
@@ -182,7 +208,18 @@ def register_fork_tools(registry: ToolRegistry, *, enabled_toolsets: list[str]) 
             )
         )
         registered += 1
-    return registered
+    # A skipped tool is never silent: name it, so a definition that failed
+    # to bridge is discoverable in the boot log rather than assumed absent.
+    _LOG.info(
+        "bridge.registered count=%d real=%d skipped=%s",
+        registered,
+        real_registered,
+        ",".join(skipped) or "-",
+    )
+    # The count of real fork hands, excluding the always-on synthetic T3
+    # terminal_irreversible gate: a caller refusing a tool-less boot checks
+    # against this, never against total size.
+    return real_registered
 
 
 def _schema(definition: dict[str, Any]) -> dict[str, Any]:

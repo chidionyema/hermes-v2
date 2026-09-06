@@ -28,7 +28,12 @@ from otto.gateway.bridge import (
     register_fork_tools,
 )
 from otto.gateway.config import GatewayConfig
-from otto.gateway.core import ApprovalToken, Envelope, ToolGateway
+from otto.gateway.core import (
+    ApprovalToken,
+    Envelope,
+    ToolGateway,
+    fail_closed_gate,
+)
 from otto.gateway.registry import Tier, ToolRegistry
 
 # A hand-built fork definition adequate for tier resolution and the spec's
@@ -176,3 +181,168 @@ def test_unknown_tool_is_unknown_tool_reason(registry: ToolRegistry) -> None:
     resp = gateway.call(env, "no_such_tool", {})
     assert resp.denied
     assert resp.denial.reason == "UNKNOWN_TOOL"
+
+
+def test_nested_function_shape_registers(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A definition in the OpenAI function shape
+    ({"type": "function", "function": {..., "name": ...}}) bridges exactly
+    like the flat fork shape — name, description and parameters are read from
+    the nested body, not lost."""
+
+    def get_tool_definitions(*, enabled_toolsets: list[str]) -> list[dict]:
+        return [
+            {
+                "type": "function",
+                "function": {
+                    "name": "todo_add",
+                    "description": "Append one task to the todo list.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {"text": {"type": "string"}},
+                        "required": ["text"],
+                    },
+                },
+            },
+            # estate MCP arrives nested too; stays a T1 read.
+            {
+                "type": "function",
+                "function": {
+                    "name": "estate_find_entity",
+                    "description": "Look up one estate entity.",
+                    "parameters": {"type": "object", "properties": {}},
+                },
+            },
+        ]
+
+    def handle_function_call(name: str, args: dict, task_id: str = "") -> str:
+        return f'{{"ran": {name!r}}}'
+
+    mod = types.ModuleType("model_tools")
+    mod.get_tool_definitions = get_tool_definitions
+    mod.handle_function_call = handle_function_call
+    monkeypatch.setitem(sys.modules, "model_tools", mod)
+
+    reg = ToolRegistry(config=GatewayConfig(max_tools=200))
+    register_fork_tools(reg, enabled_toolsets=["todo", "estate"])
+    assert "todo_add" in reg
+    assert reg.get("todo_add").tier is Tier.T2
+    assert reg.get("todo_add").description == "Append one task to the todo list."
+    assert "estate_find_entity" in reg
+    assert reg.get("estate_find_entity").tier is Tier.T1
+
+
+def test_build_registry_refuses_when_toolset_env_gives_zero_fork_tools(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """When OTTO_TOOLSETS names a surface but the fork returns no tools,
+    building the registry refuses loudly (BootRefused) instead of booting a
+    gateway that has no hands — a silent tool-less boot is worse than none.
+    """
+    from otto.boot.errors import BootRefused
+    from otto.boot.pipeline import build_registry
+
+    def get_tool_definitions(*, enabled_toolsets: list[str]) -> list[dict]:
+        return []
+
+    def handle_function_call(name: str, args: dict, task_id: str = "") -> str:
+        return '{"result": "ok"}'
+
+    mod = types.ModuleType("model_tools")
+    mod.get_tool_definitions = get_tool_definitions
+    mod.handle_function_call = handle_function_call
+    monkeypatch.setitem(sys.modules, "model_tools", mod)
+    monkeypatch.setenv("OTTO_TOOLSETS", "terminal")
+
+    with pytest.raises(BootRefused):
+        build_registry()
+
+
+def test_tool_schema_never_ships_an_empty_description() -> None:
+    """A tool registered without a description still reaches the model with
+    a non-empty one — built from its name rather than left blank. A model
+    told a tool exists but not what it does tends to guess it, which is how
+    a wrong tool gets called."""
+    from otto.boot.pipeline import _tool_schema
+    from otto.gateway.registry import ToolSpec
+
+    spec = ToolSpec(
+        name="read_session_notes",
+        tier=Tier.T1,
+        input_schema={"type": "object", "properties": {}},
+    )
+    fn = _tool_schema(spec)["function"]
+    assert fn["name"] == "read_session_notes"
+    assert fn["description"]  # non-empty, not an empty string
+
+    # An explicit description is carried through untouched.
+    named = ToolSpec(
+        name="todo_add",
+        tier=Tier.T2,
+        input_schema={"type": "object", "properties": {}},
+        description="Append one task to the list.",
+    )
+    assert _tool_schema(named)["function"]["description"] == (
+        "Append one task to the list."
+    )
+
+
+def test_fail_closed_gate_emits_human_gate_observability(
+    registry: ToolRegistry,
+) -> None:
+    """The default ``fail_closed_gate`` refuses every human-gated call and
+    the answering lane's executor turns that into the proof row's
+    ``gateway.denied ... reason=human_gate`` observability line, while the
+    gateway's structured denial keeps ``HUMAN_APPROVAL_REFUSED``.
+
+    This is the contract behind the founder proof row
+    ("delete the otto-gateway deployment" -> ``reason=human_gate``): a real
+    gate is wired at boot/worker, it returns no token for a T3/irreversible
+    call, and nothing runs --- but the operator can grep the door log for the
+    exact reason the spec names.
+    """
+    from contextlib import nullcontext as _nullcontext
+
+    from otto.boot.pipeline import _build_tool_loop
+    from otto.gateway.registry import Tier as GatewayTier
+    from otto.obs.core import TaskContext
+
+    class Recording:
+        def __init__(self) -> None:
+            self.calls: list[tuple] = []
+
+        def info(self, event: str, ctx: TaskContext, **fields: object) -> None:
+            self.calls.append((event, dict(fields)))
+
+        def task_span(self, *_a: object, **_k: object):
+            return _nullcontext()
+
+    router = Recording()
+    lane = Recording()
+    obs = type("Obs", (), {"router": router, "gateway": lane})()
+
+    gateway = ToolGateway(registry=registry, human_gate=fail_closed_gate)
+    tools, executor = _build_tool_loop(
+        ceiling=GatewayTier.T3,
+        registry_gateway=gateway,
+        obs=obs,
+        ctx=TaskContext(task_ulid="task-gate-1"),
+    )
+
+    outcome = executor(TERMINAL_IRREVERSIBLE, '{"command": "rm -rf /"}')
+
+    # The tool-turn line reports the gateway's structured reason.
+    assert any(
+        e == "router.tool_turn"
+        and f.get("denied") is True
+        and f.get("reason") == "HUMAN_APPROVAL_REFUSED"
+        for e, f in router.calls
+    )
+    # The door log's human-gate line reads exactly what the proof row greps.
+    assert any(
+        e == "gateway.denied"
+        and f.get("reason") == "human_gate"
+        and f.get("tool") == TERMINAL_IRREVERSIBLE
+        for e, f in lane.calls
+    )
+    # Nothing ran, and the model was told the structured reason.
+    assert outcome == "denied: HUMAN_APPROVAL_REFUSED"

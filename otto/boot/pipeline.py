@@ -63,6 +63,7 @@ from typing import Callable
 from otto.boot.transport import TelegramTransport
 from otto.gateway.core import Envelope as GatewayEnvelope
 from otto.gateway.core import GatewayResponse, ToolGateway
+from otto.gateway.denial import DenialReason
 from otto.gateway.registry import ToolRegistry, ToolSpec
 from otto.gateway.registry import Tier as GatewayTier
 from otto.memory import fast_recall
@@ -141,10 +142,16 @@ def _router() -> Router:
 _CONTRACT_PROMPT = """You are Otto, the operator's assistant for this estate.
 
 You may think for as long as you need to, but your thinking is not the
-reply. Your entire output must be one raw JSON object: no markdown fence,
-no preamble, no commentary before it or after it. A reasoning lane that
-narrates its way to the answer breaks the parser exactly as badly as an
-answer cut off half way through (founder, 2026-09-04).
+reply. Tools are the only sanctioned way to learn a fact about the machine,
+the estate or the outside world: when a question needs a fact a tool can
+fetch — a file, a command's output, the web, the estate — call the tool
+first and answer from its result; never guess a fact a tool could have
+fetched. A shell command runs through ``process``; git and GitHub also go
+through ``process`` with the token already in the environment. When you have
+finished using tools, your reply is ONE raw JSON object: no markdown fence,
+no preamble, no commentary before it or after it (founder, 2026-09-04). A
+reasoning lane that narrates its way to the answer breaks the parser exactly
+as badly as an answer cut off half way through.
 
 Answer the message below. Reply with a single JSON object and nothing else:
 
@@ -285,10 +292,24 @@ def build_registry() -> ToolRegistry:
     toolsets = os.environ.get("OTTO_TOOLSETS")
     if toolsets:
         from otto.gateway.bridge import register_fork_tools
+        from otto.boot.errors import BootRefused
 
-        register_fork_tools(
+        # The return is the count of *real* fork hands (the synthetic
+        # terminal_irreversible T3 gate is always present and is not a hand).
+        fork_count = register_fork_tools(
             registry, enabled_toolsets=[t for t in toolsets.split(",") if t.strip()]
         )
+        if fork_count == 0:
+            # The deployment asked for the fork tools and none arrived. A
+            # silent boot that offers the model no hands is worse than no
+            # boot: refuse loudly rather than answer every request with
+            # "I have no tools for that."
+            raise BootRefused(
+                "OTTO_TOOLSETS set but zero fork tools registered",
+                "check OTTO_TOOLSETS and the fork's get_tool_definitions(); "
+                "the bridge refused a tool-less boot rather than answer "
+                "with no hands.",
+            )
     return registry
 
 
@@ -306,11 +327,20 @@ def _json_or_empty(raw: str) -> dict:
 
 def _tool_schema(tool: ToolSpec) -> dict:
     """The OpenAI-style tool schema the model router expects for one
-    registered tool (function name + its strict JSON input schema)."""
+    registered tool (function name + its strict JSON input schema).
+
+    A tool always carries a non-empty ``description`` to the model — the
+    one registered on the spec, or one derived from the tool's own name when
+    the registering surface left it blank. Never an empty string: a model
+    that is told a tool exists but not what it does tends to guess, which is
+    how a wrong tool gets called.
+    """
+    description = tool.description or f"Runs the {tool.name} toolset action."
     return {
         "type": "function",
         "function": {
             "name": tool.name,
+            "description": description,
             "parameters": tool.input_schema,
         },
     }
@@ -336,10 +366,15 @@ def _build_tool_loop(
     def execute(name: str, arguments: str) -> str:
         start = time.perf_counter()
         # The ceiling used to gate this call is the same Capped one the tool
-        # list was built under, so a write refused once stays refused.
+        # list was built under, so a write refused once stays refused. The
+        # ceiling is passed as the Tier itself: ``GatewayEnvelope`` parses it
+        # again in ``__post_init__``, and ``Tier`` is an ``IntEnum`` whose
+        # ``.value`` is an int that ``Tier.parse`` rejects (it accepts a Tier
+        # or a tier-named string), so the int would surface as a boot-time
+        # ``ValueError`` the moment a model called any tool a second time.
         env = GatewayEnvelope(
             task_id=ctx.task_ulid,
-            authority_ceiling=ceiling.value,
+            authority_ceiling=ceiling,
             untrusted=(ceiling < GatewayTier.T2),
         )
         resp = registry_gateway.call(env, name, _json_or_empty(arguments))
@@ -354,6 +389,22 @@ def _build_tool_loop(
                 reason=reason,
                 elapsed_ms=elapsed_ms,
             )
+            # The wired human gate just refused this call. HUMAN_APPROVAL_REFUSED
+            # is only ever returned by that branch (a T3/irreversible tool with
+            # a gate present that did not approve), so it is a precise signal
+            # that a human decision was required and withheld. The gateway's
+            # structured denial keeps that value ---- the contract the BDD pins
+            # ---- while the door's observability line reads the proof row's
+            # ``reason=human_gate`` so a destructive request is unmistakable to
+            # an operator who greps for it.
+            if reason == DenialReason.HUMAN_APPROVAL_REFUSED.value:
+                obs.gateway.info(
+                    "gateway.denied",
+                    ctx,
+                    tool=name,
+                    reason="human_gate",
+                    elapsed_ms=elapsed_ms,
+                )
             return f"denied: {reason}"
         result = (resp.output or {}).get("result")
         obs.router.info(
