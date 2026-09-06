@@ -192,6 +192,37 @@ def _with_memory(message: str, recalled: str) -> str:
     )
 
 
+def _receipts_context(receipts: list[tuple[int, str, str]], *, cap_tokens: int) -> str:
+    """The tool loop's receipts as context the verify lane may cite, if any.
+
+    Newest receipt first — a later tool call happened after an earlier one and
+    is the state the answering model saw last. When the serialised receipts
+    exceed ``cap_tokens`` the *oldest* are dropped first, so the facts the
+    model could restate survive a very long tool loop. Returns an empty
+    string when there were no successful tool calls. Each line names the tool
+    that produced it so the verifying model treats it as an observed result
+    and never as its own guess. This is a heuristic token bound (a compact
+    4 chars/token stand-in), not a tokenizer: it keeps the judge's context
+    from growing without bound, which is the point of the cap.
+    """
+    if not receipts:
+        return ""
+    budget_chars = max(cap_tokens * 4, 1)
+    newest_first = sorted(receipts, key=lambda r: r[0], reverse=True)
+    kept: list[tuple[int, str, str]] = []
+    used_chars = 0
+    for entry in newest_first:
+        line = f"- [{entry[1]}] {entry[2]}"
+        # +\n\n around the block is paid by the caller, not counted here.
+        cost = len(line) + 1
+        if kept and used_chars + cost > budget_chars:
+            break  # drop this and every older receipt: budget is exhausted
+        kept.append(entry)
+        used_chars += cost
+    lines = [f"- [{name}] {text}" for _, name, text in kept]
+    return "\n".join(lines)
+
+
 def _store_fact(fact: Fact) -> bool:
     """Write one fact to the Postgres store the recall path reads.
 
@@ -348,7 +379,12 @@ def _tool_schema(tool: ToolSpec) -> dict:
 
 
 def _build_tool_loop(
-    *, ceiling: GatewayTier, registry_gateway: ToolGateway, obs, ctx
+    *,
+    ceiling: GatewayTier,
+    registry_gateway: ToolGateway,
+    obs,
+    ctx,
+    receipts: list[tuple[int, str, str]] | None = None,
 ) -> tuple[list[dict], Callable[[str, str], str]]:
     """Assemble the runtime tool list and the gateway-backed executor.
 
@@ -363,9 +399,12 @@ def _build_tool_loop(
     observability line via the ObsHandle the caller already holds.
     """
     tools: list[dict] = []
+    turn = 0
 
     def execute(name: str, arguments: str) -> str:
+        nonlocal turn
         start = time.perf_counter()
+        turn += 1
         # The ceiling used to gate this call is the same Capped one the tool
         # list was built under, so a write refused once stays refused. The
         # ceiling is passed as the Tier itself: ``GatewayEnvelope`` parses it
@@ -436,7 +475,15 @@ def _build_tool_loop(
             denied=False,
             elapsed_ms=elapsed_ms,
         )
-        return result if isinstance(result, str) else str(result)
+        text = result if isinstance(result, str) else str(result)
+        if receipts is not None:
+            # Keep the receipt the answering model may restate: the tool's
+            # own result text, tagged with the tool that produced it and the
+            # tool-loop turn. Only a tool that *ran* lands here — a denied
+            # call returns earlier and never becomes a receipt. The turn
+            # makes "newest first" explicit for the judge's context.
+            receipts.append((turn, name, text))
+        return text
 
     for tool_name in registry_gateway.registry.names():
         spec = registry_gateway.registry.get(tool_name)
@@ -596,8 +643,17 @@ def answer_envelope(
         ceiling = (
             min(raw_ceiling, taint_ceiling) if task_env.is_taint_capped else raw_ceiling
         )
+        # The receipts the answering model may restate, collected by the
+        # gateway-executor wrapper below and handed to the verify judge so a
+        # claim that restates a tool result can be graded supported instead
+        # of keeping the unverified marker (crew#892 CP1).
+        turn_receipts: list[tuple[int, str, str]] = []
         tools, executor = _build_tool_loop(
-            ceiling=ceiling, registry_gateway=registry_gateway, obs=obs, ctx=ctx
+            ceiling=ceiling,
+            registry_gateway=registry_gateway,
+            obs=obs,
+            ctx=ctx,
+            receipts=turn_receipts,
         )
         outcome = _router().execute(
             RouterTask(
@@ -659,9 +715,26 @@ def answer_envelope(
     if outcome.state is OutcomeState.COMPLETED_UNVERIFIED and statements:
         with obs.router.task_span(ctx, "verify.judge"):
             router = _router()
+            # CP1 (crew#892): the judge sees the tool receipts too, newest
+            # first, under the task's context-token budget — a claim that
+            # restates a tool result is gradeable against what the tool
+            # actually returned, not against the model's own (unsupported)
+            # guess. The receipts sit ahead of memory, which is older state.
+            receipts_block = _receipts_context(
+                turn_receipts, cap_tokens=task_env.context_budget_tokens
+            )
+            if receipts_block:
+                context = (
+                    "Facts the assistant observed from tools this turn "
+                    "(authoritative for the statements below):\n"
+                    f"{receipts_block}\n\n"
+                    f"{_with_memory(asked or noted_text, recalled)}"
+                )
+            else:
+                context = _with_memory(asked or noted_text, recalled)
             verdicts = reply_judge.judge(
                 statements,
-                context=_with_memory(asked or noted_text, recalled),
+                context=context,
                 config=router.config,
                 ledger=router.ledger,
                 client=provider_client or LiteLLMClient(),
