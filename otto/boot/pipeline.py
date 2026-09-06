@@ -141,10 +141,16 @@ def _router() -> Router:
 _CONTRACT_PROMPT = """You are Otto, the operator's assistant for this estate.
 
 You may think for as long as you need to, but your thinking is not the
-reply. Your entire output must be one raw JSON object: no markdown fence,
-no preamble, no commentary before it or after it. A reasoning lane that
-narrates its way to the answer breaks the parser exactly as badly as an
-answer cut off half way through (founder, 2026-09-04).
+reply. Tools are the only sanctioned way to learn a fact about the machine,
+the estate or the outside world: when a question needs a fact a tool can
+fetch — a file, a command's output, the web, the estate — call the tool
+first and answer from its result; never guess a fact a tool could have
+fetched. A shell command runs through ``process``; git and GitHub also go
+through ``process`` with the token already in the environment. When you have
+finished using tools, your reply is ONE raw JSON object: no markdown fence,
+no preamble, no commentary before it or after it (founder, 2026-09-04). A
+reasoning lane that narrates its way to the answer breaks the parser exactly
+as badly as an answer cut off half way through.
 
 Answer the message below. Reply with a single JSON object and nothing else:
 
@@ -285,10 +291,24 @@ def build_registry() -> ToolRegistry:
     toolsets = os.environ.get("OTTO_TOOLSETS")
     if toolsets:
         from otto.gateway.bridge import register_fork_tools
+        from otto.boot.errors import BootRefused
 
-        register_fork_tools(
+        # The return is the count of *real* fork hands (the synthetic
+        # terminal_irreversible T3 gate is always present and is not a hand).
+        fork_count = register_fork_tools(
             registry, enabled_toolsets=[t for t in toolsets.split(",") if t.strip()]
         )
+        if fork_count == 0:
+            # The deployment asked for the fork tools and none arrived. A
+            # silent boot that offers the model no hands is worse than no
+            # boot: refuse loudly rather than answer every request with
+            # "I have no tools for that."
+            raise BootRefused(
+                "OTTO_TOOLSETS set but zero fork tools registered",
+                "check OTTO_TOOLSETS and the fork's get_tool_definitions(); "
+                "the bridge refused a tool-less boot rather than answer "
+                "with no hands.",
+            )
     return registry
 
 
@@ -306,11 +326,20 @@ def _json_or_empty(raw: str) -> dict:
 
 def _tool_schema(tool: ToolSpec) -> dict:
     """The OpenAI-style tool schema the model router expects for one
-    registered tool (function name + its strict JSON input schema)."""
+    registered tool (function name + its strict JSON input schema).
+
+    A tool always carries a non-empty ``description`` to the model — the
+    one registered on the spec, or one derived from the tool's own name when
+    the registering surface left it blank. Never an empty string: a model
+    that is told a tool exists but not what it does tends to guess, which is
+    how a wrong tool gets called.
+    """
+    description = tool.description or f"Runs the {tool.name} toolset action."
     return {
         "type": "function",
         "function": {
             "name": tool.name,
+            "description": description,
             "parameters": tool.input_schema,
         },
     }
