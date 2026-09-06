@@ -213,6 +213,20 @@ class Worker:
             await msg.nak()
             return
 
+        # Step 3: the inbound was speech, so the answer goes out as a voice
+        # note too (ADR 0022). Best-effort, never a retry trigger: the text
+        # reply above already reached the customer, and a door that cannot
+        # speak (no wired speaker) must not cost them their answer.
+        if envelope.wants_voice_reply:
+            send_voice = getattr(plugin, "send_voice", None)
+            if callable(send_voice):
+                try:
+                    send_voice(secret, envelope.reply_to, answer.reply_text)
+                except OutboundNotSupported as exc:
+                    self._obs.info("worker.voice_unsupported", ctx, error=str(exc))
+                except Exception as exc:  # noqa: BLE001 - audio upload refused
+                    self._obs.info("worker.voice_failed", ctx, error=str(exc))
+
         self._obs.info("worker.answered", ctx, channel=channel)
         await msg.ack()
 

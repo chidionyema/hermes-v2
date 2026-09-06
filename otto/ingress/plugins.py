@@ -50,6 +50,17 @@ class OutboundNotSupported(RuntimeError):
     so the answer is fetched, not pushed."""
 
 
+class TextToSpeech(Protocol):
+    """Words to audio (ADR 0022). The concrete edge is the fork's tts
+    (edge-tts, offline voices before any network); a test injects a stub
+    that returns known bytes. Absent a wired speaker a door simply does
+    not speak, and never fails a text answer because of it."""
+
+    def synthesize(self, text: str) -> bytes:
+        """Return an OGG/Opus voice note ``bytes`` for ``text``."""
+        ...
+
+
 class ChannelPlugin(Protocol):
     """One channel's credential rules and its surface binding."""
 
@@ -83,6 +94,16 @@ class ChannelPlugin(Protocol):
         """
         ...
 
+    def send_voice(self, secret: str, reply_to: str, text: str) -> None:
+        """Deliver an answer as audio, when this surface can carry one
+        (ADR 0022: voice replies on). Called by the answering lane for an
+        inbound that arrived as speech; the reply's text is always sent too,
+        so ``send_voice`` degrades to a no-op on a surface that cannot
+        speak. Raises ``OutboundNotSupported`` only when the surface has no
+        audio path at all.
+        """
+        ...
+
 
 def _header(headers: Mapping[str, str], name: str) -> str | None:
     """Case-insensitive header read. HTTP header names are
@@ -110,6 +131,22 @@ class TelegramPlugin:
     channel: str = TELEGRAM
     task_source: TaskSource = TaskSource.telegram
     header_name: str = "X-Telegram-Bot-Api-Secret-Token"
+    #: Optional text-to-speech seam (ADR 0022). ``None`` (the default
+    #: wherever the fork's edge-tts is unavailable, a bare checkout or a
+    #: surface with no audio) makes ``send_voice`` a no-op: the text reply
+    #: has already been sent, so silence is never the cost.
+    speaker: TextToSpeech | None = None
+
+    def send_voice(self, secret: str, reply_to: str, text: str) -> None:
+        """Speak ``text`` to ``reply_to``. Synthesises audio through
+        ``self.speaker`` (the fork's tts) when one is wired, then uploads
+        it as a Telegram voice note. With no speaker this is a no-op — the
+        door never fails a text answer because the audio half of it cannot
+        be produced here."""
+        if self.speaker is None:
+            return
+        audio = self.speaker.synthesize(text)
+        TelegramHTTPTransport(token=secret).send_voice(int(reply_to), audio)
 
     def present_credential(
         self, headers: Mapping[str, str], raw_body: bytes
@@ -180,6 +217,12 @@ class HttpPlugin:
         return HttpBinding(principal_allowlist=dict(principal_allowlist or {}))
 
     def send_reply(self, secret: str, reply_to: str, text: str) -> None:
+        raise OutboundNotSupported(
+            "a plain HTTP caller has no address to push an answer to; it "
+            "reads the answer back by task id"
+        )
+
+    def send_voice(self, secret: str, reply_to: str, text: str) -> None:
         raise OutboundNotSupported(
             "a plain HTTP caller has no address to push an answer to; it "
             "reads the answer back by task id"

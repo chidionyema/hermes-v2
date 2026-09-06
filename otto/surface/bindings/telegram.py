@@ -22,6 +22,8 @@ TELEGRAM_CAPABILITIES: frozenset[Capability] = frozenset(
     {
         Capability.TEXT,
         Capability.RICH,
+        Capability.VOICE_IN,
+        Capability.VOICE_OUT,
         Capability.IMAGE_IN,
         Capability.IMAGE_OUT,
         Capability.APPROVAL_GESTURE,
