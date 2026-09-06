@@ -166,3 +166,48 @@ def test_tools_require_executor(monkeypatch: pytest.MonkeyPatch) -> None:
     _attach(monkeypatch, [_text_response("ok")])
     with pytest.raises(ValueError):
         LiteLLMClient().complete("kimi", "hi", timeout_seconds=5, tools=TOOLS)
+
+
+def test_tools_send_tool_choice_auto_and_descriptions(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A tool-bearing request tells the endpoint it may choose per turn
+    (``tool_choice=auto``) and every offered function carries a non-empty
+    ``description`` — a model must not be handed a tool it cannot tell what
+    it does."""
+    described_tools = [
+        {
+            "type": "function",
+            "function": {
+                "name": "estate_find_entity",
+                "description": "Look up one estate entity by name.",
+                "parameters": {},
+            },
+        }
+    ]
+    captured = _attach(monkeypatch, [_text_response("final")])
+
+    def executor(name: str, args: str) -> str:  # noqa: ARG001
+        return "ok"
+
+    LiteLLMClient().complete(
+        "kimi",
+        "find it",
+        timeout_seconds=5,
+        tools=described_tools,
+        tool_executor=executor,
+    )
+    assert captured[0]["tool_choice"] == "auto"
+    for fn in captured[0]["tools"]:
+        assert fn["function"].get("description")
+
+
+def test_no_tools_sends_no_tool_choice(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Without tools the request body carries neither a tools field nor a
+    tool_choice — the plain-completion shape is untouched."""
+    captured = _attach(monkeypatch, [_text_response("plain")])
+    LiteLLMClient().complete("kimi", "hello", timeout_seconds=5)
+    assert "tool_choice" not in captured[0]
+    assert "tools" not in captured[0]

@@ -233,6 +233,10 @@ class LiteLLMClient:
         }
         if tools is not None:
             body["tools"] = tools
+            # Let the endpoint decide tool vs plain answer per turn. The
+            # forced default is fine: the model answers directly when it
+            # needs no tool, and calls one when it does.
+            body["tool_choice"] = "auto"
         req = urllib.request.Request(  # noqa: S310 - https only, estate router
             f"{litellm_base_url()}/chat/completions",
             data=json.dumps(body).encode(),

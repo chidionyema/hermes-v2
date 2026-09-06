@@ -60,6 +60,7 @@ class ToolSpec:
     name: str
     tier: Tier
     input_schema: dict[str, Any]
+    description: str = ""
     handler: ToolHandler = _default_handler
     irreversible: bool = False
     idempotent: bool = True
