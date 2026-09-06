@@ -13,7 +13,7 @@ import json
 
 from otto.ingress.gateway import ACCEPTED, NOTHING_TO_DO, EventGateway
 from otto.ingress.media import (
-    TelegramMediaEnrichment,
+    SensedMediaEnrichment,
     detect_media,
     format_image,
 )
@@ -73,11 +73,11 @@ class _StubDescriber:
         return self.description
 
 
-def _photon_seam(desc: str, *, calls: list) -> TelegramMediaEnrichment:
+def _photon_seam(desc: str, *, calls: list) -> SensedMediaEnrichment:
     """A real seam whose fetcher writes nothing and whose describer returns
     known words — the photo path through ``process`` runs end to end, from
     intent to formatted content, with no fork import and no socket."""
-    return TelegramMediaEnrichment(
+    return SensedMediaEnrichment(
         fetcher=_StubFetcher(), describer=_StubDescriber(desc, calls=calls)
     )
 

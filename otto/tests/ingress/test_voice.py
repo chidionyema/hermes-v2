@@ -5,7 +5,7 @@ Spec ``docs/specs/otto-door-hands-and-senses.md``: a Telegram update with a
 the transcript and whose capabilities include ``VOICE_IN``; the worker with a
 stub plugin calls both ``send_reply`` and ``send_voice``.
 
-Everything here is offline. The enrichment ``TelegramMediaEnrichment`` is
+Everything here is offline. The enrichment ``SensedMediaEnrichment`` is
 stubbed so no socket opens and no fork tool imports; the transport is stubbed
 in the plugin test so send_voice never leaves the process. ADR 0022 keeps the
 real speech in the fork; this suite proves the seams the fork plugs into.
@@ -20,7 +20,7 @@ from dataclasses import dataclass, field
 from otto.ingress import worker as worker_module
 from otto.ingress.gateway import ACCEPTED, NOTHING_TO_DO, EventGateway
 from otto.ingress.media import (
-    TelegramMediaEnrichment,
+    SensedMediaEnrichment,
     detect_media,
     format_voice,
 )
@@ -115,8 +115,8 @@ class _StubFetcher:
         return _P()
 
 
-def _stub_voice_enrichment(transcript: str) -> TelegramMediaEnrichment:
-    return TelegramMediaEnrichment(
+def _stub_voice_enrichment(transcript: str) -> SensedMediaEnrichment:
+    return SensedMediaEnrichment(
         fetcher=_StubFetcher(), transcriber=_StubTranscriber(transcript)
     )
 
