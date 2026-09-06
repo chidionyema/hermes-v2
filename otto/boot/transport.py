@@ -39,6 +39,10 @@ class TelegramTransport(Protocol):
 
     def send_chat_action(self, chat_id: int, action: str = "typing") -> None: ...
 
+    def send_voice(
+        self, chat_id: int, audio: bytes, filename: str = "reply.ogg"
+    ) -> None: ...
+
 
 @dataclass(frozen=True)
 class TelegramHTTPTransport:
@@ -98,3 +102,48 @@ class TelegramHTTPTransport:
         indicator is a courtesy and must not be able to cost the sender
         their answer."""
         self._post("sendChatAction", {"chat_id": chat_id, "action": action})
+
+    def send_voice(
+        self, chat_id: int, audio: bytes, filename: str = "reply.ogg"
+    ) -> None:
+        """Send a voice message (ADR 0022: spoked replies travel as a
+        Telegram voice note). Telegram's ``sendVoice`` takes the audio as
+        a multipart upload, so this posts ``multipart/form-data`` rather
+        than the JSON the other methods use.
+
+        ``audio`` is the already-synthesised OGG/Opus bytes; the caller
+        (the plugin, via the fork's tts) produces them — this method only
+        carries bytes to the Bot API and never synthesises.
+        """
+        import uuid
+
+        boundary = "----otto" + uuid.uuid4().hex
+        fields = [
+            f'--{boundary}\r\nContent-Disposition: form-data; name="chat_id"\r\n\r\n{chat_id}\r\n'.encode(),
+            (
+                f"--{boundary}\r\nContent-Disposition: form-data; "
+                f'name="voice"; filename="{filename}"\r\n'
+                f"Content-Type: audio/ogg\r\n\r\n"
+            ).encode(),
+            audio,
+            f"\r\n--{boundary}--\r\n".encode(),
+        ]
+        body = b"".join(fields)
+        url = f"{self.api_base}/bot{self.token}/sendVoice"
+        req = urllib.request.Request(  # noqa: S310 - https, Telegram Bot API
+            url,
+            data=body,
+            headers={"Content-Type": f"multipart/form-data; boundary={boundary}"},
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=self.timeout_seconds) as resp:  # noqa: S310
+                obj = json.loads(resp.read() or b"{}")
+        except urllib.error.HTTPError as exc:  # noqa: PERF203
+            raise TelegramAPIError(f"sendVoice: HTTP {exc.code}") from exc
+        except urllib.error.URLError as exc:
+            raise TelegramAPIError(f"sendVoice: {exc.reason}") from exc
+        if not obj.get("ok"):
+            raise TelegramAPIError(
+                f"sendVoice: {obj.get('description', 'no description')}"
+            )

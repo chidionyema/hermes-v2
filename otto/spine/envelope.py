@@ -131,6 +131,12 @@ class TaskEnvelope(BaseModel):
     # tenant alone cannot say which that was. Optional for the same reason
     # ``reply_to`` is.
     reply_binding: str | None = None
+    # Step 3 of the hands-and-senses spec: whether this inbound arrived as
+    # speech, so the answering lane sends its reply as audio as well as
+    # text (ADR 0022: voice replies on). Defaults off; only the media seam
+    # sets it True, for a voice or audio note. A photo or plain text stays
+    # text-outbound.
+    wants_voice_reply: bool = False
 
     @field_serializer("taint")
     def _serialize_taint(self, taint: frozenset[TrustTag]) -> list[str]:
@@ -180,6 +186,7 @@ class TaskEnvelope(BaseModel):
         taint: frozenset[TrustTag] = frozenset(),
         created_at: datetime | None = None,
         reply_to: str | None = None,
+        wants_voice_reply: bool = False,
     ) -> "TaskEnvelope":
         """Mint a fresh envelope with a fresh ULID. The one place a task_id
         is ever generated — every other constructor call takes one in."""
@@ -198,6 +205,7 @@ class TaskEnvelope(BaseModel):
             provenance=provenance,
             taint=frozenset(taint),
             reply_to=reply_to,
+            wants_voice_reply=wants_voice_reply,
         )
 
     def canonical_json(self) -> bytes:

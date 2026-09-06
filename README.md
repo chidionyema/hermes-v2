@@ -499,12 +499,14 @@ are tracked, so what you see below is the source they come from.
 | `otto/ingress/__init__.py` | Package docstring: what the gateway is, the multi-tenant directive it implements, and its boundaries. |
 | `otto/ingress/__main__.py` | `python -m otto.ingress`: the process the deployment runs, booting the collector, the binding database and the bus before the socket opens. |
 | `otto/ingress/gateway.py` | The request pipeline every channel and every customer shares: nine steps, none of which names a channel. |
+| `otto/ingress/media.py` | Hands & senses 3+4 core: pure, channel-neutral media models and detectors; a voice note or photo becomes prefixed words, the Telegram-coupled bolts live in `plugins.py`. |
 | `otto/ingress/pg_store.py` | The binding table on PostgreSQL, the store the running gateway holds; the connection details come from the deployment and the password from a mounted file. |
 | `otto/ingress/plugins.py` | Per-channel plugins — the only place a channel's name means anything; the Telegram verifier lives here, behind the channel-blind door. |
 | `otto/ingress/publisher.py` | Hands the normalised task envelope to the spine; the gateway's job ends when the envelope is on the bus. |
 | `otto/ingress/secrets.py` | Resolves a secret reference to a secret value at request time; the binding table stores references, never material. |
 | `otto/ingress/server.py` | The socket: `GET /healthz` and `POST /webhook/{channel}`, for every channel and every customer. |
 | `otto/ingress/store.py` | The `channel_binding` table: which customer owns which channel — the whole of channel onboarding. |
+| `otto/ingress/thread.py` | Hands & senses 8: the door's conversation thread — one per principal, short-term, carrying across surfaces; `thread_messages` projects recent turns plus memory plus the current question. |
 | `otto/ingress/worker.py` | The answering half of the one door: a durable pull consumer on `OTTO_TASKS` that runs the shared answering path and replies on the customer's own channel, with its own token. |
 | `otto/memory/` | CP4: facts with provenance that survive a restart; the Postgres store and its migrations. |
 | `otto/memory/__init__.py` | CP4 memory / context-engine core (crew#768). |
@@ -587,6 +589,7 @@ are tracked, so what you see below is the source they come from.
 | `otto/tests/boot/test_main.py` | `python -m otto.boot`'s dispatch: `--set-webhook`, the missing-token refusal before anything boots, and server assembly with a non-blocking fake server. |
 | `otto/tests/boot/test_pipeline.py` | The lane crossing itself: an allowlisted chat gets a reply, an unrecognised chat gets no tool authority and no reply. |
 | `otto/tests/boot/test_memory_hindsight.py` | Proves the door remembers: one bank serves every surface, retain sends the vendor's shape, and an unreachable store never costs the answer. |
+| `otto/tests/boot/test_presence.py` | Hands & senses 7: the long-answer progress seam — one phase name past eight seconds, a single-shot reporter that edits in place once, never a running commentary. |
 | `otto/tests/cp0/` | CP0 eval tests. |
 | `otto/tests/cp0/__init__.py` | Package marker for `otto/tests/cp0`. |
 | `otto/tests/cp0/conftest.py` | Shared pytest fixtures for this folder. |
@@ -658,6 +661,7 @@ are tracked, so what you see below is the source they come from.
 | `otto/tests/cp4/test_dangling_reference.py` | Regression: a fact referencing a missing row aborts loudly, as its own error class, and stores nothing. |
 | `otto/tests/cp4/test_embedding_lane.py` | The vector arm's one wire, driven against a real loopback HTTP server: the request carries the store's width, a wrong width is refused, the key rides in the header, a `file:` endpoint never reaches urllib, and a router that is down still lets the sender have their answer. |
 | `otto/tests/cp4/test_l2_sync_recall.py` | The synchronous read path against a real Postgres: it returns what was stored, and it returns fast. |
+| `otto/tests/cp4/test_thread.py` | Hands & senses 8: three envelopes from one principal produce a messages list holding the earlier turns, and another principal holds none — proven on the real SQLite store path. |
 | `otto/tests/cp5/` | CP5 router tests. |
 | `otto/tests/cp5/__init__.py` | CP5 router and structured-outputs BDD suite (crew#768). |
 | `otto/tests/cp5/conftest.py` | Shared fixtures for the CP5 router BDD suite. |
@@ -695,6 +699,8 @@ are tracked, so what you see below is the source they come from.
 | `otto/tests/ingress/conftest.py` | Shared fixtures: `OTTO_OBS_MODE=test`, in-memory binding store and recorded publisher. |
 | `otto/tests/ingress/test_entrypoint.py` | The boot contract the deployment depends on: the port, the database, and the refusal to listen before the collector and the table are proved. |
 | `otto/tests/ingress/test_gateway.py` | The one door: routing, refusals, and channel independence. |
+| `otto/tests/ingress/test_photo.py` | Hands & senses 4: a photo update, sensed through the seam to `[image] <caption>\n<description>` content, offline with a stub describer. |
+| `otto/tests/ingress/test_voice.py` | Hands & senses 3: a voice note, transcribed to `[voice] ...` content with `VOICE_IN`, and the worker answering with both text and voice. |
 | `otto/tests/ingress/test_registry_as_data.py` | Onboarding a customer is a database write, not a deployment — the point of the gateway, proved. |
 | `otto/tests/ingress/test_routes.py` | Path routing: `channel_from_path` is the whole of the routing surface, and no route names a channel. |
 | `otto/tests/ingress/test_store_and_secrets.py` | The binding table and the secret resolver alone: the table holds no secret material, and resolution happens at request time. |
