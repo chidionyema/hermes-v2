@@ -27,6 +27,7 @@ from dataclasses import dataclass
 from otto.boot.pipeline import ObsHandles, deliver, extract_chat_id, process_update
 from otto.boot.presence import typing_while
 from otto.boot.transport import TelegramTransport
+from otto.boot.visible_progress import ProgressEditor
 from otto.gateway.core import ToolGateway
 from otto.surface.bindings.telegram import TelegramBinding
 
@@ -81,20 +82,72 @@ def handle_webhook_body(
         return WebhookResult(400, BAD_REQUEST_RESPONSE)
 
     try:
+        # CP2 (crew#892): an allowlisted sender whose text is non-empty is
+        # guaranteed to reach answer_envelope, so give that chat one
+        # placeholder before the (possibly half-minute) model pass and pass
+        # the editor down so the final answer is edited into that same
+        # message rather than a second fresh send. Everyone else gets None
+        # and stays on today's byte-identical path.
+        chat_id = extract_chat_id(native_event)
+        editor = _placeholder_for(
+            native_event,
+            chat_id=chat_id,
+            binding=binding,
+            transport=transport,
+            obs=obs,
+        )
         # The model call inside process_update blocks for as long as the
         # lane takes to think -- half a minute on a reasoning lane. Telegram
         # shows nothing at all meanwhile, so the sender is told the bot is
         # composing rather than left reading silence (founder, 2026-09-04).
-        with typing_while(transport, extract_chat_id(native_event)):
+        with typing_while(transport, chat_id):
             outcome = process_update(
-                native_event, binding=binding, registry_gateway=gateway, obs=obs
+                native_event,
+                binding=binding,
+                registry_gateway=gateway,
+                obs=obs,
+                progress=editor,
             )
-        delivered = deliver(outcome, transport)
+        if editor is not None and editor.message_id is not None:
+            delivered = deliver(outcome, transport, edit_message_id=editor.message_id)
+        else:
+            delivered = deliver(outcome, transport)
     except Exception as exc:  # noqa: BLE001 - a webhook must never crash the process
         obs.boot.error("webhook.pipeline_error", _fallback_ctx(), error=str(exc))
         return WebhookResult(200, DROPPED_RESPONSE)
 
     return WebhookResult(200, DELIVERED_RESPONSE if delivered else DROPPED_RESPONSE)
+
+
+def _placeholder_for(
+    native_event: dict,
+    *,
+    chat_id: int | None,
+    binding: TelegramBinding,
+    transport: TelegramTransport,
+    obs,  # ObsHandles — see handle_webhook_body
+) -> ProgressEditor | None:
+    """One placeholder for a turn that will truly be answered.
+
+    Returns an editor only for an update from an allowlisted person (the
+    founder lane CP2 exists for) with non-empty text — the two cases
+    ``answer_envelope`` is guaranteed to answer. Anything else returns
+    ``None`` so the plain, untouched send path runs; CP2 is opt-in per
+    message, never global. Sending a placeholder for a message that would
+    never earn an answer would strand a "… working …" that no final edit
+    ever resolved, so unknown or empty senders stay on today's path
+    byte-for-byte.
+    """
+    if chat_id is None:
+        return None
+    if binding.chat_id_allowlist.get(chat_id) is None:
+        return None
+    text = (native_event.get("message") or {}).get("text")
+    if not isinstance(text, str) or not text.strip():
+        return None
+    editor = ProgressEditor(transport)
+    editor.begin(chat_id, "… working …", obs=obs)
+    return editor
 
 
 def _fallback_ctx():

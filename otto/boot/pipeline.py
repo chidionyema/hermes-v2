@@ -61,6 +61,7 @@ from dataclasses import dataclass, replace
 from typing import Callable
 
 from otto.boot.transport import TelegramTransport
+from otto.boot.visible_progress import ProgressEditor
 from otto.gateway.bridge import ForkToolDenied
 from otto.gateway.core import Envelope as GatewayEnvelope
 from otto.gateway.core import GatewayResponse, ToolGateway
@@ -385,6 +386,7 @@ def _build_tool_loop(
     obs,
     ctx,
     receipts: list[tuple[int, str, str]] | None = None,
+    progress: ProgressEditor | None = None,
 ) -> tuple[list[dict], Callable[[str, str], str]]:
     """Assemble the runtime tool list and the gateway-backed executor.
 
@@ -483,6 +485,8 @@ def _build_tool_loop(
             # call returns earlier and never becomes a receipt. The turn
             # makes "newest first" explicit for the judge's context.
             receipts.append((turn, name, text))
+        if progress is not None:
+            progress.note(f"{turn} tool calls in… did {name}", obs=obs)
         return text
 
     for tool_name in registry_gateway.registry.names():
@@ -582,6 +586,7 @@ def answer_envelope(
     registry_gateway: ToolGateway,
     obs: ObsHandles,
     provider_client: ProviderClient | None = None,
+    progress: ProgressEditor | None = None,
 ) -> AnswerOutcome:
     """Answer one task envelope: gateway authority, then the model
     router, then the memory fact.
@@ -654,7 +659,12 @@ def answer_envelope(
             obs=obs,
             ctx=ctx,
             receipts=turn_receipts,
+            progress=progress,
         )
+        if progress is not None:
+            # The model pass is about to block for as long as the lane takes;
+            # refresh the placeholder so the sender knows work is under way.
+            progress.note("thinking…", obs=obs)
         outcome = _router().execute(
             RouterTask(
                 input=_prompt_for(_with_memory(asked or noted_text, recalled)),
@@ -808,11 +818,18 @@ def process_update(
     registry_gateway: ToolGateway,
     obs: ObsHandles,
     provider_client: ProviderClient | None = None,
+    progress: ProgressEditor | None = None,
 ) -> PipelineOutcome:
     """Run one inbound Telegram update across every lane. Never raises
     for a well-formed but untrusted or empty event — the caller (the
     HTTP layer) validates that ``native_event`` is at least dict-shaped
-    before this function is ever called."""
+    before this function is ever called.
+
+    ``progress`` (CP2, crew#892) is an optional in-place editor already
+    bound to a placeholder the caller posted for this turn. When present,
+    the answering call refreshes it as the model works; ``None`` keeps
+    today's exactly-once ``send_message`` behaviour. It is never constructed
+    here — the HTTP layer decides who gets a placeholder."""
     surface_env = binding.normalize(native_event, tenant_id=LEGACY_SINGLE_TENANT)
     ctx = TaskContext(
         task_ulid=surface_env.correlation_id, tenant_id=surface_env.tenant_id
@@ -858,6 +875,7 @@ def process_update(
         registry_gateway=registry_gateway,
         obs=obs,
         provider_client=provider_client,
+        progress=progress,
     )
     return PipelineOutcome(
         surface_envelope=surface_env,
@@ -873,11 +891,31 @@ def process_update(
     )
 
 
-def deliver(outcome: PipelineOutcome, transport: TelegramTransport) -> bool:
+def deliver(
+    outcome: PipelineOutcome,
+    transport: TelegramTransport,
+    *,
+    edit_message_id: int | None = None,
+) -> bool:
     """Send the reply Telegram is owed, if any. Returns whether a
     message was actually sent (tests assert on this rather than on
-    Telegram's own wording)."""
+    Telegram's own wording).
+
+    CP2 (crew#892): when a placeholder was posted for this turn, the caller
+    passes its ``edit_message_id`` and this edits the answer into that same
+    message rather than opening a second one, so the founder watches one
+    living message. ``edit_message_id`` is purely optional: a caller that did
+    not post a placeholder keeps ``send_message`` behaviour exactly, and the
+    default-arg caller (all existing tests) is untouched.
+    """
     if outcome.reply_chat_id is None or not outcome.reply_text:
         return False
-    transport.send_message(outcome.reply_chat_id, outcome.reply_text)
+    if edit_message_id is not None:
+        # CP2: the placeholder already told the sender Otto is at work; the
+        # answer belongs in that same slot, not as a second fresh message.
+        transport.edit_message(
+            outcome.reply_chat_id, edit_message_id, outcome.reply_text
+        )
+    else:
+        transport.send_message(outcome.reply_chat_id, outcome.reply_text)
     return True

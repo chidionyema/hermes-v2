@@ -99,4 +99,8 @@ def test_a_pipeline_exception_is_dropped_not_crashed(deps, monkeypatch) -> None:
     result = handle_webhook_body(body, **deps)
     assert result.status == 200
     assert result.body == DROPPED_RESPONSE
-    assert deps["transport"].sent == []
+    # CP2 (crew#892) posts a courtesy placeholder before the model pass, so a
+    # backend failure never answers -- the sender sees at most the
+    # acknowledgment, never a fabricated reply, and nothing was edited.
+    assert deps["transport"].edited == []
+    assert all(text == "… working …" for _, text in deps["transport"].sent)
