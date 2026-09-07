@@ -14,12 +14,24 @@ from dataclasses import dataclass, field
 
 # Spec section 5 defaults. Named once here; every one is overridable per
 # deployment via environment or the YAML policy document.
-_DEFAULT_DAILY_BUDGET_USD = {"judgment": 15.0, "bulk": 5.0, "verify": 3.0, "deep": 10.0}
+_DEFAULT_DAILY_BUDGET_USD = {
+    "judgment": 15.0,
+    "bulk": 5.0,
+    "verify": 3.0,
+    "deep": 10.0,
+    # Explorer is the cheap candidate lane (crew#892 CP3): it fans out N
+    # proposed fixes on the zero-cost deepseek tail. It cannot default to
+    # $0 (a 0 limit reads as already-exhausted in `BudgetLedger.exhausted`),
+    # so it carries the shape of the least-cost paid lane and the estate's
+    # [budget.usd_per_day.litellm] envelope is the real ceiling.
+    "explore": 3.0,
+}
 _DEFAULT_MAX_COST_PER_TASK_USD = {
     "judgment": 0.80,
     "bulk": 0.10,
     "verify": 0.10,
     "deep": 0.50,
+    "explore": 0.10,
 }
 #: Bulk lane is MiniMax (fast raw execution — founder-verified lane); the
 #: judgment lane is deliberately a different model family so bulk-lane
@@ -36,6 +48,9 @@ _DEFAULT_LANE_MODELS = {
     "bulk": "minimax",
     "verify": "google/gemini",
     "deep": "kimi",
+    # Explorer runs the zero-cost tail (crew#892 CP3): deepseek is already a
+    # known family below and is the estate router's cheap fallback alias.
+    "explore": "deepseek",
 }
 #: Family is DERIVED from the model name via this explicit mapping — never
 #: declared alongside it, so a label can never disagree with the model
@@ -173,13 +188,25 @@ class LaneConfig:
     cost_per_1k_tokens_usd: float = _DEFAULT_COST_PER_1K_TOKENS_USD
 
 
+def lane_env_override_var(lane: str) -> str:
+    """The single env var that redirects one lane's model (crew#892 CP3).
+
+    Exposed (not inlined) so a governor / ``sb config --lint`` can enumerate
+    ``OTTO_ROUTER_LANE_<NAME>_MODEL`` from the shipped lane table: the lint
+    reads this exactly the way the router does, so what it lists is what
+    actually overrides. LAW 46: the env name is a contract, never a literal
+    pasted in two places that can drift.
+    """
+    return f"OTTO_ROUTER_LANE_{lane.upper()}_MODEL"
+
+
 def _default_lanes() -> dict[str, LaneConfig]:
     lanes: dict[str, LaneConfig] = {}
     for name, budget in _DEFAULT_DAILY_BUDGET_USD.items():
         lanes[name] = LaneConfig(
             name=name,
             model=os.environ.get(
-                f"OTTO_ROUTER_LANE_{name.upper()}_MODEL", _DEFAULT_LANE_MODELS[name]
+                lane_env_override_var(name), _DEFAULT_LANE_MODELS[name]
             ),
             daily_budget_usd=_float_env(
                 f"OTTO_ROUTER_BUDGET_{name.upper()}_USD", budget
