@@ -150,3 +150,53 @@ def test_blank_message_gets_no_placeholder(deps) -> None:
     assert result.status == 200
     assert result.body == DROPPED_RESPONSE
     assert deps["transport"].sent == []
+
+
+class _RecObs:
+    """A recording obs double: ``.boot.info(event, ctx, **fields)`` appends
+    to a list so a test can assert *which* observability events a live
+    progress editor emits, without coupling to the backend."""
+
+    def __init__(self) -> None:
+        self.events: list[tuple[str, dict]] = []
+        self.boot = self._Boot(self)
+
+    class _Boot:
+        def __init__(self, outer: "_RecObs") -> None:
+            self._outer = outer
+
+        def info(self, event: str, ctx, **fields: object) -> None:
+            self._outer.events.append((event, fields))
+
+        def warning(self, event: str, ctx, **fields: object) -> None:
+            self._outer.events.append((event, fields))
+
+
+def test_progress_editor_emits_progress_edited_events_for_a_live_placeholder() -> None:
+    """When a placeholder is live, a note through the transport must surface
+    as an observable ``progress.edited`` event — the seam crew#892 names as
+    CP2's log condition. With no placeholder (begin never succeeded) a note is
+    a silent no-op, never an invented event."""
+    from otto.boot.visible_progress import ProgressEditor
+
+    rec = _RecObs()
+    transport = FakeTransport()
+    editor = ProgressEditor(transport)
+
+    # No placeholder yet: a note must not invent progress events.
+    editor.note("first progress line", obs=rec)
+    assert [e for e, _ in rec.events] == []
+
+    editor.begin(111, PLACEHOLDER, obs=rec)
+    begin_events = [e for e, _ in rec.events]
+    assert "progress.begin" in begin_events
+
+    # A live placeholder now emits progress.edited on an effective note.
+    before = len(rec.events)
+    editor.note("changed the plan after 3 tool calls", obs=rec)
+    emitted = [e for e, _ in rec.events[before:]]
+    assert "progress.edited" in emitted
+    # The edit actually reached the transport too.
+    assert transport.message_ids[(111, PLACEHOLDER)] in {
+        mid for _, mid, _ in transport.edited
+    }
