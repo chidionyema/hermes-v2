@@ -67,7 +67,7 @@ from otto.gateway.core import GatewayResponse, ToolGateway
 from otto.gateway.denial import DenialReason
 from otto.gateway.registry import ToolRegistry, ToolSpec
 from otto.gateway.registry import Tier as GatewayTier
-from otto.memory import fast_recall
+from otto.memory import conversation, fast_recall
 from otto.memory import hindsight as memory_api
 from otto.memory.models import Fact, Provenance
 from otto.obs.core import ObsHandle, TaskContext
@@ -798,6 +798,43 @@ def answer_envelope(
         )
 
     reply_text = "\n".join(reply_lines) if reply_lines else None
+
+    # The conversation itself, into the estate's Postgres. Before this the
+    # only record of what the founder asked and what Otto said back was the
+    # gateway pod's stdout: on 2026-09-08 the pod restarted at 09:22 and his
+    # 08:52 exchange was gone. A record that dies with a container is not a
+    # record, and no enterprise customer is being sold one.
+    #
+    # Here, and only here, because this is the single point where the
+    # question and the reply are both in scope. A gateway denial returns
+    # above without reaching this line, deliberately: an unrecognised sender
+    # gets silence and does not get a row in the customer's transcript
+    # either.
+    with obs.memory.task_span(ctx, "memory.record_turn"):
+        recorded = conversation.record(
+            conversation.Turn(
+                task_ulid=task_env.task_id,
+                tenant_id=task_env.tenant_id,
+                surface=task_env.source.value,
+                asked_at=task_env.created_at,
+                asked=content,
+                answered=reply_text,
+                lane=outcome.lane,
+                model=router_resp.model,
+                attempts=outcome.attempts,
+                outcome_state=outcome.state.value,
+                # Three-valued: None when the verify lane never ran at all,
+                # which is a different fact from it running and not clearing
+                # every line. Both are findable; neither is guessed.
+                verified=all(verdicts) if verdicts is not None else None,
+                claims_total=len(statements),
+                claims_clean=sum(verdicts) if verdicts is not None else None,
+                taint_capped=task_env.is_taint_capped,
+                cost_usd=outcome.charged_usd,
+            )
+        )
+        obs.memory.info("memory.turn_recorded", ctx, recorded=recorded)
+
     return AnswerOutcome(gw_response, router_resp, restored, reply_text)
 
 
