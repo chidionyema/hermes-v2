@@ -1,0 +1,533 @@
+# Synthetic CP1 baseline corpus (40 tasks), NOT the spec's real-history
+# extraction (that belongs to the eval-harness checkpoint, see
+# otto/spine/eval_runner.py module docstring for why). Exercises the
+# runner's plumbing: six task classes from spec section 3, mixed
+# correctness/groundedness/tool-path outcomes so the report's summary
+# numbers are not trivially 1.0 or 0.0 across the board.
+- id: eval-core-001
+  class: code
+  golden: golden-answer-1
+  response: golden-answer-1
+  claims:
+  - text: claim for task 1
+    evidence_refs:
+    - tool_call:1:1
+  tool_path:
+  - web_search
+  expected_tool_path:
+  - web_search
+  latency_s: 0.7
+  cost_usd: 0.02
+- id: eval-core-002
+  class: ops_read
+  golden: golden-answer-2
+  response: golden-answer-2
+  claims:
+  - text: claim for task 2
+    evidence_refs:
+    - tool_call:2:1
+  tool_path:
+  - web_search
+  expected_tool_path:
+  - web_search
+  latency_s: 0.9
+  cost_usd: 0.03
+- id: eval-core-003
+  class: comms
+  golden: golden-answer-3
+  response: golden-answer-3
+  claims:
+  - text: claim for task 3
+    evidence_refs:
+    - tool_call:3:1
+  tool_path: []
+  expected_tool_path: []
+  latency_s: 1.1
+  cost_usd: 0.04
+- id: eval-core-004
+  class: schedule
+  golden: golden-answer-4
+  response: golden-answer-4
+  claims:
+  - text: claim for task 4
+    evidence_refs:
+    - tool_call:4:1
+  tool_path: []
+  expected_tool_path: []
+  latency_s: 1.3
+  cost_usd: 0.05
+- id: eval-core-005
+  class: memory
+  golden: golden-answer-5
+  response: wrong-answer-5
+  claims:
+  - text: claim for task 5
+    evidence_refs:
+    - tool_call:5:1
+  tool_path:
+  - web_search
+  expected_tool_path:
+  - web_search
+  latency_s: 1.5
+  cost_usd: 0.01
+- id: eval-core-006
+  class: research
+  golden: golden-answer-6
+  response: golden-answer-6
+  claims:
+  - text: claim for task 6
+    evidence_refs:
+    - tool_call:6:1
+  tool_path:
+  - fs_read
+  expected_tool_path:
+  - web_search
+  latency_s: 1.7
+  cost_usd: 0.02
+- id: eval-core-007
+  class: code
+  golden: golden-answer-7
+  response: golden-answer-7
+  claims:
+  - text: claim for task 7
+    evidence_refs: []
+  tool_path:
+  - web_search
+  expected_tool_path:
+  - web_search
+  latency_s: 1.9
+  cost_usd: 0.03
+- id: eval-core-008
+  class: ops_read
+  golden: golden-answer-8
+  response: golden-answer-8
+  claims:
+  - text: claim for task 8
+    evidence_refs:
+    - tool_call:8:1
+  tool_path:
+  - web_search
+  expected_tool_path:
+  - web_search
+  latency_s: 2.1
+  cost_usd: 0.04
+- id: eval-core-009
+  class: comms
+  golden: golden-answer-9
+  response: golden-answer-9
+  claims:
+  - text: claim for task 9
+    evidence_refs:
+    - tool_call:9:1
+  tool_path: []
+  expected_tool_path: []
+  latency_s: 2.3
+  cost_usd: 0.05
+- id: eval-core-010
+  class: schedule
+  golden: golden-answer-10
+  response: wrong-answer-10
+  claims:
+  - text: claim for task 10
+    evidence_refs:
+    - tool_call:10:1
+  tool_path: []
+  expected_tool_path: []
+  latency_s: 0.5
+  cost_usd: 0.01
+- id: eval-core-011
+  class: memory
+  golden: golden-answer-11
+  response: golden-answer-11
+  claims:
+  - text: claim for task 11
+    evidence_refs:
+    - tool_call:11:1
+  tool_path:
+  - web_search
+  expected_tool_path:
+  - web_search
+  latency_s: 0.7
+  cost_usd: 0.02
+- id: eval-core-012
+  class: research
+  golden: golden-answer-12
+  response: golden-answer-12
+  claims:
+  - text: claim for task 12
+    evidence_refs:
+    - tool_call:12:1
+  tool_path:
+  - fs_read
+  expected_tool_path:
+  - web_search
+  latency_s: 0.9
+  cost_usd: 0.03
+- id: eval-core-013
+  class: code
+  golden: golden-answer-13
+  response: golden-answer-13
+  claims:
+  - text: claim for task 13
+    evidence_refs:
+    - tool_call:13:1
+  tool_path:
+  - web_search
+  expected_tool_path:
+  - web_search
+  latency_s: 1.1
+  cost_usd: 0.04
+- id: eval-core-014
+  class: ops_read
+  golden: golden-answer-14
+  response: golden-answer-14
+  claims:
+  - text: claim for task 14
+    evidence_refs: []
+  tool_path:
+  - web_search
+  expected_tool_path:
+  - web_search
+  latency_s: 1.3
+  cost_usd: 0.05
+- id: eval-core-015
+  class: comms
+  golden: golden-answer-15
+  response: wrong-answer-15
+  claims:
+  - text: claim for task 15
+    evidence_refs:
+    - tool_call:15:1
+  tool_path: []
+  expected_tool_path: []
+  latency_s: 1.5
+  cost_usd: 0.01
+- id: eval-core-016
+  class: schedule
+  golden: golden-answer-16
+  response: golden-answer-16
+  claims:
+  - text: claim for task 16
+    evidence_refs:
+    - tool_call:16:1
+  tool_path: []
+  expected_tool_path: []
+  latency_s: 1.7
+  cost_usd: 0.02
+- id: eval-core-017
+  class: memory
+  golden: golden-answer-17
+  response: golden-answer-17
+  claims:
+  - text: claim for task 17
+    evidence_refs:
+    - tool_call:17:1
+  tool_path:
+  - web_search
+  expected_tool_path:
+  - web_search
+  latency_s: 1.9
+  cost_usd: 0.03
+- id: eval-core-018
+  class: research
+  golden: golden-answer-18
+  response: golden-answer-18
+  claims:
+  - text: claim for task 18
+    evidence_refs:
+    - tool_call:18:1
+  tool_path:
+  - fs_read
+  expected_tool_path:
+  - web_search
+  latency_s: 2.1
+  cost_usd: 0.04
+- id: eval-core-019
+  class: code
+  golden: golden-answer-19
+  response: golden-answer-19
+  claims:
+  - text: claim for task 19
+    evidence_refs:
+    - tool_call:19:1
+  tool_path:
+  - web_search
+  expected_tool_path:
+  - web_search
+  latency_s: 2.3
+  cost_usd: 0.05
+- id: eval-core-020
+  class: ops_read
+  golden: golden-answer-20
+  response: wrong-answer-20
+  claims:
+  - text: claim for task 20
+    evidence_refs:
+    - tool_call:20:1
+  tool_path:
+  - web_search
+  expected_tool_path:
+  - web_search
+  latency_s: 0.5
+  cost_usd: 0.01
+- id: eval-core-021
+  class: comms
+  golden: golden-answer-21
+  response: golden-answer-21
+  claims:
+  - text: claim for task 21
+    evidence_refs: []
+  tool_path: []
+  expected_tool_path: []
+  latency_s: 0.7
+  cost_usd: 0.02
+- id: eval-core-022
+  class: schedule
+  golden: golden-answer-22
+  response: golden-answer-22
+  claims:
+  - text: claim for task 22
+    evidence_refs:
+    - tool_call:22:1
+  tool_path: []
+  expected_tool_path: []
+  latency_s: 0.9
+  cost_usd: 0.03
+- id: eval-core-023
+  class: memory
+  golden: golden-answer-23
+  response: golden-answer-23
+  claims:
+  - text: claim for task 23
+    evidence_refs:
+    - tool_call:23:1
+  tool_path:
+  - web_search
+  expected_tool_path:
+  - web_search
+  latency_s: 1.1
+  cost_usd: 0.04
+- id: eval-core-024
+  class: research
+  golden: golden-answer-24
+  response: golden-answer-24
+  claims:
+  - text: claim for task 24
+    evidence_refs:
+    - tool_call:24:1
+  tool_path:
+  - fs_read
+  expected_tool_path:
+  - web_search
+  latency_s: 1.3
+  cost_usd: 0.05
+- id: eval-core-025
+  class: code
+  golden: golden-answer-25
+  response: wrong-answer-25
+  claims:
+  - text: claim for task 25
+    evidence_refs:
+    - tool_call:25:1
+  tool_path:
+  - web_search
+  expected_tool_path:
+  - web_search
+  latency_s: 1.5
+  cost_usd: 0.01
+- id: eval-core-026
+  class: ops_read
+  golden: golden-answer-26
+  response: golden-answer-26
+  claims:
+  - text: claim for task 26
+    evidence_refs:
+    - tool_call:26:1
+  tool_path:
+  - web_search
+  expected_tool_path:
+  - web_search
+  latency_s: 1.7
+  cost_usd: 0.02
+- id: eval-core-027
+  class: comms
+  golden: golden-answer-27
+  response: golden-answer-27
+  claims:
+  - text: claim for task 27
+    evidence_refs:
+    - tool_call:27:1
+  tool_path: []
+  expected_tool_path: []
+  latency_s: 1.9
+  cost_usd: 0.03
+- id: eval-core-028
+  class: schedule
+  golden: golden-answer-28
+  response: golden-answer-28
+  claims:
+  - text: claim for task 28
+    evidence_refs: []
+  tool_path: []
+  expected_tool_path: []
+  latency_s: 2.1
+  cost_usd: 0.04
+- id: eval-core-029
+  class: memory
+  golden: golden-answer-29
+  response: golden-answer-29
+  claims:
+  - text: claim for task 29
+    evidence_refs:
+    - tool_call:29:1
+  tool_path:
+  - web_search
+  expected_tool_path:
+  - web_search
+  latency_s: 2.3
+  cost_usd: 0.05
+- id: eval-core-030
+  class: research
+  golden: golden-answer-30
+  response: wrong-answer-30
+  claims:
+  - text: claim for task 30
+    evidence_refs:
+    - tool_call:30:1
+  tool_path:
+  - fs_read
+  expected_tool_path:
+  - web_search
+  latency_s: 0.5
+  cost_usd: 0.01
+- id: eval-core-031
+  class: code
+  golden: golden-answer-31
+  response: golden-answer-31
+  claims:
+  - text: claim for task 31
+    evidence_refs:
+    - tool_call:31:1
+  tool_path:
+  - web_search
+  expected_tool_path:
+  - web_search
+  latency_s: 0.7
+  cost_usd: 0.02
+- id: eval-core-032
+  class: ops_read
+  golden: golden-answer-32
+  response: golden-answer-32
+  claims:
+  - text: claim for task 32
+    evidence_refs:
+    - tool_call:32:1
+  tool_path:
+  - web_search
+  expected_tool_path:
+  - web_search
+  latency_s: 0.9
+  cost_usd: 0.03
+- id: eval-core-033
+  class: comms
+  golden: golden-answer-33
+  response: golden-answer-33
+  claims:
+  - text: claim for task 33
+    evidence_refs:
+    - tool_call:33:1
+  tool_path: []
+  expected_tool_path: []
+  latency_s: 1.1
+  cost_usd: 0.04
+- id: eval-core-034
+  class: schedule
+  golden: golden-answer-34
+  response: golden-answer-34
+  claims:
+  - text: claim for task 34
+    evidence_refs:
+    - tool_call:34:1
+  tool_path: []
+  expected_tool_path: []
+  latency_s: 1.3
+  cost_usd: 0.05
+- id: eval-core-035
+  class: memory
+  golden: golden-answer-35
+  response: wrong-answer-35
+  claims:
+  - text: claim for task 35
+    evidence_refs: []
+  tool_path:
+  - web_search
+  expected_tool_path:
+  - web_search
+  latency_s: 1.5
+  cost_usd: 0.01
+- id: eval-core-036
+  class: research
+  golden: golden-answer-36
+  response: golden-answer-36
+  claims:
+  - text: claim for task 36
+    evidence_refs:
+    - tool_call:36:1
+  tool_path:
+  - fs_read
+  expected_tool_path:
+  - web_search
+  latency_s: 1.7
+  cost_usd: 0.02
+- id: eval-core-037
+  class: code
+  golden: golden-answer-37
+  response: golden-answer-37
+  claims:
+  - text: claim for task 37
+    evidence_refs:
+    - tool_call:37:1
+  tool_path:
+  - web_search
+  expected_tool_path:
+  - web_search
+  latency_s: 1.9
+  cost_usd: 0.03
+- id: eval-core-038
+  class: ops_read
+  golden: golden-answer-38
+  response: golden-answer-38
+  claims:
+  - text: claim for task 38
+    evidence_refs:
+    - tool_call:38:1
+  tool_path:
+  - web_search
+  expected_tool_path:
+  - web_search
+  latency_s: 2.1
+  cost_usd: 0.04
+- id: eval-core-039
+  class: comms
+  golden: golden-answer-39
+  response: golden-answer-39
+  claims:
+  - text: claim for task 39
+    evidence_refs:
+    - tool_call:39:1
+  tool_path: []
+  expected_tool_path: []
+  latency_s: 2.3
+  cost_usd: 0.05
+- id: eval-core-040
+  class: schedule
+  golden: golden-answer-40
+  response: wrong-answer-40
+  claims:
+  - text: claim for task 40
+    evidence_refs:
+    - tool_call:40:1
+  tool_path: []
+  expected_tool_path: []
+  latency_s: 0.5
+  cost_usd: 0.01

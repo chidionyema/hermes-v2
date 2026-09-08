@@ -1,0 +1,21 @@
+id: cp0-001-test
+tier: T0
+task_class: research
+input:
+  task: "search for a widget in stock"
+timeout_s: 2
+expect:
+  - property: contains
+    field: answer
+    value: widget
+  - property: tool_path
+    value: [web_search]
+    mode: subset
+  - property: max_latency_s
+    value: 1.0
+  - property: max_cost_usd
+    value: 0.01
+  - property: groundedness_ratio
+    min_ratio: 1.0
+  - property: no_error
+tags: []

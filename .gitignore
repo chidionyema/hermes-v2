@@ -149,3 +149,12 @@ verification_evidence.db
 verification_evidence.db-shm
 verification_evidence.db-wal
 skills/.curator_ledger.jsonl
+
+# Runtime writes into HERMES_HOME that showed up as an "uncommitted wave" on 2026-09-03 (rescue
+# branch rescue/2026-09-03/hermes-v2): state the gateway, the terminal tool and the LSP helper
+# write beside the tracked estate. None of it is the build; .dockerignore mirrors this list.
+processes.json
+terminal-sessions/
+cron/.jobs_*.tmp
+hindsight/
+lsp/bin/

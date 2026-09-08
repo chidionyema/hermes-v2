@@ -1,8 +1,11 @@
 model:
-  # crew#568 Phase 5: the primary model is the router's claude lane on a router key, never a
-  # vendor key (LAW 34). The router owns the vendor credential and the spend ledger.
+  # crew#568 Phase 5: the primary model is a router lane on a router key, never a vendor key
+  # (LAW 34). The router owns the vendor credential and the spend ledger. Founder 2026-09-02:
+  # Kimi is Otto's primary -- the router's kimi lane (moonshot/kimi-k3, idp platform/llm/config.yaml).
+  # crew#751: the Architect stays on the router. Cursor is the WORK runtime (Mac `agent -p` through
+  # mac-run), never the Telegram brain: Cursor ACP hangs on unknown methods and does not stream.
   provider: custom
-  default: claude
+  default: kimi
   base_url: https://llm.mumchimp.com/v1
   key_env: LITELLM_API_KEY
 fallback_providers:
@@ -46,7 +49,7 @@ command_allowlist:
   - execute_code
 _config_version: 38
 aux:
-  model: claude-fast
+  model: minimax
   provider: custom
   base_url: https://llm.mumchimp.com/v1
   key_env: LITELLM_API_KEY
@@ -60,7 +63,6 @@ sandbox:
     - $HERMES_HOME/skills:/skills:ro
   env_passthrough:
     - GITHUB_TOKEN
-    - ANTHROPIC_API_KEY
   network:
     allowlist_file: egress-allowlist.txt
 onboarding:
@@ -68,6 +70,12 @@ onboarding:
     busy_input_prompt: true
 platforms:
   telegram:
+    # Founder blueprint 2026-08-31T15:24Z (~/.claude/docs/founder/2026-08-31T1524Z-zero-downtime-
+    # deploys-have-been-solved-for-twenty-025ba76e.md): "The message itself should be deleted
+    # outright. It's a user-facing admission that process lifetime and task lifetime are the same
+    # thing." The restart banner is a config flag in the pinned fork (gateway/config.py
+    # gateway_restart_notification, default true); off is the whole change, no fork code.
+    gateway_restart_notification: false
     extra:
       # Founder 2026-08-30 01:2xZ: "my /summary game had a rich interface, now reduced to commands".
       # The card (hermes-agent gateway/summary_card.py) is built from collapsible <details> blocks and

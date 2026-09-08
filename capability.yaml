@@ -1,0 +1,13 @@
+id: auto-hermes-v2
+name: hermes-v2
+repo: hermes-v2
+path: hermes-v2
+state: HAS_CLUSTER_MANIFEST
+git_branch: feat/crew751-cursor-hermes-primary
+last_commit: '2026-08-30'
+code_files: 7361
+test_files: 3427
+indicators:
+- Dockerfile
+- pyproject.toml
+requires_deep_review: true

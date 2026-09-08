@@ -1,0 +1,12 @@
+id: auto-otto
+name: otto
+repo: hermes-v2
+path: hermes-v2/otto
+state: HAS_CLUSTER_MANIFEST
+git_branch: feat/crew751-cursor-hermes-primary
+last_commit: never
+code_files: 173
+test_files: 79
+indicators:
+- requirements.txt
+requires_deep_review: true

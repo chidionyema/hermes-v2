@@ -1,0 +1,13 @@
+id: cp0-002-edge-zero-claims
+tier: T0
+task_class: research
+input:
+  task: "a query with no findable answer"
+timeout_s: 2
+expect:
+  - property: exit_code
+    value: 0
+  - property: groundedness_ratio
+    min_ratio: 1.0
+  - property: no_error
+tags: [edge_case]
