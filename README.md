@@ -514,6 +514,7 @@ are tracked, so what you see below is the source they come from.
 | `otto/memory/audit.py` | Pluggable audit emission for the hygiene job. |
 | `otto/memory/backfill.py` | The one-way bridge that stops the fact store being empty: hindsight's existing memories, copied into `otto_facts` keeping each memory's own id, so an interrupted run is simply re-run. |
 | `otto/memory/config.py` | Configurable limits for the memory engine. |
+| `otto/memory/conversation.py` | The durable record of a conversation: one row per answered task in the estate's own Postgres, written where the question and the reply are both in scope. Before it, an exchange lived only in the gateway pod's stdout and a restart erased it (2026-09-08, 09:22Z). Never raises, so a store that is down loses the record and never the sender's answer. |
 | `otto/memory/hindsight.py` | The estate's memory over its HTTP API: recall before the router, retain after it. One bank for every surface, so context crosses channels; unset or unreachable is a no-op. |
 | `otto/memory/context.py` | Context budgets and compaction (crew#768 board row: "compaction and budgets" - named explicitly on CP4's board row, and no other Otto lane owns them). |
 | `otto/memory/db.py` | Connection and migrations for the memory store. |
@@ -525,6 +526,7 @@ are tracked, so what you see below is the source they come from.
 | `otto/memory/migrate.py` | `python -m otto.memory.migrate`: applies the migrations against the env-configured database and prints what it applied, or the reason it could not. |
 | `otto/memory/migrations/0001_facts_core.sql` | CP4 memory engine core schema (crew#768). |
 | `otto/memory/migrations/0002_cp4_hardening.sql` | CP4 hardening pass (crew#768, independent-verifier fixes). |
+| `otto/memory/migrations/0003_conversation_record.sql` | `otto_turns`: what was asked, what was said back, and the attribution that explains a bad answer without re-running it -- lane, model, attempts, outcome state, and a three-valued verified so "never judged" and "judged and not clean" stay different facts. |
 | `otto/memory/models.py` | The Fact model. |
 | `otto/memory/retrieval.py` | Hybrid retrieval: pgvector dense search fused with Postgres full-text search, with automatic fallback to lexical-only search when the embedding provider is absent or degraded (cp4's bandwidth-degradation scenario), and taint propagation across the returned… |
 | `otto/memory/store.py` | Fact writes and point reads. |
@@ -590,6 +592,7 @@ are tracked, so what you see below is the source they come from.
 | `otto/tests/boot/test_main.py` | `python -m otto.boot`'s dispatch: `--set-webhook`, the missing-token refusal before anything boots, and server assembly with a non-blocking fake server. |
 | `otto/tests/boot/test_reply_verdict.py` | The verify lane's verdict decides which reply lines carry the unverified marker: a greeting renders clean, an unsupported fact keeps it, and a garbage or timed-out verdict marks every line without losing the answer. |
 | `otto/tests/boot/test_cp1_judge_sees_tool_receipts.py` | Crew#892 CP1: the verify judge must see the turn's tool receipts, so a claim that restates a `terminal`/`process` result can be graded supported instead of keeping the unverified marker — one real tool turn drives the boot pipeline and asserts the receipt lands in the context handed to `reply_judge.judge`, newest-first and budget-capped. |
+| `otto/tests/boot/test_conversation_recorded_on_answer.py` | The answering path records the conversation it just had: both sides of an answered exchange, a thin answer stored as judged-and-unclean, a denied sender never written into a customer's transcript, and an unreachable store never costing the sender their answer. |
 | `otto/tests/boot/test_pipeline.py` | The lane crossing itself: an allowlisted chat gets a reply, an unrecognised chat gets no tool authority and no reply. |
 | `otto/tests/boot/test_memory_hindsight.py` | Proves the door remembers: one bank serves every surface, retain sends the vendor's shape, and an unreachable store never costs the answer. |
 | `otto/tests/boot/test_presence.py` | Hands & senses 7: the long-answer progress seam — one phase name past eight seconds, a single-shot reporter that edits in place once, never a running commentary. |
@@ -662,6 +665,7 @@ are tracked, so what you see below is the source they come from.
 | `otto/tests/cp4/features/cp4_memory_engine.feature` | Gherkin: CP4 memory engine core (crew#768). |
 | `otto/tests/cp4/test_cp4_hardening.py` | Step definitions for `cp4_hardening.feature`, plus regression tests for the independent verifier's findings on crew#768 (comment 5485606405). |
 | `otto/tests/cp4/test_cp4_memory_engine.py` | Step definitions for otto/tests/cp4/features/cp4_memory_engine.feature. |
+| `otto/tests/cp4/test_conversation_record.py` | The conversation outlives the pod, graded on a real Postgres with the real migration chain: a turn read back on a connection its writer never had, a replayed task recorded once, never-judged and judged-unclean as distinguishable rows, and an unmigrated database losing the row and nothing else. |
 | `otto/tests/cp4/test_dangling_reference.py` | Regression: a fact referencing a missing row aborts loudly, as its own error class, and stores nothing. |
 | `otto/tests/cp4/test_embedding_lane.py` | The vector arm's one wire, driven against a real loopback HTTP server: the request carries the store's width, a wrong width is refused, the key rides in the header, a `file:` endpoint never reaches urllib, and a router that is down still lets the sender have their answer. |
 | `otto/tests/cp4/test_l2_sync_recall.py` | The synchronous read path against a real Postgres: it returns what was stored, and it returns fast. |
