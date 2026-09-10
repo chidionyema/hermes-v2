@@ -303,6 +303,17 @@ def _state_sentence(outcome) -> str:
         OutcomeState.REFUSED_MALFORMED: "The model answered twice in a shape I could not read, so I have not answered. Your message is kept; please ask again.",
     }
     base = sentences.get(outcome.state, "I have not answered.")
+    # The reason is a diagnostic, and for REFUSED_MALFORMED it is the
+    # parser's own words about JSON keys. The founder read one of those as
+    # his reply on 2026-09-10 ("The reply protocol requires exactly one raw
+    # JSON object with keys: answer, claims, proposed_actions, unknowns")
+    # and it told him nothing he could act on. An operator still gets it in
+    # full on the router.outcome span and in the notifier line; a person
+    # gets the sentence. NEEDS_HUMAN keeps its reason because there the
+    # reason is about the world ("egress denied", "provider 5xx") and is the
+    # only thing that tells him whether to wait or to go and look.
+    if outcome.state is OutcomeState.REFUSED_MALFORMED:
+        return base
     return f"{base} ({outcome.reason})" if outcome.reason else base
 
 
@@ -633,6 +644,24 @@ def answer_envelope(
     with obs.memory.task_span(ctx, "memory.recall"):
         recalled = fast_recall.recall(asked or noted_text)
         obs.memory.info("memory.recalled", ctx, chars=len(recalled))
+
+    # The conversation he is actually having, read back out of the same
+    # Postgres the reply below is written into. Every turn since 2026-09-08
+    # was already being recorded and nothing had ever read one: the model
+    # was sent one message, the current one, and so Otto answered "URL not
+    # provided" to "summarise the URL I just sent you" and answered "check
+    # previous messages" with a recital of the fact store, which was the
+    # only past it had. Facts are what the estate knows; this is what was
+    # just said, and they are not interchangeable.
+    #
+    # Best effort by the same rule as the recall above: an unreachable
+    # store returns no history and the lane answers exactly as it did
+    # before, rather than costing the sender their answer.
+    with obs.memory.task_span(ctx, "memory.history"):
+        history = conversation.recent_messages(
+            task_env.tenant_id, task_env.source.value
+        )
+        obs.memory.info("memory.history_read", ctx, messages=len(history))
     with obs.router.task_span(ctx, "router.execute"):
         # P5: an untrusted task is capped at the gateway's taint ceiling no
         # matter what tier it claims, so the tools the model may see are the
@@ -661,6 +690,7 @@ def answer_envelope(
                 source=task_env.source.value,
                 task_class=task_class,
                 task_id=task_env.task_id,
+                history=tuple(history),
             ),
             provider_client or LiteLLMClient(),
             tools=tools or None,

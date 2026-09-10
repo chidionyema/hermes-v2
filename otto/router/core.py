@@ -39,6 +39,39 @@ nothing else. Every proposed action needs all three keys "tool" (a string),
 naming a tool, send "proposed_actions": []."""
 
 
+#: Pieces of the reply contract, in the words the contract itself uses. A
+#: model handed REPAIR_NOTE sometimes answers *about* the note instead of
+#: re-answering the question, and the person on the other end then reads his
+#: own assistant reciting its wire format at him (2026-09-10, Telegram: "The
+#: reply protocol requires exactly one raw JSON object with keys: answer,
+#: claims, proposed_actions, unknowns"). That reply parses, so nothing below
+#: the parser ever caught it.
+_PROTOCOL_WORDS = (
+    "proposed_actions",
+    "raw json object",
+    "reply protocol",
+    "refused by the parser",
+    "evidence_refs",
+    "one of t0, t1, t2, t3",
+)
+
+
+def _restates_the_contract(response) -> bool:
+    """Whether a parsed reply is the reply contract handed back.
+
+    Two distinct markers, not one: a single mention can be a person asking
+    about the format and getting their own word quoted back. A reply naming
+    two different pieces of the wire contract is the model answering the
+    repair note rather than the person. Only ever consulted on a reply that
+    followed a repair, so a first-attempt answer about JSON is untouched.
+    """
+    text = " ".join(
+        [response.answer or ""]
+        + [getattr(c, "text", "") or "" for c in response.claims]
+    ).lower()
+    return sum(word in text for word in _PROTOCOL_WORDS) >= 2
+
+
 class OutcomeState(str, Enum):
     """First-class outcomes. COMPLETED is deliberately absent: the router
     can finish a call, but only the Verification Plane completes a task."""
@@ -74,6 +107,10 @@ class RouterTask:
     task_class: str = "research"
     complexity: str = "normal"
     task_id: str = field(default_factory=new_ulid)
+    #: The conversation so far, oldest first, already in OpenAI wire shape
+    #: and already budgeted by the caller. Empty is the old behaviour: one
+    #: message, no past. A tuple because RouterTask is frozen.
+    history: tuple[dict, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -169,6 +206,13 @@ class Router:
                 # tool kwargs, so a plain client (or a test fake that
                 # predates the loop) is called exactly as before. The prompt
                 # is the repair-annotated one either way (#92).
+                # Same rule for history as for tools: a caller that supplied
+                # none calls the client with exactly the signature it had
+                # before, so a fake that predates conversation history is
+                # unchanged.
+                extra: dict = {}
+                if task.history:
+                    extra["history"] = list(task.history)
                 if tools:
                     result = client.complete(
                         lane_cfg.model,
@@ -176,10 +220,14 @@ class Router:
                         self.config.retry.timeout_seconds,
                         tools=tools,
                         tool_executor=tool_executor,
+                        **extra,
                     )
                 else:
                     result = client.complete(
-                        lane_cfg.model, prompt, self.config.retry.timeout_seconds
+                        lane_cfg.model,
+                        prompt,
+                        self.config.retry.timeout_seconds,
+                        **extra,
                     )
             except ProviderTimeout:
                 # The founder's word: a timeout is budget-charged — the
@@ -255,6 +303,24 @@ class Router:
                     lane=lane,
                     task_id=task.task_id,
                     reason=str(exc),
+                    attempts=attempts,
+                    charged_usd=charged,
+                    models_called=tuple(models_called),
+                )
+
+            if repair_reason is not None and _restates_the_contract(response):
+                # The model answered the repair note instead of the person.
+                # Refused, not delivered: he gets the plain "answered in a
+                # shape I could not read" sentence, never the wire format.
+                self.notifier.notify(
+                    f"provider restated the reply contract on lane '{lane}', "
+                    f"task {task.task_id}: refused rather than delivered"
+                )
+                return RouterOutcome(
+                    state=OutcomeState.REFUSED_MALFORMED,
+                    lane=lane,
+                    task_id=task.task_id,
+                    reason="the model restated the reply contract instead of answering",
                     attempts=attempts,
                     charged_usd=charged,
                     models_called=tuple(models_called),

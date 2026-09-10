@@ -104,6 +104,7 @@ class ProviderClient(Protocol):
         *,
         tools: list[dict] | None = None,
         tool_executor: Callable[[str, str], str] | None = None,
+        history: list[dict] | None = None,
     ) -> ProviderResult: ...
 
 
@@ -153,6 +154,7 @@ class LiteLLMClient:
         *,
         tools: list[dict] | None = None,
         tool_executor: Callable[[str, str], str] | None = None,
+        history: list[dict] | None = None,
     ) -> ProviderResult:
         """One logical completion, possibly several HTTP turns (tool loop).
 
@@ -173,7 +175,13 @@ class LiteLLMClient:
         if tools and tool_executor is None:
             raise ValueError("tool_executor is required when tools are given")
 
-        messages: list[dict] = [{"role": "user", "content": payload}]
+        # The conversation, then this message. Before 2026-09-10 this list
+        # was the current message alone, which is why Otto could not answer
+        # "summarise the URL I just sent you" -- it had never been shown the
+        # turn that carried the URL. ``history`` is already in wire shape and
+        # already budgeted by otto.memory.conversation.recent_messages; an
+        # empty or absent history sends exactly the one message it always did.
+        messages: list[dict] = [*(history or []), {"role": "user", "content": payload}]
         accumulated_tokens = 0
         turns = 0
         limit = _tool_max_turns()
