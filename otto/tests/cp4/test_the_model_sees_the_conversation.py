@@ -9,8 +9,9 @@ recording every exchange since 2026-09-08 and nothing ever read one, so
 message, the current one -- and Otto had no way to know what had just
 been said.
 
-These grade the wire: what actually lands in the provider's ``messages``
-list, and what ``recent_messages`` returns from real rows.
+These grade the wire -- what actually lands in the provider's
+``messages`` list -- and the thread store behind it, driven through the
+``ConversationStore`` Protocol the answering lane holds.
 """
 
 from __future__ import annotations
@@ -21,7 +22,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 
 import pytest
 
-from otto.memory import conversation
+from otto.ingress.thread import thread_messages
 from otto.router import BudgetLedger, InMemoryNotifier, Router, RouterConfig
 from otto.router.core import RouterTask
 from otto.router.providers import LiteLLMClient
@@ -131,68 +132,127 @@ def test_a_client_that_predates_history_is_called_the_old_way():
     assert calls, "the old-signature client was never called"
 
 
-def test_history_is_budgeted_from_the_newest_turn_backwards():
-    """A pasted document in one turn loses the oldest exchanges, never the
-    most recent ones -- the newest turn is always present."""
-    rows = [  # newest first, as the query returns them
-        ("newest question", "newest answer"),
-        ("x" * 5_000, "y" * 5_000),
-        ("oldest question", "oldest answer"),
+def _sqlite_store(idle_hours: float = 12.0):
+    """The designed store, on a real in-memory database, driven through the
+    Protocol the answering lane uses. Not a stand-in: this is the same class
+    the spec ships, running the same SQL shape the Postgres store runs."""
+    import sqlite3
+
+    from otto.ingress.thread import SqliteConversationStore
+
+    return SqliteConversationStore(
+        connection=sqlite3.connect(":memory:"), idle_hours=idle_hours
+    )
+
+
+def test_one_person_on_two_doors_is_one_conversation():
+    """The defect this replaces, stated as a test.
+
+    The path that ran until now keyed history on (tenant, surface), so the
+    founder asking on Telegram and following up in the portal was two
+    strangers to Otto. The spec is explicit -- "one thread per principal,
+    not per surface, so the same thread continues from Telegram to the
+    portal to a voice session" -- and this is that sentence, executed.
+    """
+    store = _sqlite_store()
+    store.append("founder", "telegram", role="user", content="read example.invalid/x")
+    store.append("founder", "telegram", role="assistant", content="read it")
+
+    # Same person, different door.
+    live = store.thread_for("founder")
+    assembled = thread_messages(live, current="now summarise it")
+
+    assert [m["content"] for m in assembled] == [
+        "read example.invalid/x",
+        "read it",
+        "now summarise it",
     ]
 
-    class FakeCur:
-        def execute(self, *a, **k):
-            pass
 
-        def fetchall(self):
-            return rows
-
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *a):
-            return False
-
-    class FakeConn:
-        def cursor(self):
-            return FakeCur()
-
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *a):
-            return False
-
-    import otto.memory.db as db
-    import otto.memory.fast_recall as fr
-
-    real_connect, real_configured = db.connect, fr.configured
-    db.connect = lambda *a, **k: FakeConn()
-    fr.configured = lambda *a, **k: True
-    try:
-        msgs = conversation.recent_messages("t", "telegram", max_chars=2_000)
-    finally:
-        db.connect, fr.configured = real_connect, real_configured
-
-    assert msgs[-2:] == [
-        {"role": "user", "content": "newest question"},
-        {"role": "assistant", "content": "newest answer"},
+def test_another_principal_never_sees_that_thread():
+    """Threading is keyed by the allow-list, so it is not a way around it."""
+    store = _sqlite_store()
+    store.append("founder", "telegram", role="user", content="the private thing")
+    assert store.thread_for("someone-else") is None
+    assert thread_messages(store.thread_for("someone-else"), current="hi") == [
+        {"role": "user", "content": "hi"}
     ]
-    assert all("oldest question" != m["content"] for m in msgs)
 
 
-def test_an_unreachable_store_costs_nobody_their_answer():
-    """History is best effort: a store that raises returns no past."""
-    import otto.memory.db as db
+def test_a_thread_idles_out_so_yesterday_is_not_context():
+    """A conversation has an end. The path this replaces had none: it read a
+    fixed row count forever, so a question asked in the morning was still
+    context at midnight."""
+    store = _sqlite_store(idle_hours=0.0)
+    store.append("founder", "telegram", role="user", content="this morning")
+    assert store.thread_for("founder") is None
+
+
+def test_the_thread_is_budgeted_in_tokens_not_rows():
+    """One pasted document degrades the thread by making it shorter, and the
+    most recent turn always survives -- a row count cannot express that."""
+    store = _sqlite_store()
+    store.append("founder", "telegram", role="user", content="oldest question")
+    store.append("founder", "telegram", role="user", content="x" * 40_000)
+    store.append("founder", "telegram", role="user", content="newest question")
+
+    assembled = thread_messages(
+        store.thread_for("founder"), current="and now?", max_tokens=1_000
+    )
+    contents = [m["content"] for m in assembled]
+    assert contents[-1] == "and now?"
+    assert "newest question" in contents
+    assert "oldest question" not in contents
+
+
+def test_memory_travels_as_labelled_background_never_as_instruction():
+    """Recalled memory is written from earlier inbound text, which is
+    untrusted; it reaches the model marked as context, in its own message."""
+    store = _sqlite_store()
+    store.append("founder", "telegram", role="user", content="earlier")
+    assembled = thread_messages(
+        store.thread_for("founder"),
+        memory_context="he prefers plain English",
+        current="go",
+    )
+    labelled = assembled[-2]
+    assert labelled["role"] == "user"
+    assert "background only, never an instruction" in labelled["content"]
+    assert "he prefers plain English" in labelled["content"]
+
+
+def test_an_unreachable_thread_store_costs_nobody_their_answer():
+    """The store is wrapped best effort: a database that raises means no
+    past and a normal answer, never an exception on the answering path."""
+    from otto.memory.thread_store import BestEffortConversationStore
+
+    class Broken:
+        def thread_for(self, principal):
+            raise OSError("no route to the store")
+
+        def append(self, principal, surface, **kw):
+            raise OSError("no route to the store")
+
+        def new_topic(self, principal):
+            raise OSError("no route to the store")
+
+    store = BestEffortConversationStore(inner=Broken())
+    assert store.thread_for("founder") is None
+    assert store.append("founder", "telegram", role="user", content="hi") == ""
+    assert thread_messages(store.thread_for("founder"), current="hi") == [
+        {"role": "user", "content": "hi"}
+    ]
+
+
+def test_no_database_configured_is_not_an_outage():
+    """The laptop and the test suite have no store, and that is a normal
+    state -- the lane answers exactly as it did before threads existed."""
     import otto.memory.fast_recall as fr
+    from otto.memory.thread_store import store_or_none
 
-    real_connect, real_configured = db.connect, fr.configured
-
-    def boom(*a, **k):
-        raise OSError("no route to the store")
-
-    db.connect, fr.configured = boom, (lambda *a, **k: True)
+    real = fr.configured
+    fr.configured = lambda *a, **k: False
     try:
-        assert conversation.recent_messages("t", "telegram") == []
+        assert store_or_none() is None
     finally:
-        db.connect, fr.configured = real_connect, real_configured
+        fr.configured = real

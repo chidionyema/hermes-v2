@@ -67,7 +67,9 @@ from otto.gateway.core import GatewayResponse, ToolGateway
 from otto.gateway.denial import DenialReason
 from otto.gateway.registry import ToolRegistry, ToolSpec
 from otto.gateway.registry import Tier as GatewayTier
+from otto.ingress.thread import thread_messages
 from otto.memory import conversation, fast_recall
+from otto.memory.thread_store import store_or_none as thread_store_for
 from otto.memory import hindsight as memory_api
 from otto.memory.models import Fact, Provenance
 from otto.obs.core import ObsHandle, TaskContext
@@ -658,10 +660,26 @@ def answer_envelope(
     # store returns no history and the lane answers exactly as it did
     # before, rather than costing the sender their answer.
     with obs.memory.task_span(ctx, "memory.history"):
-        history = conversation.recent_messages(
-            task_env.tenant_id, task_env.source.value
+        thread_store = thread_store_for()
+        live = thread_store.thread_for(task_env.tenant_id) if thread_store else None
+        # thread_messages returns the whole provider list -- the thread's
+        # recent turns, then memory labelled as background, then the current
+        # message. The router takes the last element as its own ``input`` and
+        # everything before it as ``history`` (otto/router/providers.py), so
+        # the split here is a projection of one assembled list, not a second
+        # assembly that could disagree with the first.
+        assembled = thread_messages(
+            live,
+            memory_context=recalled,
+            current=asked or noted_text,
         )
-        obs.memory.info("memory.history_read", ctx, messages=len(history))
+        history = assembled[:-1]
+        obs.memory.info(
+            "memory.history_read",
+            ctx,
+            messages=len(history),
+            thread=live.thread_id if live is not None else "",
+        )
     with obs.router.task_span(ctx, "router.execute"):
         # P5: an untrusted task is capped at the gateway's taint ceiling no
         # matter what tier it claims, so the tools the model may see are the
@@ -686,7 +704,7 @@ def answer_envelope(
         )
         outcome = _router().execute(
             RouterTask(
-                input=_prompt_for(_with_memory(asked or noted_text, recalled)),
+                input=_prompt_for(assembled[-1]["content"]),
                 source=task_env.source.value,
                 task_class=task_class,
                 task_id=task_env.task_id,
@@ -864,6 +882,40 @@ def answer_envelope(
             )
         )
         obs.memory.info("memory.turn_recorded", ctx, recorded=recorded)
+
+    # And onto the thread the next message will be answered against. Both
+    # halves, in order, because a thread that holds the questions and not the
+    # answers cannot tell the model what it already said -- which is how
+    # Otto came to repeat himself and to ask for a URL he had already been
+    # given. Keyed by the principal alone: the same person continues one
+    # conversation from Telegram to the portal to a voice session, which is
+    # the property the (tenant, surface) path this replaces could not hold.
+    #
+    # After the reply, never before it: a thread append that failed ahead of
+    # the answer would be a conversation feature costing a sender their
+    # answer, and the store is wrapped best-effort for the same reason.
+    with obs.memory.task_span(ctx, "memory.thread_append"):
+        thread_id = ""
+        if thread_store is not None:
+            thread_id = thread_store.append(
+                task_env.tenant_id,
+                task_env.source.value,
+                role="user",
+                content=content,
+            )
+            if reply_text:
+                thread_store.append(
+                    task_env.tenant_id,
+                    task_env.source.value,
+                    role="assistant",
+                    content=reply_text,
+                )
+        obs.memory.info(
+            "memory.thread_appended",
+            ctx,
+            thread=thread_id,
+            answered=bool(reply_text),
+        )
 
     return AnswerOutcome(gw_response, router_resp, restored, reply_text)
 

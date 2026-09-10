@@ -21,6 +21,15 @@ Two contracts hold here, and both are load-bearing:
   are both in scope at exactly one point in ``otto.boot.pipeline``, so
   there is no second writer that can fall out of step with the first.
 
+This is the ledger, and it is deliberately not the model's context. What
+Otto is shown of the conversation he is having comes from the thread store
+(``otto.ingress.thread`` over ``otto.memory.thread_store``), which is keyed
+by the principal alone, budgeted in tokens and expired on idle. A
+``recent_messages`` read over this table served that purpose for two days
+and was wrong on all three counts -- it keyed on (tenant, surface), so one
+person on two doors was two strangers -- and it is gone rather than left
+here for the next session to wire back in.
+
 What it does not hold: the model's intermediate reasoning, tool
 arguments, and the internal router calls. Those are traces, they already
 reach the estate's collector, and duplicating them here would make this
@@ -53,30 +62,6 @@ VALUES
      %(cost_usd)s)
 ON CONFLICT (task_ulid) DO NOTHING
 """
-
-#: The most recent answered turns for one principal on one surface, newest
-#: first; the caller reverses them into reading order. Only rows that carry
-#: both halves of an exchange are eligible -- a question whose answer never
-#: landed is not a turn the model can learn anything from.
-_RECENT = """
-SELECT asked, answered
-FROM otto_turns
-WHERE tenant_id = %(tenant_id)s
-  AND surface = %(surface)s
-  AND answered IS NOT NULL
-  AND answered <> ''
-  AND asked_at > now() - %(within)s::interval
-ORDER BY asked_at DESC
-LIMIT %(limit)s
-"""
-
-#: How much of the conversation travels with the next question. Twelve
-#: exchanges is a real conversation and still a small prompt; the character
-#: budget is the hard stop, because one pasted document in a single turn
-#: would otherwise crowd out the eleven turns around it.
-DEFAULT_HISTORY_TURNS = 12
-DEFAULT_HISTORY_CHARS = 24_000
-DEFAULT_HISTORY_WINDOW = "12 hours"
 
 
 @dataclass(frozen=True)
@@ -165,67 +150,3 @@ def record(turn: Turn, config: MemoryConfig | None = None) -> bool:
         _LOG.warning("conversation record write failed", exc_info=True)
         return False
     return True
-
-
-def recent_messages(
-    tenant_id: str,
-    surface: str,
-    *,
-    limit: int = DEFAULT_HISTORY_TURNS,
-    within: str = DEFAULT_HISTORY_WINDOW,
-    max_chars: int = DEFAULT_HISTORY_CHARS,
-    config: MemoryConfig | None = None,
-) -> list[dict]:
-    """The conversation so far, as OpenAI ``messages``, oldest first.
-
-    Until this existed the answering lane sent the model exactly one
-    message -- the current one -- so Otto could not see anything the
-    founder had said a minute earlier. He sent a URL and asked for a
-    summary and was told "URL not provided"; he wrote "check previous
-    messages" and got a recital of stored facts back, because the fact
-    store was the only past Otto had. The rows were being written the
-    whole time (``record`` above, since 2026-09-08); nothing read them.
-
-    Same two contracts as ``record``: it never raises, and it is best
-    effort. A database that cannot be reached returns an empty list and
-    the lane answers exactly as it did before, one message and no past.
-
-    The budget is applied from the newest turn backwards, so a long
-    conversation loses its oldest exchanges rather than its most recent
-    ones.
-    """
-    if not fast_recall.configured(config):
-        return []
-    try:
-        with db.connect(config) as conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    _RECENT,
-                    {
-                        "tenant_id": tenant_id,
-                        "surface": surface,
-                        "within": within,
-                        "limit": max(0, int(limit)),
-                    },
-                )
-                rows = cur.fetchall()
-    except Exception:  # noqa: BLE001 - see the docstring: history is best
-        # effort, and a store that cannot be read never costs the sender
-        # their answer.
-        _LOG.warning("conversation history read failed", exc_info=True)
-        return []
-
-    messages: list[dict] = []
-    spent = 0
-    for asked, answered in rows:  # newest first
-        pair = [
-            {"role": "user", "content": asked or ""},
-            {"role": "assistant", "content": answered or ""},
-        ]
-        cost = len(pair[0]["content"]) + len(pair[1]["content"])
-        if spent + cost > max_chars and messages:
-            break
-        spent += cost
-        # Prepend: rows arrive newest first, the model reads oldest first.
-        messages[:0] = pair
-    return messages

@@ -308,12 +308,19 @@ def thread_messages(
     turns: list[dict] = []
     estimate = 0
     if history is not None:
-        for turn in history.turns[-max_turns:]:
+        # Newest first, then reversed back into reading order. Walking the
+        # window forwards spends the budget on the oldest turns and breaks
+        # before reaching the newest, which drops exactly the exchange the
+        # current message is a follow-up to -- the amnesia this module
+        # exists to end, reintroduced by its own budget. Found by
+        # test_the_thread_is_budgeted_in_tokens_not_rows, 2026-09-10.
+        for turn in reversed(history.turns[-max_turns:]):
             tokens = _estimate_tokens(turn.content)
-            if estimate + tokens > max_tokens and turns:
+            if turns and estimate + tokens > max_tokens:
                 break
             estimate += tokens
             turns.append(turn.as_message)
+        turns.reverse()
     if memory_context:
         turns.append(
             {

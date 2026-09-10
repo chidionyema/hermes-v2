@@ -179,7 +179,7 @@ class LiteLLMClient:
         # was the current message alone, which is why Otto could not answer
         # "summarise the URL I just sent you" -- it had never been shown the
         # turn that carried the URL. ``history`` is already in wire shape and
-        # already budgeted by otto.memory.conversation.recent_messages; an
+        # already budgeted by otto.ingress.thread.thread_messages; an
         # empty or absent history sends exactly the one message it always did.
         messages: list[dict] = [*(history or []), {"role": "user", "content": payload}]
         accumulated_tokens = 0
