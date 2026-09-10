@@ -633,6 +633,24 @@ def answer_envelope(
     with obs.memory.task_span(ctx, "memory.recall"):
         recalled = fast_recall.recall(asked or noted_text)
         obs.memory.info("memory.recalled", ctx, chars=len(recalled))
+
+    # The conversation he is actually having, read back out of the same
+    # Postgres the reply below is written into. Every turn since 2026-09-08
+    # was already being recorded and nothing had ever read one: the model
+    # was sent one message, the current one, and so Otto answered "URL not
+    # provided" to "summarise the URL I just sent you" and answered "check
+    # previous messages" with a recital of the fact store, which was the
+    # only past it had. Facts are what the estate knows; this is what was
+    # just said, and they are not interchangeable.
+    #
+    # Best effort by the same rule as the recall above: an unreachable
+    # store returns no history and the lane answers exactly as it did
+    # before, rather than costing the sender their answer.
+    with obs.memory.task_span(ctx, "memory.history"):
+        history = conversation.recent_messages(
+            task_env.tenant_id, task_env.source.value
+        )
+        obs.memory.info("memory.history_read", ctx, messages=len(history))
     with obs.router.task_span(ctx, "router.execute"):
         # P5: an untrusted task is capped at the gateway's taint ceiling no
         # matter what tier it claims, so the tools the model may see are the
@@ -661,6 +679,7 @@ def answer_envelope(
                 source=task_env.source.value,
                 task_class=task_class,
                 task_id=task_env.task_id,
+                history=tuple(history),
             ),
             provider_client or LiteLLMClient(),
             tools=tools or None,

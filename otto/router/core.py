@@ -74,6 +74,10 @@ class RouterTask:
     task_class: str = "research"
     complexity: str = "normal"
     task_id: str = field(default_factory=new_ulid)
+    #: The conversation so far, oldest first, already in OpenAI wire shape
+    #: and already budgeted by the caller. Empty is the old behaviour: one
+    #: message, no past. A tuple because RouterTask is frozen.
+    history: tuple[dict, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -169,6 +173,13 @@ class Router:
                 # tool kwargs, so a plain client (or a test fake that
                 # predates the loop) is called exactly as before. The prompt
                 # is the repair-annotated one either way (#92).
+                # Same rule for history as for tools: a caller that supplied
+                # none calls the client with exactly the signature it had
+                # before, so a fake that predates conversation history is
+                # unchanged.
+                extra: dict = {}
+                if task.history:
+                    extra["history"] = list(task.history)
                 if tools:
                     result = client.complete(
                         lane_cfg.model,
@@ -176,10 +187,14 @@ class Router:
                         self.config.retry.timeout_seconds,
                         tools=tools,
                         tool_executor=tool_executor,
+                        **extra,
                     )
                 else:
                     result = client.complete(
-                        lane_cfg.model, prompt, self.config.retry.timeout_seconds
+                        lane_cfg.model,
+                        prompt,
+                        self.config.retry.timeout_seconds,
+                        **extra,
                     )
             except ProviderTimeout:
                 # The founder's word: a timeout is budget-charged — the
