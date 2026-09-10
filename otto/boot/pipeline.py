@@ -303,6 +303,17 @@ def _state_sentence(outcome) -> str:
         OutcomeState.REFUSED_MALFORMED: "The model answered twice in a shape I could not read, so I have not answered. Your message is kept; please ask again.",
     }
     base = sentences.get(outcome.state, "I have not answered.")
+    # The reason is a diagnostic, and for REFUSED_MALFORMED it is the
+    # parser's own words about JSON keys. The founder read one of those as
+    # his reply on 2026-09-10 ("The reply protocol requires exactly one raw
+    # JSON object with keys: answer, claims, proposed_actions, unknowns")
+    # and it told him nothing he could act on. An operator still gets it in
+    # full on the router.outcome span and in the notifier line; a person
+    # gets the sentence. NEEDS_HUMAN keeps its reason because there the
+    # reason is about the world ("egress denied", "provider 5xx") and is the
+    # only thing that tells him whether to wait or to go and look.
+    if outcome.state is OutcomeState.REFUSED_MALFORMED:
+        return base
     return f"{base} ({outcome.reason})" if outcome.reason else base
 
 
