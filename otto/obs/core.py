@@ -302,13 +302,26 @@ class ObsHandle:
         self._meter_provider.shutdown()
 
 
-def instrument(component: str, config: ObsConfig | None = None) -> ObsHandle:
+def instrument(
+    component: str,
+    config: ObsConfig | None = None,
+    *,
+    allow_degraded: bool = False,
+) -> ObsHandle:
     """The one entrypoint. Fail-closed boot: no exporter, no handle.
 
     Default mode requires ``OTEL_EXPORTER_OTLP_ENDPOINT`` in the
     environment and refuses to start the component without it — running
     dark is not an option. ``OTTO_OBS_MODE=test`` is the one named escape
     (in-memory exporters, for suites without a collector).
+
+    ``allow_degraded=True`` opts a component into graceful degradation:
+    when the OTLP endpoint is absent or unreachable the function logs a
+    warning and returns an in-memory (noop for production) handle rather
+    than raising. The degraded state is surfaced through GET /readyz so
+    the operator sees it without the pod being dark. The door must stay
+    open even when the collector is down — observability failure is never
+    an excuse for dropping a customer's message.
     """
     cfg = config if config is not None else ObsConfig.from_env()
     if cfg.mode not in (MODE_OTLP, MODE_TEST):
@@ -318,10 +331,35 @@ def instrument(component: str, config: ObsConfig | None = None) -> ObsHandle:
             f"unset {MODE_ENV} or set it to {MODE_TEST!r}",
         )
     if cfg.mode == MODE_OTLP and not cfg.endpoint:
-        raise ObsBootError(
-            component,
-            f"{ENDPOINT_ENV} is not set; this component will not run dark",
-            f"set {ENDPOINT_ENV} to the collector endpoint "
-            f"(or {MODE_ENV}={MODE_TEST} in a test suite)",
-        )
+        if allow_degraded:
+            import sys
+
+            print(
+                json.dumps(
+                    {
+                        "level": "warn",
+                        "component": component,
+                        "event": "obs.degraded",
+                        "reason": (
+                            f"{ENDPOINT_ENV} is not set; running without telemetry. "
+                            "GET /readyz will report otel_collector=false."
+                        ),
+                    }
+                ),
+                file=sys.stderr,
+            )
+            cfg = ObsConfig(
+                mode=MODE_TEST,
+                endpoint="",
+                metric_names=cfg.metric_names,
+                export_buffer_max=cfg.export_buffer_max,
+                coverage_window_seconds=cfg.coverage_window_seconds,
+            )
+        else:
+            raise ObsBootError(
+                component,
+                f"{ENDPOINT_ENV} is not set; this component will not run dark",
+                f"set {ENDPOINT_ENV} to the collector endpoint "
+                f"(or {MODE_ENV}={MODE_TEST} in a test suite)",
+            )
     return ObsHandle(component, cfg)

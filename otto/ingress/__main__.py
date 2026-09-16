@@ -40,6 +40,7 @@ from typing import Mapping
 from otto.ingress.gateway import EventGateway
 from otto.ingress.pg_store import PostgresChannelBindingStore, dsn_from_env
 from otto.ingress.publisher import JetStreamPublisher
+from otto.ingress.readiness import ReadinessChecker
 from otto.ingress.secrets import EnvSecretResolver
 from otto.ingress.server import ServerDeps, build_server
 from otto.ingress.worker import start_worker_thread
@@ -79,13 +80,20 @@ def build_deps(
 ) -> ServerDeps:
     """Every dependency, proved, in the order failure should surface.
 
+    OTel is now soft: ``allow_degraded=True`` means a missing collector
+    logs a warning and returns a noop handle rather than refusing to start.
+    The degraded state is visible through GET /readyz so the operator sees
+    it without the pod being dark. A door that drops a customer's message
+    because the collector is unreachable is worse than a door with no metrics.
+
     ``start_answering`` is the one seam a test uses: the answering lane
     opens its own connection to NATS and would otherwise run for real
     inside a test that only wanted to prove the boot order.
     """
-    obs = instrument(COMPONENT)
+    obs = instrument(COMPONENT, allow_degraded=True)
 
-    store = PostgresChannelBindingStore(dsn_from_env())
+    dsn = dsn_from_env()
+    store = PostgresChannelBindingStore(dsn)
     store.ensure_schema()
 
     bus = loop.run_until_complete(Bus().connect())
@@ -96,13 +104,16 @@ def build_deps(
     if start_answering:
         start_worker_thread(store=store, secrets=secrets, obs=obs)
 
+    checker = ReadinessChecker.from_env(dsn=dsn)
+
     return ServerDeps(
         gateway=EventGateway(
             store=store,
             secrets=secrets,
             publisher=JetStreamPublisher(bus, loop),
             obs=obs,
-        )
+        ),
+        checker=checker,
     )
 
 
