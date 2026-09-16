@@ -32,6 +32,7 @@ from otto.gateway.core import ToolGateway
 from otto.surface.bindings.telegram import TelegramBinding
 
 HEALTHZ_PATH = "/healthz"
+READYZ_PATH = "/readyz"
 
 
 @dataclass(frozen=True)
@@ -64,6 +65,12 @@ def make_handler(deps: ServerDeps) -> type[BaseHTTPRequestHandler]:
         def do_GET(self) -> None:  # noqa: N802 - stdlib's naming convention
             if self.path == HEALTHZ_PATH:
                 self._respond(200, b"ok")
+                return
+            if self.path == READYZ_PATH:
+                # otto.boot has no critical external deps (it receives nothing
+                # from Telegram; POST /telegram-webhook was removed). The process
+                # is ready when it is alive.
+                self._respond(200, b'{"status":"ok"}')
                 return
             self._respond(404, b"not found")
 
