@@ -40,6 +40,7 @@ from otto.router.providers import (
     ProviderTimeout,
 )
 from otto.router.render import render_claims
+from otto.router.telegram_notifier import TelegramNotifier
 from otto.router.ulid import new_ulid
 
 __all__ = [
@@ -50,6 +51,7 @@ __all__ = [
     "GroundingCheck",
     "InMemoryNotifier",
     "LaneConfig",
+    "TelegramNotifier",
     "MalformedProviderOutput",
     "Notifier",
     "OutcomeState",
