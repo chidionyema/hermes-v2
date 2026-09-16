@@ -24,7 +24,10 @@ and the renderer then marks every line, exactly as before.
 from __future__ import annotations
 
 import json
+import logging
 from collections.abc import Sequence
+
+_LOG = logging.getLogger(__name__)
 
 from otto.router.budget import BudgetLedger
 from otto.router.config import RouterConfig
@@ -106,10 +109,12 @@ def judge(
         result = client.complete(
             lane.model, _prompt(statements, context), config.retry.timeout_seconds
         )
-    except Exception:  # noqa: BLE001 - every failure is "no verdict", never a lost answer
+    except Exception as exc:  # noqa: BLE001 - every failure is "no verdict", never a lost answer
+        _LOG.warning("verify lane provider call failed (%s); answering unverified", exc)
         return None
     ledger.charge(VERIFY_LANE, result.tokens / 1000.0 * lane.cost_per_1k_tokens_usd)
     try:
         return parse_verdicts(result.text, len(statements))
-    except (MalformedProviderOutput, json.JSONDecodeError, ValueError):
+    except (MalformedProviderOutput, json.JSONDecodeError, ValueError) as exc:
+        _LOG.warning("verify lane output malformed (%s); answering unverified", exc)
         return None
