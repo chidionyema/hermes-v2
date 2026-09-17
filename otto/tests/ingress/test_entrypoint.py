@@ -30,7 +30,6 @@ from otto.ingress.pg_store import (
 )
 from otto.ingress.store import POSTGRES_DDL, ChannelBindingStore
 from otto.obs.config import ENDPOINT_ENV, MODE_ENV
-from otto.obs.core import ObsBootError
 
 PASSWORD_UNDER_TEST = "not-the-real-one"  # noqa: S105 - a test fixture value
 
@@ -160,14 +159,25 @@ def test_the_conflict_target_matches_the_primary_key() -> None:
 # --- boot order -----------------------------------------------------------
 
 
-def test_a_gateway_that_cannot_be_seen_does_not_start(monkeypatch) -> None:
-    """LAW 50. The collector is proved before the database and long before
-    the socket, so a workload that would run dark refuses instead."""
+def test_a_gateway_without_otel_starts_degraded_and_fails_on_the_database(
+    monkeypatch,
+) -> None:
+    """T011 / LAW 50 relaxation for the ingress door.
+
+    otto.ingress uses allow_degraded=True: when OTEL_EXPORTER_OTLP_ENDPOINT
+    is absent the door logs a warning and continues rather than refusing —
+    dropping a customer's message because the collector is down is a worse
+    failure than running without traces. The door still refuses on the next
+    hard dependency: the channel-binding database. A workload that cannot
+    serve any channel is not a workload.
+    """
     monkeypatch.delenv(ENDPOINT_ENV, raising=False)
     monkeypatch.delenv(MODE_ENV, raising=False)
+    for name in (pg_store.HOST_ENV, pg_store.NAME_ENV, pg_store.USER_ENV):
+        monkeypatch.delenv(name, raising=False)
     loop = asyncio.new_event_loop()
     try:
-        with pytest.raises(ObsBootError):
+        with pytest.raises(DatabaseNotConfigured):
             build_deps(loop)
     finally:
         loop.close()

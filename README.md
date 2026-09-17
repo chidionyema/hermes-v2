@@ -505,7 +505,8 @@ are tracked, so what you see below is the source they come from.
 | `otto/ingress/plugins.py` | Per-channel plugins — the only place a channel's name means anything; the Telegram verifier lives here, behind the channel-blind door. |
 | `otto/ingress/publisher.py` | Hands the normalised task envelope to the spine; the gateway's job ends when the envelope is on the bus. |
 | `otto/ingress/secrets.py` | Resolves a secret reference to a secret value at request time; the binding table stores references, never material. |
-| `otto/ingress/server.py` | The socket: `GET /healthz` and `POST /webhook/{channel}`, for every channel and every customer. |
+| `otto/ingress/readiness.py` | Stdlib-only deep readiness probe: checks Postgres (`SELECT 1`) and LiteLLM (`/health/liveliness`) before reporting ready; used by `/readyz` so Flux and Kubernetes gate on real dependency health, not a trivial liveness ping. |
+| `otto/ingress/server.py` | The socket: `GET /healthz`, `GET /readyz`, and `POST /webhook/{channel}`, for every channel and every customer. |
 | `otto/ingress/store.py` | The `channel_binding` table: which customer owns which channel — the whole of channel onboarding. |
 | `otto/ingress/thread.py` | Hands & senses 8: the door's conversation thread — one per principal, short-term, carrying across surfaces; `thread_messages` projects recent turns plus memory plus the current question. |
 | `otto/ingress/worker.py` | The answering half of the one door: a durable pull consumer on `OTTO_TASKS` that runs the shared answering path and replies on the customer's own channel, with its own token. |
@@ -553,6 +554,7 @@ are tracked, so what you see below is the source they come from.
 | `otto/router/config.py` | Router configuration — lane policy, budgets and retries are config, never constants. |
 | `otto/router/contract.py` | Universal response contract (spec section 5, "structured outputs everywhere"). |
 | `otto/router/core.py` | The router itself: lane selection, budget guards, bounded retries, fail-closed. |
+| `otto/router/operator_alert.py` | Operator alert sender: delivers NEEDS_HUMAN and QUEUED_BUDGET events to the operator; channel details live entirely in environment variables so the compute lane stays channel-blind. Falls back to `InMemoryNotifier` with a WARNING log when the two required env vars are absent. |
 | `otto/router/evals.py` | Eval gate for router/prompt changes (P6: evals gate change). |
 | `otto/router/grounding.py` | Mechanical groundedness check (spec section 5 acceptance: rate < 5%). |
 | `otto/router/providers.py` | Provider client protocol and failure classes. |

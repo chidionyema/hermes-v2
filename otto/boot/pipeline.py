@@ -75,7 +75,7 @@ from otto.router.budget import BudgetLedger
 from otto.router.config import RouterConfig
 from otto.router.contract import RouterResponse, normalise_provider_output
 from otto.router.core import InMemoryNotifier, OutcomeState, Router, RouterTask
-from otto.router.telegram_notifier import TelegramNotifier
+from otto.router.operator_alert import OperatorAlert
 from otto.router.providers import LiteLLMClient, ProviderClient
 from otto.router.render import render_claim, render_claims
 from otto.verify import reply_judge
@@ -129,10 +129,10 @@ def _router() -> Router:
     global _ROUTER
     if _ROUTER is None:
         config = RouterConfig()
-        notifier = TelegramNotifier.from_env() or InMemoryNotifier()
+        notifier = OperatorAlert.from_env() or InMemoryNotifier()
         if isinstance(notifier, InMemoryNotifier):
             _LOG.warning(
-                "OTTO_TELEGRAM_BOT_TOKEN or OTTO_OPERATOR_CHAT_ID unset; "
+                "OTTO_OPERATOR_ALERT_TOKEN or OTTO_OPERATOR_CHAT_ID unset; "
                 "operator will not be notified of NEEDS_HUMAN or QUEUED_BUDGET events"
             )
         _ROUTER = Router(
