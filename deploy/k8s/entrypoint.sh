@@ -73,6 +73,25 @@ elif [ ! -s estate.yaml ]; then
 fi
 "$PY" bin/render
 
+# crew#736 CP2 / crew#561: the boot reads the estate's state before it answers anyone, and says so.
+# The overlay's init container pulls oci://ghcr.io/chidionyema/idp/estate-state:latest to
+# $HERMES_ESTATE_STATE; it lands at state/estate-state.json for the agent to read. A document that
+# is missing or unparseable is BLIND, never silence, and never a reason not to boot.
+ESTATE_STATE=${HERMES_ESTATE_STATE:-}
+if [ -z "$ESTATE_STATE" ]; then
+	echo "estate-state: BLIND HERMES_ESTATE_STATE is not set"
+elif ! [ -s "$ESTATE_STATE" ]; then
+	echo "estate-state: BLIND $ESTATE_STATE is missing or empty (the pull failed; see the fetch-estate-state init log)"
+elif line=$("$PY" -c 'import json, sys
+d = json.load(open(sys.argv[1]))
+print("READ generated_at=%s version=%s sections=%d" % (d["generated_at"], d["version"], len(d)))' "$ESTATE_STATE" 2>&1); then
+	mkdir -p state
+	cp "$ESTATE_STATE" state/estate-state.json
+	echo "estate-state: $line path=$HERMES_HOME/state/estate-state.json"
+else
+	echo "estate-state: BLIND $ESTATE_STATE does not parse: ${line##*$'\n'}"
+fi
+
 # The two lanes the Mac ticked (cron/watch.jobs, cron/work.jobs). install-cron is idempotent
 # and `--feature` keeps a lane that is off in estate.yaml genuinely inert. The gateway process
 # ticks jobs.json itself; there is no second scheduler.
