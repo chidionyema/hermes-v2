@@ -1,0 +1,2 @@
+# <GHSA-id> <review-by YYYY-MM-DD> <reason>
+GHSA-vfj7-8cjw-p6xm 2027-01-14 braces <=3.0.3 has no patched release; reached only via bash-language-server -> fast-glob -> micromatch, run locally on the agent's own checkout, never on untrusted glob input
