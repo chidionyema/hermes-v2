@@ -67,7 +67,7 @@ from otto.gateway.core import GatewayResponse, ToolGateway
 from otto.gateway.denial import DenialReason
 from otto.gateway.registry import ToolRegistry, ToolSpec
 from otto.gateway.registry import Tier as GatewayTier
-from otto.memory import conversation, fast_recall
+from otto.memory import conversation, estate_mcp, fast_recall
 from otto.memory import hindsight as memory_api
 from otto.memory.models import Fact, Provenance
 from otto.obs.core import ObsHandle, TaskContext
@@ -645,6 +645,18 @@ def answer_envelope(
         recalled = fast_recall.recall(asked or noted_text)
         obs.memory.info("memory.recalled", ctx, chars=len(recalled))
 
+    # What the rest of the estate's agents know, from the unified memory the
+    # operator's Mac runtimes and the other two Ottos already share
+    # (otto/memory/estate_mcp.py). Only for a sender that is not taint-capped:
+    # that memory holds the estate's own decisions and incidents, which an
+    # untrusted sender is not entitled to read back. Empty when off,
+    # unreachable or slower than its budget, and it never costs the answer.
+    if not task_env.is_taint_capped:
+        with obs.memory.task_span(ctx, "memory.estate_brief"):
+            estate_known = estate_mcp.brief(asked or noted_text)
+            obs.memory.info("memory.estate_briefed", ctx, chars=len(estate_known))
+        recalled = "\n".join(part for part in (recalled, estate_known) if part)
+
     # The conversation he is actually having, read back out of the same
     # Postgres the reply below is written into. Every turn since 2026-09-08
     # was already being recorded and nothing had ever read one: the model
@@ -819,12 +831,23 @@ def answer_envelope(
                 "taint_capped": str(task_env.is_taint_capped).lower(),
             },
         )
+        # Tier 4, the estate's unified memory, so the Mac runtimes and the
+        # other Ottos see what was said here. Off the answering path on a
+        # daemon thread. Never for a taint-capped sender: whatever lands here
+        # is read back by every agent on the estate, and an untrusted sender's
+        # text must not be able to plant itself in all of them.
+        estate_remembering = (
+            estate_mcp.remember_in_background(content, subject=f"otto-numun/{task_env.source.value}")
+            if not task_env.is_taint_capped
+            else None
+        )
         obs.memory.info(
             "memory.fact_round_tripped",
             ctx,
             fact_id=restored.id,
             stored=stored,
             retained=written,
+            estate_remembering=estate_remembering is not None,
         )
 
     reply_text = "\n".join(reply_lines) if reply_lines else None
