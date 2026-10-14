@@ -520,6 +520,7 @@ are tracked, so what you see below is the source they come from.
 | `otto/memory/db.py` | Connection and migrations for the memory store. |
 | `otto/memory/embeddings.py` | Pluggable embedding provider interface. |
 | `otto/memory/embeddings_litellm.py` | The one concrete embedding provider, and still not a vendor: the OpenAI embeddings wire format spoken to the estate's own router. Every request carries the width the fact table was built at and a response of any other width is refused. Unset variables mean full-text search alone, which is a tested mode. |
+| `otto/memory/estate_mcp.py` | The estate's unified memory, shared with @Ottototbot, otto-gateway and the operator's Mac runtimes, over the agentgateway's `/estate/mcp`: `brief` before an answer, `remember` after it on a daemon thread, runtime `otto-numun`. Off unless `ESTATE_MCP_URL` and `ESTATE_MCP_KEY_FILE` resolve; the key is read from the file on every call. Never raises, and never used for a taint-capped sender, whose text must not reach every agent on the estate. |
 | `otto/memory/fast_recall.py` | The synchronous read: pgvector and Postgres full-text search fused by reciprocal rank fusion, in place of a cross-encoder that took 31.87s per question. Never raises; a failure costs the sender no memory, never their answer. |
 | `otto/memory/hygiene.py` | The hygiene job: expires facts past their TTL and compacts duplicate facts for the same (entity, attribute), keeping the most recent. |
 | `otto/memory/migrations/` | Numbered SQL migrations for the memory store, applied in order. |
@@ -588,6 +589,7 @@ are tracked, so what you see below is the source they come from.
 | `otto/tests/boot/fakes.py` | The one recording `TelegramTransport` fake every test in this folder uses. |
 | `otto/tests/boot/test_server_routes.py` | The boot process serves health and nothing else: it holds no webhook route and imports no webhook handler, since the estate receives a channel in one place. |
 | `otto/tests/boot/test_app.py` | `handle_webhook_body`'s four required cases: allowlisted delivery, unrecognised-sender drop, malformed payload refusal, and a pipeline exception that never crashes the process. |
+| `otto/tests/boot/test_memory_estate_mcp.py` | The unified-memory client: off without its URL or key file, a brief and a remember over JSON and over an event stream, and a timeout or an MCP error swallowed so the answer is never lost. |
 | `otto/tests/boot/test_config.py` | Every environment variable this lane reads, including the missing-token refusal. |
 | `otto/tests/boot/test_main.py` | `python -m otto.boot`'s dispatch: `--set-webhook`, the missing-token refusal before anything boots, and server assembly with a non-blocking fake server. |
 | `otto/tests/boot/test_reply_verdict.py` | The verify lane's verdict decides which reply lines carry the unverified marker: a greeting renders clean, an unsupported fact keeps it, and a garbage or timed-out verdict marks every line without losing the answer. |
