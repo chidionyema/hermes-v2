@@ -711,6 +711,7 @@ are tracked, so what you see below is the source they come from.
 | `otto/tests/ingress/conftest.py` | Shared fixtures: `OTTO_OBS_MODE=test`, in-memory binding store and recorded publisher. |
 | `otto/tests/ingress/test_entrypoint.py` | The boot contract the deployment depends on: the port, the database, and the refusal to listen before the collector and the table are proved. |
 | `otto/tests/ingress/test_gateway.py` | The one door: routing, refusals, and channel independence. |
+| `otto/tests/ingress/test_api_surface.py` | The door's second route: a surface that cannot be pushed to is answered and read back by task id (`GET /turns/{task_id}`), the tenant comes off the credential and never off the path, a failed publish is a 503 rather than an accepted 202, and an escaped exception is a named 500 instead of a closed socket. |
 | `otto/tests/ingress/test_photo.py` | Hands & senses 4: a photo update, sensed through the seam to `[image] <caption>\n<description>` content, offline with a stub describer. |
 | `otto/tests/ingress/test_voice.py` | Hands & senses 3: a voice note, transcribed to `[voice] ...` content with `VOICE_IN`, and the worker answering with both text and voice. |
 | `otto/tests/ingress/test_registry_as_data.py` | Onboarding a customer is a database write, not a deployment — the point of the gateway, proved. |

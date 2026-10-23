@@ -132,7 +132,13 @@ jobs:
   # skips itself cleanly when the estate model router is unreachable, which
   # it always is from a runner.
   otto-tests:
-    runs-on: ubuntu-latest
+    # Pinned, not `ubuntu-latest`: measured 2026-10-23 (PR #111, run 40012118364) the
+    # `ubuntu-latest` label had rolled to Ubuntu 26.04 "resolute", where the pgvector step's
+    # `postgresql-16-pgvector` does not exist -- `E: Unable to locate package
+    # postgresql-16-pgvector`, exit 100, before a single otto test ran. The suite needs
+    # PostgreSQL 16 + the matching pgvector package, and 24.04 is the image that carries it.
+    # A label that moves under the gate turns a green suite red with no change in the diff.
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
 
