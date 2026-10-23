@@ -14,9 +14,12 @@ NOT a second store: one database, one migration chain, one backup.
 
 Two contracts hold here, and both are load-bearing:
 
-* **It never raises.** A conversation record that costs a sender their
-  answer is worse than no record. Every failure is logged and swallowed,
-  exactly as ``_store_fact`` does for the fact tier.
+* **It never raises on the answering path.** A conversation record that
+  costs a sender their answer is worse than no record. Every failure
+  there is logged and swallowed, exactly as ``_store_fact`` does for the
+  fact tier. The one exception is ``read_turn``, which is not on the
+  answering path: a caller asking what Otto said back must be told the
+  store is unreachable, not handed a confident null.
 * **It is one write, on the answering path.** The question and the reply
   are both in scope at exactly one point in ``otto.boot.pipeline``, so
   there is no second writer that can fall out of step with the first.
@@ -37,9 +40,21 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from otto.memory import db, fast_recall
-from otto.memory.config import MemoryConfig
+from otto.memory.config import MemoryConfig, load_config
 
 _LOG = logging.getLogger(__name__)
+
+
+class StoreUnavailable(RuntimeError):
+    """The conversation store cannot answer the question being asked.
+
+    Raised by the strict read (``read_turn``) and not by the best-effort
+    ones: a caller that asked "what did Otto say back to this task" must be
+    able to tell "there is no such turn" (``None``) from "the store is not
+    there" (this). Collapsing the two into a null would make an outage look
+    like an empty conversation.
+    """
+
 
 _INSERT = """
 INSERT INTO otto_turns
@@ -52,6 +67,18 @@ VALUES
      %(verified)s, %(claims_total)s, %(claims_clean)s, %(taint_capped)s,
      %(cost_usd)s)
 ON CONFLICT (task_ulid) DO NOTHING
+"""
+
+#: One turn by its task id. The API surface's read-back: a caller that was
+#: answered without a push (``ChannelPlugin.PULLABLE``) fetches the answer
+#: here, by the id the door returned to it in the 202. Only answered rows
+#: are eligible -- a row whose answer never landed is not an answer.
+_TURN = """
+SELECT task_ulid, tenant_id, surface, asked_at, asked, answered,
+       lane, model, attempts, outcome_state, verified,
+       claims_total, claims_clean, taint_capped, cost_usd
+FROM otto_turns
+WHERE task_ulid = %(task_ulid)s
 """
 
 #: The most recent answered turns for one principal on one surface, newest
@@ -128,6 +155,29 @@ class Turn:
             "cost_usd": self.cost_usd,
         }
 
+    def to_payload(self) -> dict:
+        """The answer as the door hands it to the caller that asked.
+
+        A pullable surface (``ChannelPlugin.PULLABLE``) polls for exactly
+        this: what was asked, what Otto said, and enough attribution to
+        explain a bad answer without re-running anything. Kept here rather
+        than in the socket so the wire shape and the row cannot drift.
+        """
+        return {
+            "task_id": self.task_ulid,
+            "asked": self.asked,
+            "answered": self.answered,
+            "surface": self.surface,
+            "lane": self.lane,
+            "model": self.model,
+            "attempts": self.attempts,
+            "outcome_state": self.outcome_state,
+            "verified": self.verified,
+            "claims_total": self.claims_total,
+            "claims_clean": self.claims_clean,
+            "cost_usd": self.cost_usd,
+        }
+
 
 def write_turn(conn, turn: Turn) -> None:
     """Insert one turn. Raises whatever the driver raises.
@@ -165,6 +215,63 @@ def record(turn: Turn, config: MemoryConfig | None = None) -> bool:
         _LOG.warning("conversation record write failed", exc_info=True)
         return False
     return True
+
+
+def read_turn(task_ulid: str, config: MemoryConfig | None = None) -> Turn | None:
+    """One answered turn, by task id. ``None`` when there is no such turn.
+
+    The strict read, unlike ``record``: a caller asking "what did Otto say
+    back to this task" needs to be told the store could not be reached
+    rather than being handed a confident ``null``. Raises whatever the
+    driver raises; the door turns that into a 503.
+
+    Read-only and tenant-less here on purpose -- the tenant check belongs to
+    the caller that resolved the credential, because this function has no
+    idea who is asking and must not pretend to.
+    """
+    effective = config or load_config()
+    if not fast_recall.configured(effective):
+        raise StoreUnavailable("no conversation store is configured")
+    with db.connect(effective) as conn:
+        with conn.cursor() as cur:
+            cur.execute(_TURN, {"task_ulid": task_ulid})
+            row = cur.fetchone()
+    if row is None:
+        return None
+    (
+        task,
+        tenant_id,
+        surface,
+        asked_at,
+        asked,
+        answered,
+        lane,
+        model,
+        attempts,
+        outcome_state,
+        verified,
+        claims_total,
+        claims_clean,
+        taint_capped,
+        cost_usd,
+    ) = row
+    return Turn(
+        task_ulid=task,
+        tenant_id=tenant_id,
+        surface=surface,
+        asked_at=asked_at,
+        asked=asked,
+        answered=answered,
+        lane=lane,
+        model=model,
+        attempts=attempts,
+        outcome_state=outcome_state,
+        verified=verified,
+        claims_total=claims_total,
+        claims_clean=claims_clean,
+        taint_capped=bool(taint_capped),
+        cost_usd=float(cost_usd) if cost_usd is not None else None,
+    )
 
 
 def recent_messages(

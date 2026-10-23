@@ -90,6 +90,30 @@ class Bus:
             await self._nc.close()
 
     @property
+    def connected(self) -> bool:
+        """Whether this connection can carry a publish right now.
+
+        A property rather than a guess from "we connected at boot": the
+        server closes a connection for its own reasons (a restart, a
+        network blip, an idle timeout) and the object stays in memory
+        looking healthy. Anything that publishes from a long-lived process
+        should be able to ask this question instead of assuming.
+        """
+        return self._nc is not None and self._nc.is_connected and not self._nc.is_closed
+
+    async def reconnect(self) -> "Bus":
+        """Drop whatever connection is held and open a fresh one.
+
+        The recovery for ``connected`` being False. Deliberately a full
+        re-open rather than a wait for ``nats-py``'s own reconnect loop: the
+        loop runs on the event loop that owns the connection, and a caller
+        publishing synchronously from a request thread has no way to tell
+        a loop that is about to recover from one that has wedged.
+        """
+        await self.close()
+        return await self.connect()
+
+    @property
     def js(self) -> JetStreamContext:
         if self._js is None:
             raise RuntimeError("Bus.connect() was not awaited")

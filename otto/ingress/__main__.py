@@ -102,7 +102,10 @@ def build_deps(
             secrets=secrets,
             publisher=JetStreamPublisher(bus, loop),
             obs=obs,
-        )
+        ),
+        # The socket's own handle, for the one failure the gateway cannot
+        # turn into a status line: an exception that escaped it.
+        obs=obs,
     )
 
 
