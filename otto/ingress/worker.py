@@ -75,21 +75,49 @@ FETCH_TIMEOUT_S = 5.0
 TYPING_REFRESH_S = 4.0
 
 
-def _no_typing() -> threading.Event:
+class _Typing:
+    """The typing indicator's lifetime.
+
+    ``set()`` stops the keepalive **and waits for the thread to exit**. The
+    earlier event-only version left a window: the thread could be about to
+    call ``send_chat_action`` when the answer went out, so "the indicator
+    stops once the reply is out" was true eventually rather than at the
+    moment the reply was delivered -- measured 2026-10-23 as a red
+    ``test_the_typing_indicator_shows_while_the_answer_is_being_written``
+    on gates run 40091280499 (one run in three, same tree). A courtesy that
+    can outlive the answer it announces is a leak, and a test that can only
+    see it sometimes is a test that fails for the wrong reason.
+    """
+
+    __slots__ = ("_event", "_thread")
+
+    def __init__(
+        self, event: threading.Event, thread: threading.Thread | None = None
+    ) -> None:
+        self._event = event
+        self._thread = thread
+
+    def set(self) -> None:
+        self._event.set()
+        if self._thread is not None:
+            self._thread.join(timeout=TYPING_REFRESH_S + 1.0)
+
+
+def _no_typing() -> _Typing:
     """The keepalive for a task with nowhere to show one: already stopped.
 
-    The answering lane always sets the event in a ``finally``, so the no-op
-    has to be a set ``Event`` rather than ``None`` -- a None there would
+    The answering lane always calls ``set()`` in a ``finally``, so the no-op
+    has to be a stopped handle rather than ``None`` -- a None there would
     turn "this surface has no typing indicator" into an ``AttributeError``
     on the path that answers it.
     """
     done = threading.Event()
     done.set()
-    return done
+    return _Typing(done)
 
 
-def _typing_keepalive(plugin: Any, secret: str, reply_to: str) -> threading.Event:
-    """Show "typing" on ``plugin`` until the returned event is set.
+def _typing_keepalive(plugin: Any, secret: str, reply_to: str) -> _Typing:
+    """Show "typing" on ``plugin`` until the returned handle is set.
 
     A plugin without ``send_chat_action`` (HTTP) gets no thread. The first
     refused call ends the courtesy quietly: presence never costs an answer.
@@ -98,7 +126,7 @@ def _typing_keepalive(plugin: Any, secret: str, reply_to: str) -> threading.Even
     action = getattr(plugin, "send_chat_action", None)
     if not callable(action):
         done.set()
-        return done
+        return _Typing(done)
 
     def _run() -> None:
         while not done.is_set():
@@ -109,8 +137,9 @@ def _typing_keepalive(plugin: Any, secret: str, reply_to: str) -> threading.Even
             if done.wait(TYPING_REFRESH_S):
                 return
 
-    threading.Thread(target=_run, name="otto-typing", daemon=True).start()
-    return done
+    thread = threading.Thread(target=_run, name="otto-typing", daemon=True)
+    thread.start()
+    return _Typing(done, thread)
 
 
 class Worker:
