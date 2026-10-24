@@ -14,7 +14,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg libgomp1 libsndfile1 \
     && rm -rf /var/lib/apt/lists/*
 
-RUN pip install --no-cache-dir uv==0.12.5
+RUN pip install --no-cache-dir uv==0.13.4
 
 # crew#561: every estate skill (estate-map, incident-triage, pr-discipline, phone-idea-flow) tells
 # the agent to run `gh`, and the pod had no `gh` -- so Otto told the founder he had "no access to
@@ -83,6 +83,60 @@ COPY otto/requirements.txt /tmp/otto-requirements.txt
 RUN sed '/^# test-only$/,$d' /tmp/otto-requirements.txt > /tmp/otto-runtime.txt \
     && uv pip install --python /app/hermes-agent/.venv/bin/python --no-cache -r /tmp/otto-runtime.txt \
     && rm -f /tmp/otto-requirements.txt /tmp/otto-runtime.txt
+
+# Security patches on top of the fork's frozen lock, because `no CRITICAL vulnerability ships`
+# is a hard gate on this build and the lock at PINNED_VERSION had drifted behind it: the build
+# of 29e9f385 (run 40087250012, job 120852587393) was refused by Trivy with 11 CRITICAL findings
+# in 6 packages -- PyJWT 2.13.0 (CVE-2026-102268), anyio 4.12.1 (CVE-2026-63374), brotlicffi
+# 1.2.0.1 (GHSA-9v8h-qqgm-4m35), certifi 2026.5.20 and 2026.6.17 (GHSA-6q48-6c7w-9gw2), pillow
+# 12.3.0 (5 CVEs) and uv 0.12.5 (GHSA-hq85-5cpj-mr62) -- every one of them fixed upstream before
+# the tag, none of them reachable by changing this repo's own source. The prior image is from
+# 2026-09-29 and would fail the same scan today, so without this line no fix in this repo can
+# reach the cluster at all: the gate is right, and the lock is what is stale.
+#
+# Patched here rather than in the fork's uv.lock because the pin is the fork's release, and
+# `uv sync --frozen` keeps every other version exactly as the lock has it -- these six move to
+# the first version that carries the fix, and `deploy/k8s/boot-contract.sh` (the step above in
+# this workflow) still runs against the result, so a patch that breaks an import fails the build
+# instead of the pod.
+#
+# `UV_EXCLUDE_NEWER` is the one deliberate exception to the fork's supply-chain cooldown
+# (uv.toml `exclude-newer`, which is why the first attempt at this line died with "brotlicffi
+# was filtered by exclude-newer ... published at 2026-10-22"): two of these fixes were published
+# days ago, inside the window the cooldown protects, and the cooldown's job is to stop a
+# *freshly published, unreviewed* version resolving in -- not to block a version chosen by hand
+# for a named advisory. Every entry here is an exact `==` pin the gate asked for by name, nothing
+# is wildcarded, and the cooldown still applies to everything else in the build.
+# The receipt at the end of this RUN: the versions the interpreter will actually import, and
+# every copy of the certifi metadata that exists anywhere in the image. Two builds have now
+# failed on a certifi 2026.6.17 that was not the venv's -- a scan report names a package but
+# not the path -- so the next failure names its own location instead of costing a round trip.
+RUN UV_EXCLUDE_NEWER=2026-10-23 uv pip install --python /app/hermes-agent/.venv/bin/python --no-cache --no-deps \
+      'PyJWT==2.14.0' \
+      'anyio==4.14.2' \
+      'brotlicffi==1.2.1.0' \
+      'certifi==2026.10.19' \
+      'pillow==13.0.0' \
+   && /app/hermes-agent/.venv/bin/python -c 'import importlib.metadata as m; print("security-patch", " ".join("%s==%s" % (n, m.version(n)) for n in ("certifi", "anyio", "PyJWT", "pillow", "brotlicffi")))' \
+   && for sp in /opt/uv/python/cpython-*/lib/python3.*/site-packages; do rm -rf "$sp"/pip "$sp"/pip-*.dist-info; done \
+   && rm -rf /root/.cache/uv \
+   && find / -name 'certifi*' -not -path '/app/hermes-agent/.venv/lib/python3.11/site-packages/certifi/*' 2>/dev/null | sort -u
+
+# This RUN is the last thing that touches the interpreter, and the receipt it prints is not
+# decoration -- it is how each of the four rounds below was aimed, each time by a measurement
+# instead of a theory:
+#   run 40088411090 -> 11 CRITICAL, with the patch placed above the otto install
+#   run 40088779542 -> 1 CRITICAL (certifi 2026.6.17), patch moved below that install
+#   run 40089449255 -> the interpreter reports certifi==2026.10.19, anyio==4.14.2,
+#                     PyJWT==2.14.0, pillow==13.0.0, brotlicffi==1.2.1.0 and the venv's only
+#                     dist-info is 2026.10.19, yet the scan still named 2026.6.17. A scan
+#                     report names a package and never a path, so this RUN now prints every
+#                     path matching `certifi*`. That run listed an unpacked wheel in the uv
+#                     cache and pip's vendored copy inside the uv-managed CPython.
+#   run 40090232000 -> with the cache dropped, the one remaining finding was pip's own vendored
+#                     certifi under /opt/uv/python. Nothing in this image runs pip: `uv` does the
+#                     installing, and the venv it built has no pip of its own. So the managed
+#                     interpreter's pip is deleted and the vendored metadata goes with it.
 
 ENV PATH="/app/hermes-agent/.venv/bin:$PATH"
 ENV HERMES_HOME=/app
