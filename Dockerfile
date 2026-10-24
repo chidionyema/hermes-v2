@@ -86,7 +86,15 @@ RUN uv sync --frozen --no-dev --extra messaging --extra hindsight --extra otlp -
 # the first version that carries the fix, and `deploy/k8s/boot-contract.sh` (the step above in
 # this workflow) still runs against the result, so a patch that breaks an import fails the build
 # instead of the pod.
-RUN uv pip install --python /app/hermes-agent/.venv/bin/python --no-cache --no-deps \
+#
+# `UV_EXCLUDE_NEWER` is the one deliberate exception to the fork's supply-chain cooldown
+# (uv.toml `exclude-newer`, which is why the first attempt at this line died with "brotlicffi
+# was filtered by exclude-newer ... published at 2026-10-22"): two of these fixes were published
+# days ago, inside the window the cooldown protects, and the cooldown's job is to stop a
+# *freshly published, unreviewed* version resolving in -- not to block a version chosen by hand
+# for a named advisory. Every entry here is an exact `==` pin the gate asked for by name, nothing
+# is wildcarded, and the cooldown still applies to everything else in the build.
+RUN UV_EXCLUDE_NEWER=2026-10-23 uv pip install --python /app/hermes-agent/.venv/bin/python --no-cache --no-deps \
       'PyJWT==2.14.0' \
       'anyio==4.14.2' \
       'brotlicffi==1.2.1.0' \
