@@ -118,14 +118,22 @@ RUN UV_EXCLUDE_NEWER=2026-10-23 uv pip install --python /app/hermes-agent/.venv/
       'certifi==2026.10.19' \
       'pillow==13.0.0' \
    && /app/hermes-agent/.venv/bin/python -c 'import importlib.metadata as m; print("security-patch", " ".join("%s==%s" % (n, m.version(n)) for n in ("certifi", "anyio", "PyJWT", "pillow", "brotlicffi")))' \
-   && find / /opt /usr/local -name 'certifi-*.dist-info' -o -name 'certifi-*.egg-info' 2>/dev/null | sort -u
+   && find / -name 'certifi*' -not -path '/app/hermes-agent/.venv/lib/python3.11/site-packages/certifi/*' 2>/dev/null | sort -u \
+   && rm -rf /root/.cache/uv
 
-# This block runs LAST on purpose. Run 40088411090 (job 120855935789) proved the first
-# placement wrong: with the patch above the otto install, the build went 11 CRITICAL -> 1, and
-# the survivor was `certifi 2026.6.17` -- the otto runtime install resolved certifi again under
-# the fork's cooldown (2026.10.19 is newer than the cutoff, so the cooldown picked 2026.6.17) and
-# quietly reverted the pin one layer above it. A security patch placed before the last install in
-# the image is decoration; it has to be the last word on the interpreter's site-packages.
+# Runs LAST, and the receipt at the end of it is not decoration. Measured over three builds:
+#   run 40088411090 -> 11 CRITICAL, patch placed above the otto install
+#   run 40088779542 -> 1 CRITICAL (certifi 2026.6.17), patch moved below it
+#   run 40089449255 -> the interpreter now reports certifi==2026.10.19, anyio==4.14.2,
+#                     PyJWT==2.14.0, pillow==13.0.0, brotlicffi==1.2.1.0 and the venv's own
+#                     dist-info is 2026.10.19 -- yet the scan still names a certifi 2026.6.17,
+#                     so the last copy is metadata somewhere else in the image: the same run
+#                     printed /root/.cache/uv/archive-v0/.../certifi-2026.5.20.dist-info, an
+#                     unpacked wheel left behind by `uv sync`. A scan report names a package and
+#                     never a path, which is why this RUN prints every path matching `certifi*`
+#                     and then deletes the uv cache: a build cache is dead weight in a runtime
+#                     image whose root filesystem is read-only, and it is where a stale wheel's
+#                     METADATA survives the uninstall that removed the package itself.
 
 ENV PATH="/app/hermes-agent/.venv/bin:$PATH"
 ENV HERMES_HOME=/app
