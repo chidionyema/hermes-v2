@@ -14,7 +14,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg libgomp1 libsndfile1 \
     && rm -rf /var/lib/apt/lists/*
 
-RUN pip install --no-cache-dir uv==0.12.5
+RUN pip install --no-cache-dir uv==0.13.4
 
 # crew#561: every estate skill (estate-map, incident-triage, pr-discipline, phone-idea-flow) tells
 # the agent to run `gh`, and the pod had no `gh` -- so Otto told the founder he had "no access to
@@ -70,6 +70,28 @@ RUN uv sync --frozen --no-dev --extra messaging --extra hindsight --extra otlp -
     && chmod -R a+rX /opt/uv \
     && test -x "$(readlink -f .venv/bin/python)" \
     && case "$(readlink -f .venv/bin/python)" in /root/*) echo "python under /root" >&2; exit 1;; esac
+
+# Security patches on top of the fork's frozen lock, because `no CRITICAL vulnerability ships`
+# is a hard gate on this build and the lock at PINNED_VERSION had drifted behind it: the build
+# of 29e9f385 (run 40087250012, job 120852587393) was refused by Trivy with 11 CRITICAL findings
+# in 6 packages -- PyJWT 2.13.0 (CVE-2026-102268), anyio 4.12.1 (CVE-2026-63374), brotlicffi
+# 1.2.0.1 (GHSA-9v8h-qqgm-4m35), certifi 2026.5.20 and 2026.6.17 (GHSA-6q48-6c7w-9gw2), pillow
+# 12.3.0 (5 CVEs) and uv 0.12.5 (GHSA-hq85-5cpj-mr62) -- every one of them fixed upstream before
+# the tag, none of them reachable by changing this repo's own source. The prior image is from
+# 2026-09-29 and would fail the same scan today, so without this line no fix in this repo can
+# reach the cluster at all: the gate is right, and the lock is what is stale.
+#
+# Patched here rather than in the fork's uv.lock because the pin is the fork's release, and
+# `uv sync --frozen` keeps every other version exactly as the lock has it -- these six move to
+# the first version that carries the fix, and `deploy/k8s/boot-contract.sh` (the step above in
+# this workflow) still runs against the result, so a patch that breaks an import fails the build
+# instead of the pod.
+RUN uv pip install --python /app/hermes-agent/.venv/bin/python --no-cache --no-deps \
+      'PyJWT==2.14.0' \
+      'anyio==4.14.2' \
+      'brotlicffi==1.2.1.0' \
+      'certifi==2026.10.19' \
+      'pillow==13.0.0'
 
 # otto rides in this image too: platform/otto-staging (idp) runs `python -m otto.boot` with this
 # same venv, but nothing ever installed otto's declared dependencies -- otto/requirements.txt was
