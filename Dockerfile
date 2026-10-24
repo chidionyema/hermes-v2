@@ -118,22 +118,25 @@ RUN UV_EXCLUDE_NEWER=2026-10-23 uv pip install --python /app/hermes-agent/.venv/
       'certifi==2026.10.19' \
       'pillow==13.0.0' \
    && /app/hermes-agent/.venv/bin/python -c 'import importlib.metadata as m; print("security-patch", " ".join("%s==%s" % (n, m.version(n)) for n in ("certifi", "anyio", "PyJWT", "pillow", "brotlicffi")))' \
-   && find / -name 'certifi*' -not -path '/app/hermes-agent/.venv/lib/python3.11/site-packages/certifi/*' 2>/dev/null | sort -u \
-   && rm -rf /root/.cache/uv
+   && for sp in /opt/uv/python/cpython-*/lib/python3.*/site-packages; do rm -rf "$sp"/pip "$sp"/pip-*.dist-info; done \
+   && rm -rf /root/.cache/uv \
+   && find / -name 'certifi*' -not -path '/app/hermes-agent/.venv/lib/python3.11/site-packages/certifi/*' 2>/dev/null | sort -u
 
-# Runs LAST, and the receipt at the end of it is not decoration. Measured over three builds:
-#   run 40088411090 -> 11 CRITICAL, patch placed above the otto install
-#   run 40088779542 -> 1 CRITICAL (certifi 2026.6.17), patch moved below it
-#   run 40089449255 -> the interpreter now reports certifi==2026.10.19, anyio==4.14.2,
-#                     PyJWT==2.14.0, pillow==13.0.0, brotlicffi==1.2.1.0 and the venv's own
-#                     dist-info is 2026.10.19 -- yet the scan still names a certifi 2026.6.17,
-#                     so the last copy is metadata somewhere else in the image: the same run
-#                     printed /root/.cache/uv/archive-v0/.../certifi-2026.5.20.dist-info, an
-#                     unpacked wheel left behind by `uv sync`. A scan report names a package and
-#                     never a path, which is why this RUN prints every path matching `certifi*`
-#                     and then deletes the uv cache: a build cache is dead weight in a runtime
-#                     image whose root filesystem is read-only, and it is where a stale wheel's
-#                     METADATA survives the uninstall that removed the package itself.
+# This RUN is the last thing that touches the interpreter, and the receipt it prints is not
+# decoration -- it is how each of the four rounds below was aimed, each time by a measurement
+# instead of a theory:
+#   run 40088411090 -> 11 CRITICAL, with the patch placed above the otto install
+#   run 40088779542 -> 1 CRITICAL (certifi 2026.6.17), patch moved below that install
+#   run 40089449255 -> the interpreter reports certifi==2026.10.19, anyio==4.14.2,
+#                     PyJWT==2.14.0, pillow==13.0.0, brotlicffi==1.2.1.0 and the venv's only
+#                     dist-info is 2026.10.19, yet the scan still named 2026.6.17. A scan
+#                     report names a package and never a path, so this RUN now prints every
+#                     path matching `certifi*`. That run listed an unpacked wheel in the uv
+#                     cache and pip's vendored copy inside the uv-managed CPython.
+#   run 40090232000 -> with the cache dropped, the one remaining finding was pip's own vendored
+#                     certifi under /opt/uv/python. Nothing in this image runs pip: `uv` does the
+#                     installing, and the venv it built has no pip of its own. So the managed
+#                     interpreter's pip is deleted and the vendored metadata goes with it.
 
 ENV PATH="/app/hermes-agent/.venv/bin:$PATH"
 ENV HERMES_HOME=/app
