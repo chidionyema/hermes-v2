@@ -107,12 +107,18 @@ RUN sed '/^# test-only$/,$d' /tmp/otto-requirements.txt > /tmp/otto-runtime.txt 
 # *freshly published, unreviewed* version resolving in -- not to block a version chosen by hand
 # for a named advisory. Every entry here is an exact `==` pin the gate asked for by name, nothing
 # is wildcarded, and the cooldown still applies to everything else in the build.
+# The receipt at the end of this RUN: the versions the interpreter will actually import, and
+# every copy of the certifi metadata that exists anywhere in the image. Two builds have now
+# failed on a certifi 2026.6.17 that was not the venv's -- a scan report names a package but
+# not the path -- so the next failure names its own location instead of costing a round trip.
 RUN UV_EXCLUDE_NEWER=2026-10-23 uv pip install --python /app/hermes-agent/.venv/bin/python --no-cache --no-deps \
       'PyJWT==2.14.0' \
       'anyio==4.14.2' \
       'brotlicffi==1.2.1.0' \
       'certifi==2026.10.19' \
-      'pillow==13.0.0'
+      'pillow==13.0.0' \
+   && /app/hermes-agent/.venv/bin/python -c 'import certifi, anyio, jwt, PIL; print("security-patch", certifi.__version__, anyio.__version__, jwt.__version__, PIL.__version__)' \
+   && find / -xdev -name 'certifi-*.dist-info' | sort
 
 # This block runs LAST on purpose. Run 40088411090 (job 120855935789) proved the first
 # placement wrong: with the patch above the otto install, the build went 11 CRITICAL -> 1, and
