@@ -19,7 +19,13 @@ import pytest
 from otto.boot.pipeline import AnswerOutcome
 from otto.ingress import worker as worker_module
 from otto.ingress.gateway import ACCEPTED, EventGateway
-from otto.ingress.plugins import TELEGRAM, OutboundNotSupported, TelegramPlugin
+from otto.ingress.plugins import (
+    HTTP,
+    TELEGRAM,
+    OutboundNotSupported,
+    TelegramPlugin,
+    default_plugins,
+)
 from otto.ingress.store import ChannelBinding, SqliteChannelBindingStore
 from otto.spine.envelope import TaskEnvelope, TaskSource
 
@@ -485,10 +491,16 @@ def test_a_refused_typing_indicator_never_costs_the_answer(monkeypatch) -> None:
 class PullablePlugin:
     """The API surface's shape: there is no chat id and no push. The task
     id the door handed back is the address, and the answer to it is read
-    back over the door."""
+    back over the door.
 
-    channel: str = "api"
-    task_source: object = None
+    Its channel is ``http`` because that is the channel production builds
+    (``plugins.HTTP``) -- the surface is called *api* in ``TaskSource``, and
+    a fake registered under that name is a fake for a plugin that does not
+    exist, which is how the real registry's gap stayed invisible.
+    """
+
+    channel: str = HTTP
+    task_source: TaskSource = TaskSource.api
     PULLABLE: bool = True
     sent: list[tuple[str, str, str]] = field(default_factory=list)
 
@@ -517,7 +529,7 @@ def _api_worker(plugin, obs=None) -> worker_module.Worker:
         obs=obs or SilentObs(),
         lanes=None,
         gateway=None,
-        plugins={"api": plugin},
+        plugins={HTTP: plugin},
     )
 
 
@@ -575,3 +587,55 @@ def test_a_pullable_surface_is_not_pushed_to_and_says_so(monkeypatch) -> None:
     assert "worker.no_reply_address" not in obs.names()
     line = next(kw for name, kw in obs.lines if name == "worker.answered_undelivered")
     assert line["pullable"] is True
+
+
+def test_the_real_registry_answers_every_source_a_door_can_mint(
+    monkeypatch,
+) -> None:
+    """Production's own plugin table, not a fake one.
+
+    Measured 2026-10-24 on the first real public turn after the answering
+    lane shipped: the door accepted it (202), and the lane terminated it as
+
+        {"component": "otto-ingress", "event": "worker.unknown_channel",
+         "otto.task_ulid": "01M5PY5XGE8W6ZVQ7Z9HNW97SV", "channel": "api"}
+
+    because the lane looked the plugin up by ``TaskSource.api`` (``"api"``)
+    while the registry is keyed by channel (``"http"``). Every test here
+    passed throughout, because the fake registry was keyed ``"api"`` -- a
+    name ``default_plugins()`` never mints. So this one asks the worker the
+    question the bus asks it, against the table production actually builds.
+    """
+    registry = default_plugins()
+    obs = CapturingObs()
+    worker = worker_module.Worker(
+        bus=None,
+        store=_store(),
+        secrets=FakeSecrets({OUTBOUND_REF: BOT_TOKEN}),
+        obs=obs,
+        lanes=None,
+        gateway=None,
+        plugins=registry,
+    )
+
+    # The api door's own envelope, through that table. This is the assertion
+    # that fails on the tree that dropped the real turn.
+    msg = FakeMsg(data=_api_envelope().canonical_json())
+    _run(
+        worker,
+        msg,
+        lambda envelope, **kwargs: _answer("pong"),
+        monkeypatch,
+    )
+
+    assert "worker.unknown_channel" not in obs.names(), obs.names()
+    assert msg.acked and not msg.termed, "the accepted turn was terminated"
+
+    # And the join holds for every channel this build ships, not only the one
+    # that broke: each plugin answers for the source it declares.
+    for plugin in registry.values():
+        assert worker._plugin_for(plugin.task_source) is plugin, (
+            f"no plugin in default_plugins() serves {plugin.task_source!r}; "
+            "an envelope for that source is terminated as an unknown channel"
+        )
+
