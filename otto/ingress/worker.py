@@ -23,10 +23,15 @@ Three things make it one messaging layer rather than a second one:
 
 Delivery discipline, because a work queue that retries the wrong things
 is worse than none: a task that can never succeed as written — no reply
-address, no binding for its tenant, a channel that cannot be pushed to —
-is terminated, not redelivered, and the reason is logged. Anything that
-could succeed on a second attempt — the model router, Telegram's API,
-the database — is negatively acknowledged so the server redelivers it.
+address on a channel that can only push, no binding for its tenant, a
+channel that cannot be pushed to and cannot be read back from — is
+terminated, not redelivered, and the reason is logged. A task this lane
+can answer but not deliver to (``ChannelPlugin.PULLABLE``: the caller
+reads the answer back by task id) is answered and acknowledged, and the
+log says ``worker.answered_undelivered`` rather than pretending a reply
+went out. Anything that could succeed on a second attempt — the model
+router, Telegram's API, the database — is negatively acknowledged so the
+server redelivers it.
 """
 
 from __future__ import annotations
@@ -70,8 +75,49 @@ FETCH_TIMEOUT_S = 5.0
 TYPING_REFRESH_S = 4.0
 
 
-def _typing_keepalive(plugin: Any, secret: str, reply_to: str) -> threading.Event:
-    """Show "typing" on ``plugin`` until the returned event is set.
+class _Typing:
+    """The typing indicator's lifetime.
+
+    ``set()`` stops the keepalive **and waits for the thread to exit**. The
+    earlier event-only version left a window: the thread could be about to
+    call ``send_chat_action`` when the answer went out, so "the indicator
+    stops once the reply is out" was true eventually rather than at the
+    moment the reply was delivered -- measured 2026-10-23 as a red
+    ``test_the_typing_indicator_shows_while_the_answer_is_being_written``
+    on gates run 40091280499 (one run in three, same tree). A courtesy that
+    can outlive the answer it announces is a leak, and a test that can only
+    see it sometimes is a test that fails for the wrong reason.
+    """
+
+    __slots__ = ("_event", "_thread")
+
+    def __init__(
+        self, event: threading.Event, thread: threading.Thread | None = None
+    ) -> None:
+        self._event = event
+        self._thread = thread
+
+    def set(self) -> None:
+        self._event.set()
+        if self._thread is not None:
+            self._thread.join(timeout=TYPING_REFRESH_S + 1.0)
+
+
+def _no_typing() -> _Typing:
+    """The keepalive for a task with nowhere to show one: already stopped.
+
+    The answering lane always calls ``set()`` in a ``finally``, so the no-op
+    has to be a stopped handle rather than ``None`` -- a None there would
+    turn "this surface has no typing indicator" into an ``AttributeError``
+    on the path that answers it.
+    """
+    done = threading.Event()
+    done.set()
+    return _Typing(done)
+
+
+def _typing_keepalive(plugin: Any, secret: str, reply_to: str) -> _Typing:
+    """Show "typing" on ``plugin`` until the returned handle is set.
 
     A plugin without ``send_chat_action`` (HTTP) gets no thread. The first
     refused call ends the courtesy quietly: presence never costs an answer.
@@ -80,7 +126,7 @@ def _typing_keepalive(plugin: Any, secret: str, reply_to: str) -> threading.Even
     action = getattr(plugin, "send_chat_action", None)
     if not callable(action):
         done.set()
-        return done
+        return _Typing(done)
 
     def _run() -> None:
         while not done.is_set():
@@ -91,8 +137,9 @@ def _typing_keepalive(plugin: Any, secret: str, reply_to: str) -> threading.Even
             if done.wait(TYPING_REFRESH_S):
                 return
 
-    threading.Thread(target=_run, name="otto-typing", daemon=True).start()
-    return done
+    thread = threading.Thread(target=_run, name="otto-typing", daemon=True)
+    thread.start()
+    return _Typing(done, thread)
 
 
 class Worker:
@@ -171,14 +218,22 @@ class Worker:
         ctx = TaskContext(task_ulid=envelope.task_id, tenant_id=envelope.tenant_id)
         channel = envelope.source.value
 
-        if not envelope.reply_to:
-            self._obs.info("worker.no_reply_address", ctx, channel=channel)
-            await msg.term()
-            return
-
         plugin = self._plugins.get(channel)
         if plugin is None:
             self._obs.info("worker.unknown_channel", ctx, channel=channel)
+            await msg.term()
+            return
+
+        # A pullable surface (``ChannelPlugin.PULLABLE``) does not need an
+        # address an answer is *pushed* to: the task id is the address, and
+        # the door reads the answer back on it. Before this distinction
+        # existed the two checks below ran first and terminated the task, so
+        # an accepted ``api`` turn never reached the router at all --
+        # measured 2026-10-23 as ``worker.no_reply_address`` on the first
+        # turn this surface ever carried.
+        pullable = bool(getattr(plugin, "PULLABLE", False))
+        if not envelope.reply_to and not pullable:
+            self._obs.info("worker.no_reply_address", ctx, channel=channel)
             await msg.term()
             return
 
@@ -191,7 +246,21 @@ class Worker:
             binding = self._store.find_by_external_id(channel, envelope.reply_binding)
         else:
             binding = self._store.find_by_tenant(channel, envelope.tenant_id)
-        if binding is None or not binding.outbound_secret_ref:
+
+        # Delivery is optional; answering is not. A binding with an outbound
+        # reference gives this lane an address and a credential to push to.
+        # A pullable surface needs neither: the answer is written against the
+        # task id by the answering path and read back over the door.
+        delivery_secret: str | None = None
+        if binding is not None and binding.outbound_secret_ref:
+            try:
+                delivery_secret = self._secrets.resolve(binding.outbound_secret_ref)
+            except SecretNotFound as exc:
+                # The platform's fault, and a fixable one: retry.
+                self._obs.info("worker.secret_unavailable", ctx, error=str(exc))
+                await msg.nak()
+                return
+        elif not pullable:
             # A listen-only connection. Not a fault of this delivery, and
             # not something a retry fixes: the operator adds the outbound
             # reference to the row, and the next message answers.
@@ -208,16 +277,13 @@ class Worker:
         # (2026-09-06): the boot path shows Telegram's typing indicator
         # (otto.boot.presence) but this lane, the one every Telegram message
         # actually takes, showed nothing for the tens of seconds a reasoning
-        # lane needs. The indicator lives as long as the answer does.
-        try:
-            secret = self._secrets.resolve(binding.outbound_secret_ref)
-        except SecretNotFound as exc:
-            # The platform's fault, and a fixable one: retry.
-            self._obs.info("worker.secret_unavailable", ctx, error=str(exc))
-            await msg.nak()
-            return
-
-        typing_done = _typing_keepalive(plugin, secret, envelope.reply_to)
+        # lane needs. The indicator lives as long as the answer does, and
+        # only where there is a place to show it.
+        typing_done = (
+            _typing_keepalive(plugin, delivery_secret, envelope.reply_to)
+            if delivery_secret is not None and envelope.reply_to
+            else _no_typing()
+        )
         try:
             answer = answer_envelope(
                 envelope,
@@ -240,9 +306,36 @@ class Worker:
             await msg.ack()
             return
 
+        if delivery_secret is None or not envelope.reply_to:
+            # Answered, and readable at the door by task id, but there is no
+            # address on this channel to push it to. Acknowledged rather
+            # than terminated: the answer exists and was recorded, so a
+            # redelivery would only produce it twice. Named so that a turn
+            # nobody read is visible in the log instead of looking answered.
+            self._obs.info(
+                "worker.answered_undelivered",
+                ctx,
+                channel=channel,
+                pullable=pullable,
+            )
+            await msg.ack()
+            return
+
         try:
-            plugin.send_reply(secret, envelope.reply_to, answer.reply_text)
+            plugin.send_reply(delivery_secret, envelope.reply_to, answer.reply_text)
         except OutboundNotSupported as exc:
+            if pullable:
+                # The answer is recorded and fetchable; the push was never
+                # going to exist on this channel.
+                self._obs.info(
+                    "worker.answered_undelivered",
+                    ctx,
+                    channel=channel,
+                    pullable=True,
+                    error=str(exc),
+                )
+                await msg.ack()
+                return
             self._obs.info("worker.outbound_unsupported", ctx, error=str(exc))
             await msg.term()
             return
@@ -259,7 +352,7 @@ class Worker:
             send_voice = getattr(plugin, "send_voice", None)
             if callable(send_voice):
                 try:
-                    send_voice(secret, envelope.reply_to, answer.reply_text)
+                    send_voice(delivery_secret, envelope.reply_to, answer.reply_text)
                 except OutboundNotSupported as exc:
                     self._obs.info("worker.voice_unsupported", ctx, error=str(exc))
                 except Exception as exc:  # noqa: BLE001 - audio upload refused

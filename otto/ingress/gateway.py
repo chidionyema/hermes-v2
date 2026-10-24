@@ -42,10 +42,13 @@ from otto.ingress.media import MediaEnrichment, detect_media
 from otto.ingress.publisher import EventPublisher
 from otto.ingress.secrets import SecretNotFound, SecretResolver
 from otto.ingress.store import ChannelBindingStore
+from otto.memory import conversation
+from otto.memory.conversation import StoreUnavailable
 from otto.obs.core import ObsHandle, TaskContext
 from otto.spine.envelope import TaskClass, TaskEnvelope, Tier, TrustTag
 from otto.surface.envelope import SurfaceEnvelope, TrustClass
 
+OK = 200
 ACCEPTED = 202
 NOTHING_TO_DO = 200
 BAD_REQUEST = 400
@@ -71,6 +74,9 @@ class IngressResult:
     tenant_id: str | None = None
     task_id: str | None = None
     subject: str | None = None
+    #: Extra fields for a read-back response (``answer_for``). Absent on the
+    #: accept path, where the body is the three keys a caller needs.
+    payload: dict[str, Any] | None = None
 
     @property
     def body(self) -> bytes:
@@ -79,6 +85,8 @@ class IngressResult:
             payload["reason"] = self.reason
         if self.task_id:
             payload["task_id"] = self.task_id
+        if self.payload:
+            payload.update(self.payload)
         return json.dumps(payload, separators=(",", ":")).encode("utf-8")
 
 
@@ -228,13 +236,91 @@ class EventGateway:
             binding.external_id,
             wants_voice_reply=wants_voice_reply,
         )
-        subject = self._publisher.publish_submitted(task_env)
+        try:
+            subject = self._publisher.publish_submitted(task_env)
+        except Exception as exc:  # noqa: BLE001 - the bus refused the task
+            # A turn that never reached the bus has not been accepted, and
+            # saying 202 would be the lie that cost four days: measured
+            # 2026-10-23, the last task on OTTO_TASKS was published
+            # 2026-10-19T12:08:26Z, the pod stayed Ready, and every turn
+            # after that was dropped with no line in the log at all. 503 is
+            # also the answer that makes the channel retry.
+            self._obs.info(
+                "ingress.publish_failed",
+                TaskContext(task_ulid=task_env.task_id, tenant_id=task_env.tenant_id),
+                channel=channel,
+                error=type(exc).__name__,
+            )
+            return IngressResult(
+                UNAVAILABLE,
+                "the task bus refused the work; the turn was not accepted",
+                tenant_id=task_env.tenant_id,
+                task_id=task_env.task_id,
+            )
         return IngressResult(
             ACCEPTED,
             "accepted",
             tenant_id=task_env.tenant_id,
             task_id=task_env.task_id,
             subject=subject,
+        )
+
+    def answer_for(self, headers: Mapping[str, str], task_id: str) -> IngressResult:
+        """The answer to a turn this tenant asked, read back by task id.
+
+        This is the other half of a pullable surface (``HttpPlugin``): the
+        202 hands the caller a task id and there is no address to push an
+        answer to, so the caller fetches it here with the same credential it
+        sent the turn with.
+
+        Who is asking is decided by the credential alone -- the channel is
+        whichever plugin accepts the presented one, so the read-back has no
+        per-channel path either. A turn belonging to another tenant is
+        reported as absent rather than forbidden: the reader already proved
+        which tenant it is, and telling it that someone else's turn exists
+        would leak the customer list one ULID at a time.
+        """
+        tenant_id: str | None = None
+        authenticated = False
+        for plugin in self._plugins.values():
+            presented = plugin.present_credential(headers, b"")
+            if not presented:
+                continue
+            binding = self._store.find_by_credential(plugin.channel, presented)
+            if binding is None or not binding.active:
+                continue
+            try:
+                secret = self._secrets.resolve(binding.secret_ref)
+            except SecretNotFound:
+                continue
+            if not plugin.verify(presented, secret):
+                continue
+            authenticated = True
+            tenant_id = binding.tenant_id
+            break
+        if not authenticated:
+            return IngressResult(UNAUTHORIZED, "no credential presented")
+
+        try:
+            turn = conversation.read_turn(task_id)
+        except StoreUnavailable as exc:
+            return IngressResult(
+                UNAVAILABLE, f"conversation store unavailable: {exc}", tenant_id
+            )
+        except Exception as exc:  # noqa: BLE001 - the driver, on a read path
+            return IngressResult(
+                UNAVAILABLE,
+                f"conversation store failed: {type(exc).__name__}",
+                tenant_id,
+            )
+        if turn is None or turn.tenant_id != tenant_id:
+            return IngressResult(NOT_FOUND, "no such answered turn", tenant_id)
+        return IngressResult(
+            OK,
+            "answered",
+            tenant_id=tenant_id,
+            task_id=turn.task_ulid,
+            payload=turn.to_payload(),
         )
 
     def _mint(

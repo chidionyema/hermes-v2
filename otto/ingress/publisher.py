@@ -46,6 +46,24 @@ class JetStreamPublisher:
 
     def publish_submitted(self, envelope: TaskEnvelope) -> str:
         subject = subjects.task_subject(subjects.TaskState.submitted)
+        try:
+            return self._publish(subject, envelope)
+        except Exception:
+            # The connection opened at boot can die while the process stays
+            # up, and nothing above here notices: readiness was a process
+            # probe, so the pod stayed Ready while every accepted turn was
+            # dropped. Measured 2026-10-23 — the last task on OTTO_TASKS was
+            # published 2026-10-19T12:08:26Z and the door had been answering
+            # 202 with nothing behind it ever since.
+            #
+            # One reconnect, then one retry: the envelope carries
+            # ``Nats-Msg-Id``, so a retry of a publish that actually landed
+            # is stored once, and the dedupe window covers this case rather
+            # than hoping the first attempt failed cleanly.
+            self._loop.run_until_complete(self._bus.reconnect())
+            return self._publish(subject, envelope)
+
+    def _publish(self, subject: str, envelope: TaskEnvelope) -> str:
         self._loop.run_until_complete(
             self._bus.publish(
                 subject,

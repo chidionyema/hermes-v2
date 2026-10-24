@@ -476,3 +476,102 @@ def test_a_refused_typing_indicator_never_costs_the_answer(monkeypatch) -> None:
 
     assert plugin.first_action.is_set()
     assert plugin.sent == [(BOT_TOKEN, str(CHAT_ID), "still here")]
+
+
+# --- a surface the platform cannot push to -------------------------------
+
+
+@dataclass
+class PullablePlugin:
+    """The API surface's shape: there is no chat id and no push. The task
+    id the door handed back is the address, and the answer to it is read
+    back over the door."""
+
+    channel: str = "api"
+    task_source: object = None
+    PULLABLE: bool = True
+    sent: list[tuple[str, str, str]] = field(default_factory=list)
+
+    def send_reply(self, secret: str, reply_to: str, text: str) -> None:
+        raise OutboundNotSupported("the api surface has no push address")
+
+
+def _api_envelope() -> TaskEnvelope:
+    from otto.spine.envelope import TaskClass, Tier
+
+    return TaskEnvelope.new(
+        tenant_id=TENANT,
+        source=TaskSource.api,
+        task_class=TaskClass.comms,
+        input="how many nodes are we paying for",
+        authority_ceiling=Tier.T1,
+        provenance="api",
+    )
+
+
+def _api_worker(plugin, obs=None) -> worker_module.Worker:
+    return worker_module.Worker(
+        bus=None,
+        store=_store(),
+        secrets=FakeSecrets({OUTBOUND_REF: BOT_TOKEN}),
+        obs=obs or SilentObs(),
+        lanes=None,
+        gateway=None,
+        plugins={"api": plugin},
+    )
+
+
+class CapturingObs(SilentObs):
+    def __init__(self) -> None:
+        self.lines: list[tuple[str, dict]] = []
+
+    def info(self, name: str, ctx=None, **kwargs) -> None:
+        self.lines.append((name, kwargs))
+
+    def names(self) -> list[str]:
+        return [name for name, _ in self.lines]
+
+
+def test_a_pullable_surface_is_answered_with_no_reply_address(
+    monkeypatch,
+) -> None:
+    """Measured 2026-10-23: the ``api`` turn was accepted with a task id and
+    terminated one line later as ``worker.no_reply_address``, so it never
+    reached the router. No address means "read it back", not "nobody is
+    asking"."""
+    envelope = _api_envelope()
+    assert not envelope.reply_to
+    plugin = PullablePlugin()
+    called: list[TaskEnvelope] = []
+
+    def fake_answer_envelope(envelope, **kwargs):
+        called.append(envelope)
+        return _answer("6.9 cores, and 6.90 of them are asked for.")
+
+    msg = FakeMsg(data=envelope.canonical_json())
+    _run(_api_worker(plugin), msg, fake_answer_envelope, monkeypatch)
+
+    assert called, "the turn never reached the answering lane"
+    assert msg.acked and not msg.termed and not msg.naked
+
+
+def test_a_pullable_surface_is_not_pushed_to_and_says_so(monkeypatch) -> None:
+    """There is no address on this surface, so no send is attempted, and
+    the answer being recorded-but-unread is a line in the log rather than a
+    silent success."""
+    envelope = _api_envelope()
+    plugin = PullablePlugin()
+    obs = CapturingObs()
+    worker = _api_worker(plugin, obs)
+
+    def fake_answer_envelope(envelope, **kwargs):
+        return _answer("the answer the caller will fetch")
+
+    msg = FakeMsg(data=envelope.canonical_json())
+    _run(worker, msg, fake_answer_envelope, monkeypatch)
+
+    assert plugin.sent == []
+    assert msg.acked and not msg.naked
+    assert "worker.no_reply_address" not in obs.names()
+    line = next(kw for name, kw in obs.lines if name == "worker.answered_undelivered")
+    assert line["pullable"] is True

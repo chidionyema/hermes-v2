@@ -1,0 +1,14 @@
+# Advisories read, judged, and dismissed with a date they must be re-read by.
+# Format (bin/estate-security-scan): <GHSA-id> <review-by YYYY-MM-DD> <reason>
+#
+# 2026-10-23: published 2026-10-01T18:32:46Z, and it turned every lane in this repo red the first
+# time one ran after it landed (security-scan run 40039720644 on da8cc36: "2 high severity
+# vulnerabilities", both this one). zod <4.6.6 is reached only through lsp/package.json ->
+# bash-language-server, the local language server the agent's workspace uses to read shell and
+# Dockerfiles. It validates its own JSON-RPC payloads, never a customer's: it is not in the runtime
+# image and takes no request from the network surface Otto answers on. Upstream has no fixed
+# release to adopt -- bash-language-server 5.8.1, the latest, still depends on zod 3.25.76, and the
+# only "fix" npm offers is a downgrade to bash-language-server 3.3.1, which is a breaking change to
+# the tooling for no security gain. Re-read before the date: adopt zod 4 the moment
+# bash-language-server releases against it, and delete this line.
+GHSA-mrhx-c7xc-m3w5 2026-12-01 zod <4.6.6 is reached only via lsp/package.json -> bash-language-server 5.8.1, a local language server that validates its own JSON-RPC payloads, is not in the runtime image and takes no network request; the latest upstream release still ships zod 3.x and npm's only fix is a breaking downgrade of the tool, so re-read on the review-by date instead

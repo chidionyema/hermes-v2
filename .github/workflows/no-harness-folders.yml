@@ -1,0 +1,29 @@
+# Founder 2026-09-30, non-negotiable: no harness folder (.claude) ever enters the estate. The
+# estate is model-agnostic; knowledge hidden in a harness folder is invisible to every other
+# model.
+#
+# This file exists because the estate's `no-harness-folders` ruleset (id 24305817) requires this
+# check on this repo's default branch and no workflow here produced it, so every pull request to
+# `main` reported mergeStateStatus=BLOCKED with a green board: measured 2026-10-24 on PR #111,
+# where `gates`, `security-scan`, `flow-tests`, `executes-gate`, `shell-strict` and `otto-tests`
+# were all SUCCESS and the merge was still refused, because the one check the ruleset names had
+# never been asked for. A gate nothing can satisfy is the same defect as a gate nothing can fail;
+# the repair is to make the check real and let the tree answer it.
+name: no-harness-folders
+on:
+  pull_request:
+  push:
+jobs:
+  no-harness-folders:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - name: refuse any .claude path
+        run: |
+          found=$(git ls-files | grep -E '(^|/)\.claude(/|$)' || true)
+          if [ -n "$found" ]; then
+            echo "::error::harness folder in the tree (founder 2026-09-30: no .claude anywhere):"
+            echo "$found"
+            exit 1
+          fi
+          echo "no .claude path in $(git ls-files | wc -l) tracked files"

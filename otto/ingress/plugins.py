@@ -67,6 +67,21 @@ class ChannelPlugin(Protocol):
     channel: str
     task_source: TaskSource
 
+    #: Whether an answer on this channel is *read back* rather than pushed.
+    #:
+    #: This is the difference between a channel that can only begin a
+    #: message while a request is open and one that mints an address an
+    #: answer can be delivered to later. It is a property of the channel,
+    #: not of a customer, so it lives on the plugin and not on the binding.
+    #: The answering lane uses it to decide whether a task with no reply
+    #: address is unanswerable (terminate, as before) or answerable and
+    #: merely undelivered (answer, record, acknowledge).
+    #:
+    #: Measured 2026-10-23: every accepted ``api`` turn ended at
+    #: ``worker.no_reply_address`` before any model ran, so the surface had
+    #: answered nothing since the day it was added.
+    PULLABLE: bool
+
     def present_credential(
         self, headers: Mapping[str, str], raw_body: bytes
     ) -> str | None:
@@ -131,6 +146,10 @@ class TelegramPlugin:
     channel: str = TELEGRAM
     task_source: TaskSource = TaskSource.telegram
     header_name: str = "X-Telegram-Bot-Api-Secret-Token"
+    #: Telegram pushes: the chat id minted by the binding is an address the
+    #: answer is delivered to, so an answer with no address is unanswerable
+    #: here and the lane terminates it as it always has.
+    PULLABLE: bool = False
     #: Optional text-to-speech seam (ADR 0022). ``None`` (the default
     #: wherever the fork's edge-tts is unavailable, a bare checkout or a
     #: surface with no audio) makes ``send_voice`` a no-op: the text reply
@@ -205,6 +224,13 @@ class HttpPlugin:
     task_source: TaskSource = TaskSource.api
     header_name: str = "Authorization"
     scheme: str = "Bearer "
+
+    #: The answer is fetched, not pushed (``send_reply`` below refuses for
+    #: exactly this reason). Declaring it here is what lets the answering
+    #: lane answer a turn whose surface has no address to deliver to: the
+    #: task id is the address, and ``GET /turns/<task id>`` is the door's
+    #: read-back of it.
+    PULLABLE: bool = True
 
     def present_credential(
         self, headers: Mapping[str, str], raw_body: bytes
