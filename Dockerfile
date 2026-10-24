@@ -71,6 +71,19 @@ RUN uv sync --frozen --no-dev --extra messaging --extra hindsight --extra otlp -
     && test -x "$(readlink -f .venv/bin/python)" \
     && case "$(readlink -f .venv/bin/python)" in /root/*) echo "python under /root" >&2; exit 1;; esac
 
+# otto rides in this image too: platform/otto-staging (idp) runs `python -m otto.boot` with this
+# same venv, but nothing ever installed otto's declared dependencies -- otto/requirements.txt was
+# COPY'd with the estate below and never pip-installed, so main-58 shipped an otto that dies on
+# `import jsonschema` (otto/gateway/core.py:21, pod otto-staging-7db5dfc98b 2026-09-02) while the
+# boot contract graded only the hermes modules. The runtime section installs into the one
+# contracted interpreter; the test-only tail (pytest and friends) never ships. Guard:
+# deploy/k8s/boot-contract.txt names otto.boot.pipeline, so an image whose interpreter cannot
+# import the otto chain never reaches the registry again.
+COPY otto/requirements.txt /tmp/otto-requirements.txt
+RUN sed '/^# test-only$/,$d' /tmp/otto-requirements.txt > /tmp/otto-runtime.txt \
+    && uv pip install --python /app/hermes-agent/.venv/bin/python --no-cache -r /tmp/otto-runtime.txt \
+    && rm -f /tmp/otto-requirements.txt /tmp/otto-runtime.txt
+
 # Security patches on top of the fork's frozen lock, because `no CRITICAL vulnerability ships`
 # is a hard gate on this build and the lock at PINNED_VERSION had drifted behind it: the build
 # of 29e9f385 (run 40087250012, job 120852587393) was refused by Trivy with 11 CRITICAL findings
@@ -101,18 +114,12 @@ RUN UV_EXCLUDE_NEWER=2026-10-23 uv pip install --python /app/hermes-agent/.venv/
       'certifi==2026.10.19' \
       'pillow==13.0.0'
 
-# otto rides in this image too: platform/otto-staging (idp) runs `python -m otto.boot` with this
-# same venv, but nothing ever installed otto's declared dependencies -- otto/requirements.txt was
-# COPY'd with the estate below and never pip-installed, so main-58 shipped an otto that dies on
-# `import jsonschema` (otto/gateway/core.py:21, pod otto-staging-7db5dfc98b 2026-09-02) while the
-# boot contract graded only the hermes modules. The runtime section installs into the one
-# contracted interpreter; the test-only tail (pytest and friends) never ships. Guard:
-# deploy/k8s/boot-contract.txt names otto.boot.pipeline, so an image whose interpreter cannot
-# import the otto chain never reaches the registry again.
-COPY otto/requirements.txt /tmp/otto-requirements.txt
-RUN sed '/^# test-only$/,$d' /tmp/otto-requirements.txt > /tmp/otto-runtime.txt \
-    && uv pip install --python /app/hermes-agent/.venv/bin/python --no-cache -r /tmp/otto-runtime.txt \
-    && rm -f /tmp/otto-requirements.txt /tmp/otto-runtime.txt
+# This block runs LAST on purpose. Run 40088411090 (job 120855935789) proved the first
+# placement wrong: with the patch above the otto install, the build went 11 CRITICAL -> 1, and
+# the survivor was `certifi 2026.6.17` -- the otto runtime install resolved certifi again under
+# the fork's cooldown (2026.10.19 is newer than the cutoff, so the cooldown picked 2026.6.17) and
+# quietly reverted the pin one layer above it. A security patch placed before the last install in
+# the image is decoration; it has to be the last word on the interpreter's site-packages.
 
 ENV PATH="/app/hermes-agent/.venv/bin:$PATH"
 ENV HERMES_HOME=/app
