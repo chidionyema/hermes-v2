@@ -117,8 +117,8 @@ RUN UV_EXCLUDE_NEWER=2026-10-23 uv pip install --python /app/hermes-agent/.venv/
       'brotlicffi==1.2.1.0' \
       'certifi==2026.10.19' \
       'pillow==13.0.0' \
-   && /app/hermes-agent/.venv/bin/python -c 'import certifi, anyio, jwt, PIL; print("security-patch", certifi.__version__, anyio.__version__, jwt.__version__, PIL.__version__)' \
-   && find / -xdev -name 'certifi-*.dist-info' | sort
+   && /app/hermes-agent/.venv/bin/python -c 'import importlib.metadata as m; print("security-patch", " ".join("%s==%s" % (n, m.version(n)) for n in ("certifi", "anyio", "PyJWT", "pillow", "brotlicffi")))' \
+   && find / /opt /usr/local -name 'certifi-*.dist-info' -o -name 'certifi-*.egg-info' 2>/dev/null | sort -u
 
 # This block runs LAST on purpose. Run 40088411090 (job 120855935789) proved the first
 # placement wrong: with the patch above the otto install, the build went 11 CRITICAL -> 1, and
