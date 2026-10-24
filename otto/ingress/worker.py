@@ -54,7 +54,7 @@ from otto.obs.core import ObsHandle, TaskContext
 from otto.router.providers import ProviderClient
 from otto.spine import subjects
 from otto.spine.bus import Bus
-from otto.spine.envelope import TaskEnvelope
+from otto.spine.envelope import TaskEnvelope, TaskSource
 
 #: One durable name for the whole answering lane. Every replica pulls
 #: from it, so a task goes to exactly one of them and a replica that dies
@@ -204,6 +204,20 @@ class Worker:
                 self._obs.info("worker.loop_error", TaskContext.new(), error=str(exc))
                 await asyncio.sleep(1)
 
+    def _plugin_for(self, source: TaskSource) -> Any | None:
+        """The plugin that serves ``source``, by its own declaration.
+
+        ``ChannelPlugin.task_source`` is what a plugin says it serves; the
+        registry is keyed by the channel it speaks. Neither is derived from
+        the other here, so a channel added tomorrow is answerable as soon as
+        it declares its source -- and a source no plugin serves is still a
+        logged termination rather than a task answered by the wrong surface.
+        """
+        for plugin in self._plugins.values():
+            if getattr(plugin, "task_source", None) == source:
+                return plugin
+        return None
+
     async def _handle(self, msg) -> None:
         try:
             envelope = TaskEnvelope.model_validate_json(msg.data)
@@ -216,13 +230,34 @@ class Worker:
             return
 
         ctx = TaskContext(task_ulid=envelope.task_id, tenant_id=envelope.tenant_id)
-        channel = envelope.source.value
 
-        plugin = self._plugins.get(channel)
+        # An envelope says where a task came *from* (``TaskSource``: telegram,
+        # cron, api, subtask); a plugin is registered under the *channel* it
+        # speaks (``plugins.HTTP == "http"``, ``plugins.TELEGRAM``). Those are
+        # two vocabularies, and looking a plugin up by the source's own value
+        # found none for the ``api`` door -- whose plugin is called ``http``.
+        # Measured 2026-10-24 on a real public turn, accepted with a 202 and
+        # terminated one line later:
+        #
+        #   {"component": "otto-ingress", "event": "worker.unknown_channel",
+        #    "otto.task_ulid": "01M5PY5XGE8W6ZVQ7Z9HNW97SV", "channel": "api"}
+        #
+        # So the join is the one every plugin already declares: ``task_source``.
+        # A plugin names the source it serves; nothing here keeps a second copy
+        # of that mapping to drift away from it.
+        plugin = self._plugin_for(envelope.source)
         if plugin is None:
-            self._obs.info("worker.unknown_channel", ctx, channel=channel)
+            self._obs.info(
+                "worker.unknown_channel", ctx, channel=envelope.source.value
+            )
             await msg.term()
             return
+
+        # The credential row is keyed by the plugin's own channel name, which
+        # is not the task source's: the door authenticated this request against
+        # a ``channel_binding`` row under ``plugin.channel``, and every binding
+        # lookup below has to ask for that row the same way.
+        channel = getattr(plugin, "channel", envelope.source.value)
 
         # A pullable surface (``ChannelPlugin.PULLABLE``) does not need an
         # address an answer is *pushed* to: the task id is the address, and
