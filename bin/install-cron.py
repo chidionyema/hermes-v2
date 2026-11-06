@@ -6,7 +6,7 @@ ignored. Fields:
 
   name      required, and the identity: a job whose name already exists is
             left exactly as it is, so running this twice changes nothing
-  schedule  required, a cron expression
+  schedule  required, a cron expression (5 fields, or an @daily-style form)
   prompt    what the agent is told to do. Empty for a script job.
   skills    list of skill names to attach
   script    a file under scripts/, run instead of a prompt
@@ -17,15 +17,33 @@ Usage: bin/install-cron.py cron/watch.jobs [--dry-run] [--feature NAME]
 --feature is the on/off switch. With it, this script creates nothing at all
 unless that lane is on in estate.yaml. That is what makes a switched-off lane
 genuinely inert rather than merely discouraged: no job exists, so nothing fires.
+
+Legion 5 hardening (2026-11-06): the file is validated BEFORE anything is
+created - schedule shape, duplicate names, and prompt/script coherence all fail
+loudly here rather than halfway through a lane install. `--feature` without a
+name is a clean error, not an IndexError.
 """
 import json
 import os
+import re
 import subprocess
 import sys
 
 HOME = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 HERMES = os.path.join(HOME, "bin", "hermes")
 FEATURES = os.path.join(HOME, "bin", "features")
+
+# 5 cron fields of [0-9*,/-] plus month/day names, or an @daily-style shorthand.
+_SCHEDULE_RE = re.compile(
+    r"^(@(hourly|daily|weekly|monthly|yearly|reboot))"
+    r"|([0-9A-Za-z*,/\-]+ [0-9A-Za-z*,/\-]+ [0-9A-Za-z*,/\-]+ "
+    r"[0-9A-Za-z*,/\-]+ [0-9A-Za-z*,/\-]+)$"
+)
+
+
+def valid_schedule(expr):
+    """True for a 5-field cron expression or an @daily-style shorthand."""
+    return bool(_SCHEDULE_RE.match(expr.strip()))
 
 
 def feature_is_on(name):
@@ -50,6 +68,7 @@ def existing_names():
 
 def load(path):
     jobs = []
+    seen = set()
     with open(path) as f:
         for n, line in enumerate(f, 1):
             line = line.strip()
@@ -62,6 +81,25 @@ def load(path):
             for required in ("name", "schedule"):
                 if not job.get(required):
                     sys.exit(f"install-cron: {path}:{n} has no '{required}'")
+            if job["name"] in seen:
+                sys.exit(f"install-cron: {path}:{n} duplicates job name "
+                         f"'{job['name']}' earlier in the file")
+            seen.add(job["name"])
+            if not valid_schedule(job["schedule"]):
+                sys.exit(f"install-cron: {path}:{n} schedule "
+                         f"{job['schedule']!r} is not a 5-field cron expression "
+                         f"or an @daily-style shorthand")
+            has_prompt = bool(job.get("prompt"))
+            has_script = bool(job.get("script"))
+            if has_prompt and has_script:
+                sys.exit(f"install-cron: {path}:{n} '{job['name']}' has both "
+                         f"prompt and script - pick one")
+            if not has_prompt and not has_script:
+                sys.exit(f"install-cron: {path}:{n} '{job['name']}' has neither "
+                         f"prompt nor script - the job would do nothing")
+            if job.get("no_agent") and not has_script:
+                sys.exit(f"install-cron: {path}:{n} '{job['name']}' is no_agent "
+                         f"but has no script - nothing to run")
             jobs.append(job)
     return jobs
 
@@ -86,7 +124,10 @@ def main():
     path = sys.argv[1]
     dry = "--dry-run" in sys.argv
     if "--feature" in sys.argv:
-        name = sys.argv[sys.argv.index("--feature") + 1]
+        i = sys.argv.index("--feature")
+        if i + 1 >= len(sys.argv):
+            sys.exit("install-cron: --feature needs a lane name")
+        name = sys.argv[i + 1]
         if not feature_is_on(name):
             print(f"  {name} is off in estate.yaml, so no jobs were created")
             print(f"  switch it on with: bin/features {name} on")

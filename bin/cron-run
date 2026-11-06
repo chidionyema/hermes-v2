@@ -1,0 +1,144 @@
+#!/usr/bin/env python3
+"""bin/cron-run — supervised execution wrapper for hermes cron jobs (Legion 5).
+
+    bin/cron-run <job-name> [--timeout S] -- <cmd...>
+
+What it guarantees, per the Legion production gates:
+
+  supervision (G1)   an flock per job name — a second invocation while one is
+                     running is REFUSED (exit 75) and metered as
+                     "overlap-refused". A job that overruns its interval can
+                     never stack with itself.
+  hard budget (G2)   wall-clock timeout, default 1800s, hard-clamped to 3600s
+                     (the estate-wide ceiling, matching pi_bridge and the army
+                     node ceiling). On timeout the whole process GROUP is
+                     killed — no orphaned children burning tokens.
+  health (G4)        every invocation writes state/cron-health/<name>.json
+                     atomically: {job, status, exit, duration_ms, timeout_s,
+                     last_start, last_end}. A dead-man's switch reads these:
+                     a job whose last_start is older than its schedule
+                     interval is UNHEALTHY by construction.
+
+Exit code: the wrapped command's code (124 on timeout, 75 on overlap refusal).
+"""
+from __future__ import annotations
+
+import fcntl
+import json
+import os
+import signal
+import subprocess
+import sys
+import time
+from datetime import datetime, timezone
+from pathlib import Path
+
+DEFAULT_TIMEOUT_S = 1800
+MAX_TIMEOUT_S = 3600
+EXIT_OVERLAP = 75  # EX_TEMPFAIL
+EXIT_TIMEOUT = 124
+
+
+def _home() -> Path:
+    return Path(os.environ.get("HERMES_HOME") or Path(__file__).resolve().parent.parent)
+
+
+def _clamp_timeout(value: float) -> float:
+    if value <= 0:
+        raise ValueError(f"--timeout must be positive, got {value!r}")
+    return min(value, float(MAX_TIMEOUT_S))
+
+
+def _write_health(state_dir: Path, name: str, record: dict) -> None:
+    """Atomic write: tmp file + rename, so a reader never sees a torn record."""
+    health_dir = state_dir / "cron-health"
+    health_dir.mkdir(parents=True, exist_ok=True)
+    target = health_dir / f"{name}.json"
+    tmp = target.with_suffix(".json.tmp")
+    tmp.write_text(json.dumps(record, sort_keys=True) + "\n", encoding="utf-8")
+    os.replace(tmp, target)
+
+
+def _usage() -> None:
+    sys.exit(__doc__)
+
+
+def main(argv: list[str]) -> int:
+    if not argv or argv[0] in ("-h", "--help"):
+        _usage()
+    name = argv[0]
+    if not name or any(c in name for c in "/\\ "):
+        sys.exit(f"cron-run: bad job name {name!r}")
+
+    timeout_s = DEFAULT_TIMEOUT_S
+    rest = argv[1:]
+    if "--timeout" in rest:
+        i = rest.index("--timeout")
+        if i + 1 >= len(rest):
+            sys.exit("cron-run: --timeout needs a value")
+        try:
+            timeout_s = _clamp_timeout(float(rest[i + 1]))
+        except ValueError as exc:
+            sys.exit(f"cron-run: {exc}")
+        del rest[i : i + 2]
+    if not rest or rest[0] != "--" or len(rest) < 2:
+        _usage()
+    cmd = rest[1:]
+
+    state_dir = _home() / "state"
+    lock_dir = state_dir / "locks"
+    lock_dir.mkdir(parents=True, exist_ok=True)
+    started = time.time()
+    started_iso = datetime.now(tz=timezone.utc).isoformat()
+
+    with (lock_dir / f"{name}.lock").open("w") as lock_fh:
+        try:
+            fcntl.flock(lock_fh, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            _write_health(
+                state_dir,
+                name,
+                {
+                    "job": name,
+                    "status": "overlap-refused",
+                    "exit": EXIT_OVERLAP,
+                    "duration_ms": 0,
+                    "timeout_s": timeout_s,
+                    "last_start": started_iso,
+                    "last_end": datetime.now(tz=timezone.utc).isoformat(),
+                },
+            )
+            print(f"cron-run: {name} is already running; refusing overlap", file=sys.stderr)
+            return EXIT_OVERLAP
+
+        # New session => own process group, so a timeout kills children too.
+        proc = subprocess.Popen(cmd, start_new_session=True)
+        status, code = "ok", 0
+        try:
+            code = proc.wait(timeout=timeout_s)
+            if code != 0:
+                status = "failed"
+        except subprocess.TimeoutExpired:
+            os.killpg(proc.pid, signal.SIGKILL)
+            proc.wait()
+            status, code = "timeout", EXIT_TIMEOUT
+
+    finished = time.time()
+    _write_health(
+        state_dir,
+        name,
+        {
+            "job": name,
+            "status": status,
+            "exit": code,
+            "duration_ms": round((finished - started) * 1000, 1),
+            "timeout_s": timeout_s,
+            "last_start": started_iso,
+            "last_end": datetime.now(tz=timezone.utc).isoformat(),
+        },
+    )
+    return code
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))
