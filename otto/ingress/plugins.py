@@ -119,6 +119,29 @@ class ChannelPlugin(Protocol):
         """
         ...
 
+    def answer_widget_query(self, secret: str, query_id: str, chat_data: dict) -> None:
+        """Answer a native-widget tap (Bot API 10.4 ``answerWidgetQuery``).
+
+        ``secret`` is the customer's *outbound* bot token; ``query_id`` is
+        the Telegram-issued id echoed back within the 15-second window the
+        platform allows. Raises ``OutboundNotSupported`` on a channel that
+        has no widget path (HTTP).
+        """
+        ...
+
+    def send_widget(
+        self,
+        secret: str,
+        reply_to: str,
+        chat_data: dict,
+        widget_id: str,
+        url: str | None = None,
+    ) -> None:
+        """Push a native message widget (Bot API 10.4 ``sendWidget``) to a
+        chat. Raises ``OutboundNotSupported`` on a channel without widgets.
+        """
+        ...
+
 
 def _header(headers: Mapping[str, str], name: str) -> str | None:
     """Case-insensitive header read. HTTP header names are
@@ -210,6 +233,23 @@ class TelegramPlugin:
         it after about five); a channel without the method shows nothing."""
         TelegramHTTPTransport(token=secret).send_chat_action(int(reply_to), "typing")
 
+    def answer_widget_query(self, secret: str, query_id: str, chat_data: dict) -> None:
+        """Answer a founder widget tap within Telegram's 15s window."""
+        TelegramHTTPTransport(token=secret).answer_widget_query(query_id, chat_data)
+
+    def send_widget(
+        self,
+        secret: str,
+        reply_to: str,
+        chat_data: dict,
+        widget_id: str,
+        url: str | None = None,
+    ) -> None:
+        """Push the founder's compass widget into a chat."""
+        TelegramHTTPTransport(token=secret).send_widget(
+            int(reply_to), widget_id, chat_data, url=url
+        )
+
 
 @dataclass(frozen=True)
 class HttpPlugin:
@@ -258,6 +298,23 @@ class HttpPlugin:
         raise OutboundNotSupported(
             "a plain HTTP caller has no address to push an answer to; it "
             "reads the answer back by task id"
+        )
+
+    def answer_widget_query(self, secret: str, query_id: str, chat_data: dict) -> None:
+        raise OutboundNotSupported(
+            "a plain HTTP caller has no widget path"
+        )
+
+    def send_widget(
+        self,
+        secret: str,
+        reply_to: str,
+        chat_data: dict,
+        widget_id: str,
+        url: str | None = None,
+    ) -> None:
+        raise OutboundNotSupported(
+            "a plain HTTP caller has no widget path"
         )
 
 

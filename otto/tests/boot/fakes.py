@@ -14,12 +14,28 @@ from dataclasses import dataclass, field
 class FakeTransport:
     sent: list[tuple[int, str]] = field(default_factory=list)
     webhooks_set: list[str] = field(default_factory=list)
+    widgets_sent: list[tuple[int, str, dict]] = field(default_factory=list)
+    widget_queries_answered: list[tuple[str, dict]] = field(default_factory=list)
 
     def send_message(self, chat_id: int, text: str) -> None:
         self.sent.append((chat_id, text))
 
     def set_webhook(self, url: str) -> None:
         self.webhooks_set.append(url)
+
+    def send_widget(
+        self,
+        chat_id: int,
+        widget_id: str,
+        chat_data: dict,
+        url: str | None = None,
+    ) -> None:
+        self.widgets_sent.append((chat_id, widget_id, chat_data))
+
+    def answer_widget_query(
+        self, widget_query_id: str, chat_data: dict
+    ) -> None:
+        self.widget_queries_answered.append((widget_query_id, chat_data))
 
 
 @dataclass

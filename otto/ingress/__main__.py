@@ -37,13 +37,18 @@ import os
 import sys
 from typing import Mapping
 
+from otto.ingress.evidence import (
+    CatalogNotConfigured,
+    FounderEvidenceStore,
+    catalog_dsn_from_env,
+)
 from otto.ingress.gateway import EventGateway
 from otto.ingress.pg_store import PostgresChannelBindingStore, dsn_from_env
 from otto.ingress.publisher import JetStreamPublisher
 from otto.ingress.secrets import EnvSecretResolver
 from otto.ingress.server import ServerDeps, build_server
 from otto.ingress.worker import start_worker_thread
-from otto.obs.core import instrument
+from otto.obs.core import TaskContext, instrument
 from otto.spine.bus import Bus
 
 COMPONENT = "otto-ingress"
@@ -96,12 +101,29 @@ def build_deps(
     if start_answering:
         start_worker_thread(store=store, secrets=secrets, obs=obs)
 
+    # The founder widget's evidence is a *soft* dependency, deliberately
+    # the opposite of the binding database above. A missing or unreachable
+    # catalogue means the widget renders a stale "no verified evidence"
+    # packet — never invented numbers, never a refused boot. The binding
+    # database being down is a door that cannot work at all; the catalogue
+    # being down is a door whose widget refresh is briefly stale.
+    widgets = None
+    try:
+        widgets = FounderEvidenceStore(catalog_dsn_from_env())
+    except CatalogNotConfigured as exc:
+        obs.info(
+            "ingress.widget_evidence_unconfigured",
+            TaskContext.new(),
+            error=str(exc),
+        )
+
     return ServerDeps(
         gateway=EventGateway(
             store=store,
             secrets=secrets,
             publisher=JetStreamPublisher(bus, loop),
             obs=obs,
+            widgets=widgets,
         ),
         # The socket's own handle, for the one failure the gateway cannot
         # turn into a status line: an exception that escaped it.
