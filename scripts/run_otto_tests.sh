@@ -19,11 +19,24 @@
 # else the default python3. Deps are pinned in otto/requirements.txt (the
 # guard otto/tests/integration/test_requirements_pinned.py fails on any unpinned
 # line or any third-party import not declared there).
-set -uo pipefail
+# The strict-mode contract bin/shell-strict enforces: set -euo pipefail at the
+# top, and a trap. `-e` is then switched off explicitly below, because every
+# check in this runner must run and print its own named refusal instead of
+# aborting silently at the first non-zero — which is the whole reason the runner
+# exists. Making that an explicit, documented `set +e` keeps the rule honest
+# rather than working around it.
+set -euo pipefail
 
 cd "$(dirname "$0")/.." || exit 1
 
 fail_loud() { printf '\n\033[31m%s\033[0m\n' "$1" >&2; exit 1; }
+
+# From here on each check owns its verdict: a failing check calls fail_loud with
+# the reason, so -e would only ever cut the message short.
+set +e
+
+# An interrupted run says so, instead of dying mid-report with no verdict.
+trap 'printf "\n\033[31motto test run interrupted\033[0m\n" >&2' INT TERM
 
 # 1. The dependency manifest exists — without it there is no contract to consume.
 [ -f otto/requirements.txt ] || fail_loud "otto/requirements.txt is missing; the otto dependency contract does not exist"
