@@ -37,11 +37,22 @@ import json
 from dataclasses import dataclass
 from typing import Any, Mapping
 
-from otto.ingress.plugins import ChannelPlugin, default_plugins
+from otto.ingress.plugins import (
+    ChannelPlugin,
+    OutboundNotSupported,
+    default_plugins,
+)
 from otto.ingress.media import MediaEnrichment, detect_media
 from otto.ingress.publisher import EventPublisher
 from otto.ingress.secrets import SecretNotFound, SecretResolver
-from otto.ingress.store import ChannelBindingStore
+from otto.ingress.store import ChannelBinding, ChannelBindingStore
+from otto.ingress.widgets import (
+    FounderEvidence,
+    WidgetQuery,
+    detect_widget_query,
+    founder_authorized,
+    is_brief_query,
+)
 from otto.memory import conversation
 from otto.memory.conversation import StoreUnavailable
 from otto.obs.core import ObsHandle, TaskContext
@@ -102,6 +113,7 @@ class EventGateway:
         obs: ObsHandle,
         plugins: Mapping[str, ChannelPlugin] | None = None,
         media: "MediaEnrichment | None" = None,
+        widgets: "FounderEvidence | None" = None,
     ) -> None:
         self._store = store
         self._secrets = secrets
@@ -113,6 +125,11 @@ class EventGateway:
         #: reachable content is audio/pixels is gated as nothing-to-do,
         #: exactly as before this capability existed.
         self._media = media
+        #: The evidence seam that populates the founder widget's brief. A
+        #: door with no seam (the default in a bare checkout) answers a
+        #: widget tap with a fail-closed "no evidence" packet — never
+        #: invented numbers.
+        self._widgets = widgets
 
     @property
     def channels(self) -> tuple[str, ...]:
@@ -187,6 +204,15 @@ class EventGateway:
             return IngressResult(
                 BAD_REQUEST, "body is not a JSON object", tenant_id=binding.tenant_id
             )
+
+        # A native message widget tap is its own update kind and its own
+        # deadline: Telegram drops the tap if ``answerWidgetQuery`` is not
+        # sent within 15 seconds, so it is handled here, synchronously, on
+        # the authenticated credential's own connection — never pushed to
+        # the async answering lane, which would be tens of seconds late.
+        widget_query = detect_widget_query(native_event)
+        if widget_query is not None:
+            return self._handle_widget_query(widget_query, plugin, binding)
 
         # The allow-list travels with the customer's row, so who counts as
         # a named principal on this channel is a database fact rather than
@@ -322,6 +348,122 @@ class EventGateway:
             task_id=turn.task_ulid,
             payload=turn.to_payload(),
         )
+
+    def _handle_widget_query(
+        self,
+        query: WidgetQuery,
+        plugin: ChannelPlugin,
+        binding: ChannelBinding,
+    ) -> IngressResult:
+        """The founder tapped the private-office widget: answer it now.
+
+        Fail-closed in three layers, in order of cheapness: a non-``brief``
+        tap is ignored (the widget only ever sends ``brief``); a tap whose
+        sender and view chat are not both the founder is refused with no
+        answer; and a tap whose outbound credential is missing resolves to
+        a 503 rather than a silent drop. Auth decisions name the tenant so
+        the log line is attributable.
+        """
+        if not is_brief_query(query):
+            return IngressResult(
+                NOTHING_TO_DO, "widget query not brief", tenant_id=binding.tenant_id
+            )
+        if not founder_authorized(query, binding.principal_allowlist):
+            self._obs.info(
+                "ingress.widget_refused",
+                TaskContext.new(tenant_id=binding.tenant_id),
+                reason="not founder on this channel",
+            )
+            return IngressResult(
+                FORBIDDEN, "widget query not authorized", tenant_id=binding.tenant_id
+            )
+
+        if not binding.outbound_secret_ref:
+            return IngressResult(
+                UNAVAILABLE, "no outbound widget credential", tenant_id=binding.tenant_id
+            )
+        try:
+            outbound_secret = self._secrets.resolve(binding.outbound_secret_ref)
+        except SecretNotFound:
+            return IngressResult(
+                UNAVAILABLE,
+                "widget credential unavailable",
+                tenant_id=binding.tenant_id,
+            )
+
+        answer = getattr(plugin, "answer_widget_query", None)
+        if not callable(answer):
+            return IngressResult(
+                UNAVAILABLE,
+                "widget not supported on this channel",
+                tenant_id=binding.tenant_id,
+            )
+
+        brief = self._safe_brief()
+        try:
+            answer(outbound_secret, query.id, brief)
+        except OutboundNotSupported:
+            return IngressResult(
+                UNAVAILABLE,
+                "widget not supported on this channel",
+                tenant_id=binding.tenant_id,
+            )
+        except Exception as exc:  # noqa: BLE001 - the channel API refused
+            self._obs.info(
+                "ingress.widget_answer_failed",
+                TaskContext.new(tenant_id=binding.tenant_id),
+                error=str(exc),
+            )
+            return IngressResult(
+                UNAVAILABLE,
+                "widget answer failed",
+                tenant_id=binding.tenant_id,
+            )
+
+        self._obs.info(
+            "ingress.widget_answered",
+            TaskContext.new(tenant_id=binding.tenant_id),
+        )
+        return IngressResult(
+            NOTHING_TO_DO, "widget query answered", tenant_id=binding.tenant_id
+        )
+
+    def _safe_brief(self) -> dict[str, Any]:
+        """The ``chat_data`` object the widget renders. A down or absent
+        evidence source yields a fail-closed "no verified evidence" packet
+        in the same shape, never invented numbers and never an exception
+        that would lose the 15-second window."""
+        if self._widgets is None:
+            return {
+                "r": 0,
+                "at": 0,
+                "headline": "No verified estate briefing is available.",
+                "delivered": 0,
+                "active": 0,
+                "issues": 0,
+                "priority": "—",
+                "id": "—",
+                "proof": "—",
+            }
+        try:
+            return self._widgets.brief()
+        except Exception as exc:  # noqa: BLE001 - a down source is a stale brief
+            self._obs.info(
+                "ingress.widget_evidence_down",
+                TaskContext.new(),
+                error=str(exc),
+            )
+            return {
+                "r": 0,
+                "at": 0,
+                "headline": "Verified evidence source is unavailable right now.",
+                "delivered": 0,
+                "active": 0,
+                "issues": 0,
+                "priority": "—",
+                "id": "—",
+                "proof": "—",
+            }
 
     def _mint(
         self,

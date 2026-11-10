@@ -394,6 +394,7 @@ are tracked, so what you see below is the source they come from.
 | `scripts/estate-urls.py` | Every UI's URL from the platform catalogue, rendered as one card and pinned in the founder's Telegram chat; the card edits itself when a host appears or disappears (crew#282). |
 | `scripts/dispatch-agent-go.py` | The WORK dispatcher (crew#182 CP7). Reads the board through `gh`, claims one `agent-go` issue into a worktree and branch, starts the configured runtime, and only then labels the issue. `--drill` runs the same logic against a fixture with no GitHub, which `bin/verify` and the incident test use. |
 | `scripts/run_tests.sh` | The verify command for this repo, resolved by hermes-agent's `detect_project_facts` as its first-priority marker, so the verification ledger and the claim gate can back a `DONE:` with a green run here. Runs `tests/` only; the vendored hermes-agent suite is not this repo's gate. |
+| `scripts/run_otto_tests.sh` | The canonical runner for the `otto/` suite, because the test command is a contract and not folklore: it consumes `otto/requirements.txt` and the pin guard's own import→dist map (one copy of the truth), refuses a dangling venv or python<3.10, names every missing dependency with its remediation, and scopes to the targets given. Green means a printed `N passed`, never a bare exit 0. |
 | `skills/` | What the agent knows how to do. Every `SKILL.md` in here is generated; only the vetting list is tracked. |
 | `skills/VETTED.md` | Which third-party skills have been read line by line and may be installed. A skill is someone else's shell commands running with your credentials. |
 | `templates/` | The source of every generated file. Editing a generated file loses the edit the next time anyone runs `bin/render`; edit the template instead. |
@@ -500,6 +501,7 @@ are tracked, so what you see below is the source they come from.
 | `otto/ingress/` | The Universal Event Gateway: one door for every channel and every customer; the founder's 2026-09-03 directive that onboarding a channel is a database write, never a deployment. |
 | `otto/ingress/__init__.py` | Package docstring: what the gateway is, the multi-tenant directive it implements, and its boundaries. |
 | `otto/ingress/__main__.py` | `python -m otto.ingress`: the process the deployment runs, booting the collector, the binding database and the bus before the socket opens. |
+| `otto/ingress/evidence.py` | The founder widget's verified evidence: one bounded aggregate read of the catalogue instruction ledger, mapped to the widget's `chat_data` contract. Fail-closed — any read failure renders a "no verified evidence" packet, never an invented number. |
 | `otto/ingress/gateway.py` | The request pipeline every channel and every customer shares: nine steps, none of which names a channel. |
 | `otto/ingress/media.py` | Hands & senses 3+4 core: pure, channel-neutral media models and detectors; a voice note or photo becomes prefixed words, the Telegram-coupled bolts live in `plugins.py`. |
 | `otto/ingress/pg_store.py` | The binding table on PostgreSQL, the store the running gateway holds; the connection details come from the deployment and the password from a mounted file. |
@@ -507,6 +509,7 @@ are tracked, so what you see below is the source they come from.
 | `otto/ingress/publisher.py` | Hands the normalised task envelope to the spine; the gateway's job ends when the envelope is on the bus. |
 | `otto/ingress/secrets.py` | Resolves a secret reference to a secret value at request time; the binding table stores references, never material. |
 | `otto/ingress/server.py` | The socket: `GET /healthz` and `POST /webhook/{channel}`, for every channel and every customer. |
+| `otto/ingress/widgets.py` | The founder's private-office widget, inbound half: a `widget_query` carries no message, so it is detected before normalisation and answered synchronously inside Telegram's 15s window. Detection is pure and fail-closed, and a tap is answered only when the sender AND the view chat both resolve to the same founder in the binding's `principal_allowlist`. |
 | `otto/ingress/store.py` | The `channel_binding` table: which customer owns which channel — the whole of channel onboarding. |
 | `otto/ingress/thread.py` | Hands & senses 8: the door's conversation thread — one per principal, short-term, carrying across surfaces; `thread_messages` projects recent turns plus memory plus the current question. |
 | `otto/ingress/worker.py` | The answering half of the one door: a durable pull consumer on `OTTO_TASKS` that runs the shared answering path and replies on the customer's own channel, with its own token. |
@@ -713,8 +716,10 @@ are tracked, so what you see below is the source they come from.
 | `otto/tests/ingress/test_entrypoint.py` | The boot contract the deployment depends on: the port, the database, and the refusal to listen before the collector and the table are proved. |
 | `otto/tests/ingress/test_gateway.py` | The one door: routing, refusals, and channel independence. |
 | `otto/tests/ingress/test_api_surface.py` | The door's second route: a surface that cannot be pushed to is answered and read back by task id (`GET /turns/{task_id}`), the tenant comes off the credential and never off the path, a failed publish is a 503 rather than an accepted 202, and an escaped exception is a named 500 instead of a closed socket. |
+| `otto/tests/ingress/test_evidence.py` | Offline proof that the widget's evidence is fail-closed: missing catalogue config, an unreachable database, and a read that raises all produce the no-evidence packet, and a good read maps the ledger's statuses to the widget's three counts. |
 | `otto/tests/ingress/test_photo.py` | Hands & senses 4: a photo update, sensed through the seam to `[image] <caption>\n<description>` content, offline with a stub describer. |
 | `otto/tests/ingress/test_voice.py` | Hands & senses 3: a voice note, transcribed to `[voice] ...` content with `VOICE_IN`, and the worker answering with both text and voice. |
+| `otto/tests/ingress/test_widgets.py` | The widget's three lines of defence, offline and without a network: a malformed update is ignored rather than raised, a tap is answered only when both ids resolve to the founder, only the exact literal `brief` is served, and a missing outbound credential is a 503 rather than a silent drop. |
 | `otto/tests/ingress/test_registry_as_data.py` | Onboarding a customer is a database write, not a deployment — the point of the gateway, proved. |
 | `otto/tests/ingress/test_routes.py` | Path routing: `channel_from_path` is the whole of the routing surface, and no route names a channel. |
 | `otto/tests/ingress/test_store_and_secrets.py` | The binding table and the secret resolver alone: the table holds no secret material, and resolution happens at request time. |
