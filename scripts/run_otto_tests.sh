@@ -29,7 +29,10 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.." || exit 1
 
-fail_loud() { printf '\n\033[31m%s\033[0m\n' "$1" >&2; exit 1; }
+fail_loud() {
+	printf '\n\033[31m%s\033[0m\n' "$1" >&2
+	exit 1
+}
 
 # From here on each check owns its verdict: a failing check calls fail_loud with
 # the reason, so -e would only ever cut the message short.
@@ -58,7 +61,7 @@ elif command -v python3.12 >/dev/null 2>&1 && py_runs python3.12; then
 elif command -v python3 >/dev/null 2>&1 && py_runs python3; then
 	PY=python3
 else
-	fail_loud "no *working* Python interpreter found; a stale .venv points at a deleted base Python, and python3.12 is absent or broken. Install python3.12 (or recreate .venv with `uv venv`) and re-run."
+	fail_loud "no *working* Python interpreter found; a stale .venv points at a deleted base Python, and python3.12 is absent or broken. Install python3.12 (or recreate .venv with $(uv venv)) and re-run."
 fi
 if ! "$PY" -c 'import sys; sys.exit(0 if sys.version_info >= (3, 10) else 1)' 2>/dev/null; then
 	fail_loud "'$PY' is $("$PY" --version 2>&1) — too old. This suite needs Python >= 3.10 (the pin guard uses sys.stdlib_module_names); set up .venv or a python3.12+ and re-run."
@@ -77,7 +80,8 @@ fi
 #    for a suite that never imports them.
 deptargets=()
 if [ "$#" -gt 0 ]; then deptargets=("$@"); else deptargets=(otto/tests/); fi
-import_check="$("$PY" - "${deptargets[@]}" <<'PY'
+import_check="$(
+	"$PY" - "${deptargets[@]}" <<'PY'
 import ast, importlib, pathlib, sys
 sys.path.insert(0, "otto/tests/integration")
 from test_requirements_pinned import _DIST_FOR_IMPORT, _FORK_OWNED_MODULES
