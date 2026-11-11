@@ -136,9 +136,9 @@ class ChannelPlugin(Protocol):
         chat_data: dict,
         widget_id: str,
         url: str | None = None,
-    ) -> None:
+    ) -> int:
         """Push a native message widget (Bot API 10.4 ``sendWidget``) to a
-        chat. Raises ``OutboundNotSupported`` on a channel without widgets.
+        chat. Returns the delivered message_id; refuses missing evidence.
         """
         ...
 
@@ -244,9 +244,9 @@ class TelegramPlugin:
         chat_data: dict,
         widget_id: str,
         url: str | None = None,
-    ) -> None:
-        """Push the founder's compass widget into a chat."""
-        TelegramHTTPTransport(token=secret).send_widget(
+    ) -> int:
+        """Push the founder's compass widget; return real Telegram message_id."""
+        return TelegramHTTPTransport(token=secret).send_widget(
             int(reply_to), widget_id, chat_data, url=url
         )
 
