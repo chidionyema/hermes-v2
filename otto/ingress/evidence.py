@@ -170,7 +170,7 @@ class FounderEvidenceStore:
             self._dsn, connect_timeout=self._connect_timeout, autocommit=True
         ) as conn:
             row = conn.execute(_BRIEF_SQL).fetchone()
-        return int(row.delivered or 0), int(row.active or 0), int(row.issues or 0)
+        return int(row[0] or 0), int(row[1] or 0), int(row[2] or 0)
 
     def _latest(self) -> tuple[str | None, str | None]:
         try:
@@ -178,7 +178,7 @@ class FounderEvidenceStore:
                 self._dsn, connect_timeout=self._connect_timeout, autocommit=True
             ) as conn:
                 row = conn.execute(_BRIEF_SQL).fetchone()
-            return row.latest_id, row.latest_prompt
+            return row[4], row[5]
         except Exception:  # noqa: BLE001 - proof/id are a nicety, never a must
             return None, None
 
@@ -265,9 +265,9 @@ DEFAULT_NO_EVIDENCE: Mapping[str, Any] = {
     "r": 0,
     "at": 0,
     "headline": "No verified estate briefing is available.",
-    "delivered": 0,
-    "active": 0,
-    "issues": 0,
+    "delivered": None,
+    "active": None,
+    "issues": None,
     "priority": "—",
     "id": "—",
     "proof": "—",
