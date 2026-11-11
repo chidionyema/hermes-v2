@@ -136,19 +136,11 @@ class ChannelPlugin(Protocol):
         chat_data: dict,
         widget_id: str,
         url: str | None = None,
-    ) -> int:
+    ) -> None:
         """Push a native message widget (Bot API 10.4 ``sendWidget``) to a
-        chat. Returns the delivered message_id; refuses missing evidence.
+        chat. Raises ``OutboundNotSupported`` on a channel without widgets.
         """
         ...
-
-
-    def edit_message_widget_data(
-        self, secret: str, chat_id: int, message_id: int, chat_data: dict
-    ) -> None:
-        """Persist the source-verified brief without sending another message."""
-        ...
-
 
 
 def _header(headers: Mapping[str, str], name: str) -> str | None:
@@ -252,17 +244,10 @@ class TelegramPlugin:
         chat_data: dict,
         widget_id: str,
         url: str | None = None,
-    ) -> int:
-        """Push the founder's compass widget; return real Telegram message_id."""
+    ) -> None:
+        """Push the founder's compass widget into a chat."""
         return TelegramHTTPTransport(token=secret).send_widget(
             int(reply_to), widget_id, chat_data, url=url
-        )
-
-    def edit_message_widget_data(
-        self, secret: str, chat_id: int, message_id: int, chat_data: dict
-    ) -> None:
-        TelegramHTTPTransport(token=secret).edit_message_widget_data(
-            chat_id, message_id, chat_data
         )
 
 
@@ -331,11 +316,6 @@ class HttpPlugin:
         raise OutboundNotSupported(
             "a plain HTTP caller has no widget path"
         )
-
-    def edit_message_widget_data(
-        self, secret: str, chat_id: int, message_id: int, chat_data: dict
-    ) -> None:
-        raise OutboundNotSupported("a plain HTTP caller has no widget path")
 
 
 def default_plugins() -> dict[str, Any]:

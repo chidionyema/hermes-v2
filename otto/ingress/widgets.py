@@ -52,8 +52,6 @@ class WidgetQuery:
     from_id: int
     chat_id: int
     data: str
-    message_id: int | None = None
-    chat_type: str = "private"
 
 
 def detect_widget_query(native_event: Mapping[str, Any]) -> WidgetQuery | None:
@@ -78,23 +76,9 @@ def detect_widget_query(native_event: Mapping[str, Any]) -> WidgetQuery | None:
         return None
     from_id = sender.get("id") if isinstance(sender, dict) else None
     chat_id = chat.get("id") if isinstance(chat, dict) else None
-    if (
-        type(from_id) is not int or type(chat_id) is not int
-        or from_id <= 0 or chat_id <= 0
-    ):
+    if not isinstance(from_id, int) or not isinstance(chat_id, int):
         return None
-    # Telegram widgets may be displayed in other contexts. An original
-    # founder-private widget alone is eligible for the private ledger.
-    chat_type = chat.get("type", "") if isinstance(chat, dict) else ""
-    if chat_type != "private" or query.get("inline_message_id"):
-        return None
-    message_id = query.get("message_id")
-    if type(message_id) is not int or message_id <= 0:
-        message_id = None
-    return WidgetQuery(
-        id=qid, from_id=from_id, chat_id=chat_id, data=data,
-        message_id=message_id, chat_type=chat_type,
-    )
+    return WidgetQuery(id=qid, from_id=from_id, chat_id=chat_id, data=data)
 
 
 class FounderEvidence(Protocol):
@@ -127,10 +111,7 @@ def founder_authorized(
     """
     sender = principal_allowlist.get(str(query.from_id))
     chat = principal_allowlist.get(str(query.chat_id))
-    return (
-        query.chat_type == "private"
-        and sender is not None and chat is not None and sender == chat
-    )
+    return sender is not None and chat is not None and sender == chat
 
 
 def is_brief_query(query: WidgetQuery) -> bool:

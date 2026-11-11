@@ -471,8 +471,6 @@ are tracked, so what you see below is the source they come from.
 | `docs/onboarding/otto.md` | How a service is onboarded onto Otto and what admission refuses. |
 | `otto/` | The Otto platform: six lanes (evals, spine, gateway, verify, memory, router), the surface contract, observability, onboarding, the boot lane that runs it, and their tests. Spec: crew#768. |
 | `otto/__init__.py` | Otto Agent Platform v1.0 — new build, isolated from the running Otto. |
-| `otto/assets/` | Self-contained, reviewable HTML assets sent by the real OTTO Telegram gateway; no external widget URL or browser-side network dependency. |
-| `otto/assets/otto_founder_compass.html` | OTTO Private Office widget bundled in the actual serving repo, with 32 KiB raw/4 KiB zlib-9 size contracts and verified-data-only display. |
 | `otto/boot/` | The boot lane: a webhook server (`python -m otto.boot`) that wires the merged platform lanes to a real Telegram bot — the one running process the library lanes had none of. |
 | `otto/boot/__init__.py` | Package docstring: what the boot lane is, why it adds no new dependency, and its token-handling rules. |
 | `otto/boot/__main__.py` | `python -m otto.boot` — starts the webhook server; `--set-webhook <url>` registers the webhook with Telegram and exits. |
@@ -588,7 +586,6 @@ are tracked, so what you see below is the source they come from.
 | `otto/tests/` | The Otto conformance suite, one folder per spec section; `bin/otto-demo` runs it fresh. |
 | `otto/tests/__init__.py` | Test suites for the Otto Agent Platform v1.0 build (crew#768). |
 | `otto/tests/conftest.py` | Suite-wide test environment (W2 wiring, crew#768). |
-| `otto/tests/boot/test_telegram_widget_api_contract.py` | Real urllib Bot API request/response serialization tests for Telegram 10.4 send, answer and silent edit, malformed/oversized payload refusals, and actual message_id receipts. |
 | `otto/tests/boot/` | Boot-lane tests: mocked transport only, no network. |
 | `otto/tests/boot/__init__.py` | Package marker and scope note for `otto/tests/boot`. |
 | `otto/tests/boot/conftest.py` | `OTTO_OBS_MODE=test` and shared-store hygiene for every test in this folder. |
@@ -756,6 +753,11 @@ are tracked, so what you see below is the source they come from.
 | `otto/verify/verifier.py` | Verifier core: checks a claimed-work envelope, signs a verdict. |
 | `otto/verify/reply_judge.py` | Per-line verdict from the verify lane (a different model on a different lane, never the one that answered): conversational or supported renders clean; anything unreadable, over budget or timed out fails closed to marked. |
 | `pyproject.toml` | Python project metadata for the `otto` packages and the pytest configuration the suite runs under. |
+
+| `otto/ingress/office_delivery.py` | Sends the verified, private founder Telegram widget from the production gateway, retaining PostgreSQL delivery state to avoid replay on every restart. |
+| `otto/ingress/otto_founder_compass.html` | Self-contained Telegram 10.4 widget HTML shipped inside the runtime image and checked against Telegram byte limits. |
+| `otto/tests/cp1/test_widget_postgres_receipt.py` | Exercises real PostgreSQL idempotency and refusal state in a disposable cloud test cluster. |
+| `otto/tests/ingress/test_widget_wire_104.py` | Exercises actual Bot API JSON requests, private authorization and psycopg tuple-row evidence behavior. |
 
 <!-- /tracked -->
 

@@ -22,8 +22,6 @@ token before minting the client.
 from __future__ import annotations
 
 import json
-import zlib
-from pathlib import Path
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
@@ -51,14 +49,10 @@ class TelegramTransport(Protocol):
         widget_id: str,
         chat_data: dict,
         url: str | None = None,
-    ) -> int: ...
+    ) -> None: ...
 
     def answer_widget_query(
         self, widget_query_id: str, chat_data: dict
-    ) -> None: ...
-
-    def edit_message_widget_data(
-        self, chat_id: int, message_id: int, chat_data: dict
     ) -> None: ...
 
 
@@ -166,6 +160,14 @@ class TelegramHTTPTransport:
                 f"sendVoice: {obj.get('description', 'no description')}"
             )
 
+    @staticmethod
+    def _widget_json(data: dict) -> str:
+        """Enforce the exact Telegram UTF-8 byte budget before a network call."""
+        payload = json.dumps(data, ensure_ascii=False, separators=(",", ":"))
+        if len(payload.encode("utf-8")) > 1024:
+            raise ValueError("Telegram widget data exceeds 1024 UTF-8 bytes")
+        return payload
+
     def send_widget(
         self,
         chat_id: int,
@@ -173,71 +175,53 @@ class TelegramHTTPTransport:
         chat_data: dict,
         url: str | None = None,
     ) -> int:
-        """Send the actual founder HTML to a private chat under Bot API 10.4.
+        """Send the actual Bot API 10.4 HTML widget, return Telegram message_id.
 
-        `widget_id` here is a *local asset selector*, NOT a Bot API
-        `sendWidget` parameter (only sendSharedWidget takes widget_id).
-        The method returns Telegram's message_id as an actual delivery receipt.
+        widget_id is a local selector, never a wire parameter. HTML ships in
+        the image; no runtime URL download or separate bot listener exists.
         """
+        import zlib
+        from pathlib import Path
+
         if widget_id != "otto_founder_compass":
-            raise ValueError("send_widget: unrecognized local widget asset")
+            raise ValueError("unregistered OTTO widget identifier")
         if url is not None:
-            raise ValueError("send_widget: remote HTML URLs are not supported")
-        if type(chat_id) is not int or chat_id <= 0:
-            raise ValueError("send_widget: expected numeric private chat id")
-        asset = Path(__file__).resolve().parents[1] / "assets" / "otto_founder_compass.html"
-        html = asset.read_bytes()
-        if not 1 <= len(html) <= 32768 or len(zlib.compress(html, 9)) > 4096 or b"\x00" in html:
-            raise ValueError("send_widget: invalid HTML or Telegram size budget exceeded")
-        data = json.dumps(chat_data, ensure_ascii=False, separators=(",", ":"))
-        if len(data.encode("utf-8")) > 1024:
-            raise ValueError("send_widget: chat_data exceeds 1024 bytes")
+            raise ValueError("external widget URL is not accepted")
+        asset = Path(__file__).resolve().parents[1] / "ingress" / "otto_founder_compass.html"
+        raw = asset.read_bytes()
+        if not raw or len(raw) > 32768 or len(zlib.compress(raw, level=9)) > 4096:
+            raise ValueError("OTTO widget exceeds Telegram HTML size limits")
+        try:
+            html = raw.decode("utf-8")
+        except UnicodeDecodeError:
+            raise ValueError("OTTO widget HTML must be UTF-8") from None
         result = self._post("sendWidget", {
             "chat_id": chat_id,
-            "html": html.decode("utf-8"),
-            "chat_data": data,
-            "caption": "OTTO Private Office — verified estate brief. Open to refresh.",
+            "html": html,
+            "chat_data": self._widget_json(chat_data),
             "allow_queries": True,
             "is_shared": False,
-        })
-        message = result.get("result")
-        message_id = message.get("message_id") if isinstance(message, dict) else None
-        if type(message_id) is not int or message_id <= 0:
-            raise TelegramAPIError("sendWidget: Telegram returned no message_id")
-        return message_id
+            "caption": "OTTO Private Office — open for a source-backed briefing and refresh.",
+        }).get("result")
+        if not isinstance(result, dict) or type(result.get("message_id")) is not int:
+            raise TelegramAPIError("sendWidget: no valid message_id; delivery unconfirmed")
+        return result["message_id"]
 
-    def answer_widget_query(
-        self, widget_query_id: str, chat_data: dict
-    ) -> None:
-        """Answer a private widget request with the real 10.4 `data` field.
-
-        answerWidgetQuery updates only the awaiting widget's promise;
-        editMessageWidgetData independently updates persistent chat state.
-        """
-        if not isinstance(widget_query_id, str) or not widget_query_id:
+    def answer_widget_query(self, widget_query_id: str, chat_data: dict) -> None:
+        """Answer the Telegram widget request within its 15-second deadline."""
+        if not widget_query_id:
             raise ValueError("answer_widget_query requires a query id")
-        data = json.dumps(chat_data, ensure_ascii=False, separators=(",", ":"))
-        if len(data.encode("utf-8")) > 1024:
-            raise ValueError("answer_widget_query data exceeds 1024 UTF-8 bytes")
         self._post("answerWidgetQuery", {
             "widget_query_id": widget_query_id,
-            "data": data,
+            "data": self._widget_json(chat_data),
         })
 
-    def edit_message_widget_data(
-        self, chat_id: int, message_id: int, chat_data: dict
-    ) -> None:
-        """Silently persist the verified brief in the original widget message."""
-        if (
-            type(chat_id) is not int or chat_id <= 0
-            or type(message_id) is not int or message_id <= 0
-        ):
-            raise ValueError("edit_message_widget_data: invalid original message")
-        data = json.dumps(chat_data, ensure_ascii=False, separators=(",", ":"))
-        if len(data.encode("utf-8")) > 1024:
-            raise ValueError("edit_message_widget_data exceeds 1024 UTF-8 bytes")
+    def edit_message_widget_data(self, chat_id: int, message_id: int, chat_data: dict) -> None:
+        """Update the existing widget without posting another message."""
+        if type(message_id) is not int or message_id <= 0:
+            raise ValueError("editMessageWidgetData requires a positive message_id")
         self._post("editMessageWidgetData", {
             "chat_id": chat_id,
             "message_id": message_id,
-            "chat_data": data,
+            "chat_data": self._widget_json(chat_data),
         })
