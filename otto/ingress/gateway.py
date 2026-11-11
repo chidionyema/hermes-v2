@@ -214,6 +214,13 @@ class EventGateway:
         if widget_query is not None:
             return self._handle_widget_query(widget_query, plugin, binding)
 
+        # /office is a transport action, not an LLM prompt. The existing
+        # channel credential was authenticated above; authenticate the
+        # founder's sender and private chat separately before any response.
+        office_result = self._handle_office_command(native_event, plugin, binding)
+        if office_result is not None:
+            return office_result
+
         # The allow-list travels with the customer's row, so who counts as
         # a named principal on this channel is a database fact rather than
         # a deployment fact.
@@ -347,6 +354,69 @@ class EventGateway:
             tenant_id=tenant_id,
             task_id=turn.task_ulid,
             payload=turn.to_payload(),
+        )
+
+    def _handle_office_command(
+        self, native_event: dict[str, Any], plugin: ChannelPlugin, binding: ChannelBinding
+    ) -> IngressResult | None:
+        """Deliver actual Telegram widget HTML, never queue /office as a model turn."""
+        if plugin.channel != "telegram":
+            return None
+        message = native_event.get("message")
+        if not isinstance(message, dict):
+            return None
+        text = message.get("text")
+        if not isinstance(text, str) or not text.strip():
+            return None
+        command = text.split(maxsplit=1)[0].split("@", 1)[0].lower()
+        if command != "/office":
+            return None
+
+        chat = message.get("chat")
+        sender = message.get("from")
+        chat_id = chat.get("id") if isinstance(chat, dict) else None
+        sender_id = sender.get("id") if isinstance(sender, dict) else None
+        allowlist = binding.principal_allowlist
+        founder = (
+            chat is not None and chat.get("type") == "private"
+            and type(chat_id) is int and chat_id > 0
+            and type(sender_id) is int and sender_id == chat_id
+            and allowlist.get(str(chat_id)) == "founder"
+            and allowlist.get(str(sender_id)) == "founder"
+        )
+        if not founder:
+            return IngressResult(FORBIDDEN, "office widget founder-only", tenant_id=binding.tenant_id)
+        if not binding.outbound_secret_ref:
+            return IngressResult(UNAVAILABLE, "office widget outbound credential absent",
+                                 tenant_id=binding.tenant_id)
+        try:
+            token = self._secrets.resolve(binding.outbound_secret_ref)
+        except SecretNotFound:
+            return IngressResult(UNAVAILABLE, "office widget credential unavailable",
+                                 tenant_id=binding.tenant_id)
+        send = getattr(plugin, "send_widget", None)
+        if not callable(send):
+            return IngressResult(UNAVAILABLE, "office widget unsupported on this channel",
+                                 tenant_id=binding.tenant_id)
+        try:
+            message_id = send(
+                token, str(chat_id), self._safe_brief(), "otto_founder_compass"
+            )
+            if type(message_id) is not int or message_id <= 0:
+                return IngressResult(UNAVAILABLE, "office widget send has no Telegram message id",
+                                     tenant_id=binding.tenant_id)
+        except Exception:
+            # Never surface the token-bearing HTTP exception in the gateway.
+            self._obs.info("ingress.office_send_failed", TaskContext.new(tenant_id=binding.tenant_id))
+            return IngressResult(UNAVAILABLE, "office widget delivery failed",
+                                 tenant_id=binding.tenant_id)
+        self._obs.info(
+            "ingress.office_widget_sent", TaskContext.new(tenant_id=binding.tenant_id),
+            message_id=message_id,
+        )
+        return IngressResult(
+            OK, "office widget delivered", tenant_id=binding.tenant_id,
+            payload={"message_id": message_id},
         )
 
     def _handle_widget_query(
