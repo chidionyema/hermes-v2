@@ -143,6 +143,14 @@ class ChannelPlugin(Protocol):
         ...
 
 
+    def edit_message_widget_data(
+        self, secret: str, chat_id: int, message_id: int, chat_data: dict
+    ) -> None:
+        """Persist the source-verified brief without sending another message."""
+        ...
+
+
+
 def _header(headers: Mapping[str, str], name: str) -> str | None:
     """Case-insensitive header read. HTTP header names are
     case-insensitive by specification, and different servers and proxies
@@ -250,6 +258,13 @@ class TelegramPlugin:
             int(reply_to), widget_id, chat_data, url=url
         )
 
+    def edit_message_widget_data(
+        self, secret: str, chat_id: int, message_id: int, chat_data: dict
+    ) -> None:
+        TelegramHTTPTransport(token=secret).edit_message_widget_data(
+            chat_id, message_id, chat_data
+        )
+
 
 @dataclass(frozen=True)
 class HttpPlugin:
@@ -316,6 +331,11 @@ class HttpPlugin:
         raise OutboundNotSupported(
             "a plain HTTP caller has no widget path"
         )
+
+    def edit_message_widget_data(
+        self, secret: str, chat_id: int, message_id: int, chat_data: dict
+    ) -> None:
+        raise OutboundNotSupported("a plain HTTP caller has no widget path")
 
 
 def default_plugins() -> dict[str, Any]:
