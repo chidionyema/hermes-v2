@@ -156,6 +156,6 @@ def test_default_no_evidence_has_the_widgets_contract_shape() -> None:
     }
     assert DEFAULT_NO_EVIDENCE["r"] == 0
     assert DEFAULT_NO_EVIDENCE["at"] == 0
-    assert DEFAULT_NO_EVIDENCE["delivered"] == 0
-    assert DEFAULT_NO_EVIDENCE["active"] == 0
-    assert DEFAULT_NO_EVIDENCE["issues"] == 0
+    assert DEFAULT_NO_EVIDENCE["delivered"] is None
+    assert DEFAULT_NO_EVIDENCE["active"] is None
+    assert DEFAULT_NO_EVIDENCE["issues"] is None
