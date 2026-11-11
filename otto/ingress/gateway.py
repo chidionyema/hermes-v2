@@ -424,6 +424,27 @@ class EventGateway:
             "ingress.widget_answered",
             TaskContext.new(tenant_id=binding.tenant_id),
         )
+        # A query answer resolves TelegramWidget.request(). It does NOT
+        # update the widget's stored chat data. Persist the read-only brief
+        # through the same authenticated channel, after answering, so a
+        # reopened phone widget sees the latest verified evidence. Any edit
+        # failure remains observable but must not revoke the query answer.
+        if query.message_id is not None:
+            edit = getattr(plugin, "edit_message_widget_data", None)
+            if callable(edit):
+                try:
+                    edit(outbound_secret, query.chat_id, query.message_id, brief)
+                except Exception as exc:  # noqa: BLE001 - response was already delivered
+                    self._obs.info(
+                        "ingress.widget_edit_failed",
+                        TaskContext.new(tenant_id=binding.tenant_id),
+                        error=type(exc).__name__,
+                    )
+                else:
+                    self._obs.info(
+                        "ingress.widget_edited",
+                        TaskContext.new(tenant_id=binding.tenant_id),
+                    )
         return IngressResult(
             NOTHING_TO_DO, "widget query answered", tenant_id=binding.tenant_id
         )
