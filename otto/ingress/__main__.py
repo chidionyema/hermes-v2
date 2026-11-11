@@ -35,6 +35,7 @@ from __future__ import annotations
 import asyncio
 import os
 import sys
+import threading
 from typing import Mapping
 
 from otto.ingress.evidence import (
@@ -143,6 +144,30 @@ def main() -> int:
         return 1
 
     server = build_server(deps, port)
+
+    # Startup automatically sends the real native widget to the private founder
+    # chat using the token/chat pair already mounted by IDP Kubernetes. The
+    # existing Postgres gateway database prevents repeats on normal restarts.
+    # This is independent of (and cannot delay) message ingress readiness.
+    if os.environ.get("OTTO_OPERATOR_CHAT_ID") and os.environ.get("OTTO_TELEGRAM_BOT_TOKEN"):
+        def deliver_founder_widget() -> None:
+            from otto.ingress.office_delivery import auto_publish_widget
+            try:
+                receipt = auto_publish_widget(deps.gateway, dsn=dsn_from_env())
+            except Exception:
+                receipt = {"status": "BLIND", "reason": "unhandled startup delivery error"}
+            # Never log raw webhook/Telegram token or credential-bearing errors.
+            obs_fields = {"status": receipt.get("status", "BLIND")}
+            if receipt.get("message_id"):
+                obs_fields["message_id"] = receipt["message_id"]
+            if receipt.get("reason"):
+                obs_fields["reason"] = receipt["reason"]
+            deps.obs.info("ingress.founder_widget_delivery", TaskContext.new(), **obs_fields)
+
+        threading.Thread(
+            target=deliver_founder_widget, name="otto-founder-widget-delivery", daemon=True
+        ).start()
+
     try:
         server.serve_forever()
     except KeyboardInterrupt:
