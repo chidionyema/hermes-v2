@@ -14,6 +14,7 @@ import json
 from otto.ingress.gateway import FORBIDDEN, NOTHING_TO_DO, UNAVAILABLE, EventGateway
 from otto.ingress.plugins import TELEGRAM, OutboundNotSupported
 from otto.ingress.store import ChannelBinding, SqliteChannelBindingStore
+from otto.spine.envelope import TaskSource
 from otto.ingress.widgets import (
     detect_widget_query,
     founder_authorized,
@@ -55,7 +56,7 @@ class _RecordingPlugin:
     gateway touches before the widget path, so the full pipeline runs."""
 
     channel = TELEGRAM
-    task_source = "telegram"
+    task_source = TaskSource.telegram
 
     def __init__(self) -> None:
         self.answered: list[tuple[str, str, dict]] = []
@@ -352,7 +353,7 @@ def test_office_command_fails_without_confirmed_telegram_message_id():
     assert result.status == UNAVAILABLE
 
 
-def test_office_command_is_not_injected_through_non_telegram_channel():
+def test_unrelated_telegram_command_does_not_send_founder_widget():
     plugin = _RecordingPlugin()
     called = []
     plugin.send_widget = lambda *args, **kwargs: called.append(1)
