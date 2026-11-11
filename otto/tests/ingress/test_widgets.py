@@ -226,7 +226,7 @@ def test_founder_brief_tap_is_answered_synchronously() -> None:
     assert secret == OUTBOUND_TOKEN
     assert qid == "AQr-42"
     # Fail-closed brief: no evidence seam wired, so zero and a headline.
-    assert chat_data["delivered"] == 0
+    assert chat_data["delivered"] is None
     assert "headline" in chat_data
 
 
