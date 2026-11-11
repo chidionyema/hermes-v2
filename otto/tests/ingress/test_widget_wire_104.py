@@ -153,3 +153,93 @@ def test_live_psycopg_default_tuple_row_contract(monkeypatch):
     assert brief["proof"] == "Proof from ledger"
     assert calls
     assert all(kw["connect_timeout"] == 2 for _, kw in calls)
+
+
+def test_cloud_gateway_startup_sends_once_and_reuses_postgres_receipt(monkeypatch):
+    """The real bootstrap calls Telegram once, persists message_id and avoids spam."""
+    from types import SimpleNamespace
+    from otto.ingress import office_delivery as mod
+
+    record = {}
+    sends = []
+    class Cursor:
+        def __init__(self, row=None, rowcount=1):
+            self.row = row
+            self.rowcount = rowcount
+        def fetchone(self):
+            return self.row
+
+    class Connection:
+        def __enter__(self):
+            return self
+        def __exit__(self, *_):
+            return False
+        def execute(self, sql, args=None):
+            if "CREATE TABLE" in sql:
+                return Cursor()
+            if "INSERT INTO otto_founder_widget_delivery" in sql:
+                if record.get("state") == "DELIVERED":
+                    return Cursor(None)
+                record["state"] = "PENDING"
+                return Cursor(("reserved-key",))
+            if "SELECT state, message_id" in sql:
+                return Cursor((record.get("state"), record.get("message_id")))
+            if "UPDATE otto_founder_widget_delivery" in sql:
+                record["state"], record["message_id"] = args[:2]
+                return Cursor(rowcount=1)
+            raise AssertionError("unexpected persistence call: " + sql)
+
+    monkeypatch.setattr(mod.psycopg, "connect", lambda *_a, **_k: Connection())
+    def send(self, chat_id, widget_id, chat_data):
+        sends.append((chat_id, widget_id, chat_data))
+        return 713
+    monkeypatch.setattr(mod.TelegramHTTPTransport, "send_widget", send)
+
+    founder_binding = SimpleNamespace(
+        tenant_id="estate", external_id="424242",
+        principal_allowlist={"424242": "founder"},
+        outbound_secret_ref="vault://otto/founder",
+    )
+    gateway = SimpleNamespace(
+        _store=SimpleNamespace(find_by_credential=lambda ch, secret: founder_binding),
+        _secrets=SimpleNamespace(resolve=lambda ref: BOT),
+        _safe_brief=lambda: {"r": 1, "at": 12, "delivered": None},
+    )
+    env = {
+        "OTTO_OPERATOR_CHAT_ID": "424242",
+        "OTTO_TELEGRAM_BOT_TOKEN": BOT,
+        "OTTO_CHANNEL_SECRET_VAULT_OTTO_STAGING_TELEGRAM_WEBHOOK_SECRET": "test-webhook-only",
+    }
+    assert mod.auto_publish_widget(gateway, dsn="dbname=mock", environ=env) == {
+        "status": "DELIVERED", "message_id": 713
+    }
+    assert mod.auto_publish_widget(gateway, dsn="dbname=mock", environ=env) == {
+        "status": "ALREADY_DELIVERED", "message_id": 713
+    }
+    assert sends == [(424242, "otto_founder_compass", {"r": 1, "at": 12, "delivered": None})]
+
+
+def test_automated_delivery_denies_mismatched_bot_or_private_founder(monkeypatch):
+    from types import SimpleNamespace
+    from otto.ingress import office_delivery as mod
+    called = []
+    monkeypatch.setattr(mod.psycopg, "connect", lambda *_a, **_k: called.append("db"))
+    binding = SimpleNamespace(tenant_id="estate", external_id="424242",
+                              principal_allowlist={"424242": "founder"},
+                              outbound_secret_ref="vault://otto/founder")
+    gateway = SimpleNamespace(
+        _store=SimpleNamespace(find_by_credential=lambda *_: binding),
+        _secrets=SimpleNamespace(resolve=lambda *_: BOT),
+    )
+    env = {
+        "OTTO_OPERATOR_CHAT_ID": "424242",
+        "OTTO_TELEGRAM_BOT_TOKEN": "a-different-bot-token",
+        "OTTO_CHANNEL_SECRET_VAULT_OTTO_STAGING_TELEGRAM_WEBHOOK_SECRET": "webhook",
+    }
+    result = mod.auto_publish_widget(gateway, dsn="dbname=mock", environ=env)
+    assert result["status"] == "REFUSED"
+    assert called == [], "forged deployment bot identity cannot access DB or Telegram"
+    binding.principal_allowlist = {"424242": "guest"}
+    env["OTTO_TELEGRAM_BOT_TOKEN"] = BOT
+    assert mod.auto_publish_widget(gateway, dsn="dbname=mock", environ=env)["status"] == "REFUSED"
+    assert called == []
