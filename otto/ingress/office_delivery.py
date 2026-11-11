@@ -94,16 +94,24 @@ def auto_publish_widget(
         )
         if type(sent) is not int or sent <= 0:
             raise RuntimeError("Telegram sendWidget returned no positive message_id")
-        with psycopg.connect(dsn, connect_timeout=3) as conn:
-            result = conn.execute(_RECEIPT, ("DELIVERED", sent, key))
-            if result.rowcount != 1:
-                return {"status": "BLIND", "reason": "Telegram sent but receipt not recorded"}
-        return {"status": "DELIVERED", "message_id": sent}
     except Exception:
-        # Never log exceptions that could contain a bot token or secret DSN.
+        # Only a FAILED Telegram send may be retried immediately. A send which
+        # succeeded but lost its DB commit is ambiguous, not a failed send.
         try:
             with psycopg.connect(dsn, connect_timeout=3) as conn:
                 conn.execute(_RECEIPT, ("FAILED", None, key))
         except Exception:
             return {"status": "BLIND", "reason": "send and receipt both unavailable"}
         return {"status": "FAILED", "reason": "Telegram sendWidget rejected or unavailable"}
+
+    try:
+        with psycopg.connect(dsn, connect_timeout=3) as conn:
+            result = conn.execute(_RECEIPT, ("DELIVERED", sent, key))
+            if result.rowcount != 1:
+                return {"status": "BLIND", "reason": "Telegram sent but receipt row not updated"}
+    except Exception:
+        # Do NOT mark a delivered Telegram message FAILED: that would cause
+        # an immediate duplicate on the next retry. Preserve PENDING for
+        # bounded recovery and surface the ambiguous state explicitly.
+        return {"status": "BLIND", "reason": "Telegram sent but database receipt unavailable"}
+    return {"status": "DELIVERED", "message_id": sent}
