@@ -150,7 +150,7 @@ def test_live_psycopg_default_tuple_row_contract(monkeypatch):
     brief = store.brief()
     assert brief["delivered"] == 3
     assert brief["id"] == "INS-42"
-    assert brief["proof"] == "Proof from ledger"
+    # A prompt stored in the catalogue is not an independently verified receipt.\n    assert brief["proof"] == "—"
     assert calls
     assert all(kw["connect_timeout"] == 2 for _, kw in calls)
 
