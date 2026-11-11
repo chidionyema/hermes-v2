@@ -59,6 +59,7 @@ class _RecordingPlugin:
 
     def __init__(self) -> None:
         self.answered: list[tuple[str, str, dict]] = []
+        self.edits: list[tuple[str, int, int, dict]] = []
 
     @staticmethod
     def header_name() -> str:
@@ -89,6 +90,9 @@ class _RecordingPlugin:
 
     def answer_widget_query(self, secret, query_id, chat_data):
         self.answered.append((secret, query_id, chat_data))
+
+    def edit_message_widget_data(self, secret, chat_id, message_id, chat_data):
+        self.edits.append((secret, chat_id, message_id, chat_data))
 
 
 class _Publisher:
@@ -295,3 +299,42 @@ def test_no_outbound_credential_resolves_unavailable() -> None:
     )
     assert result.status == UNAVAILABLE
     assert plugin.answered == []
+
+
+def test_founder_refresh_changes_persistent_chat_state_after_answer() -> None:
+    plugin = _RecordingPlugin()
+    body = json.loads(_widget_query_body(
+        from_id=FOUNDER_CHAT_ID, chat_id=FOUNDER_CHAT_ID,
+    ))
+    body["widget_query"]["message_id"] = 1234
+    result = _gateway(plugin).handle(TELEGRAM, _headers(), json.dumps(body).encode())
+    assert result.status == NOTHING_TO_DO
+    assert len(plugin.answered) == 1
+    assert len(plugin.edits) == 1
+    secret, chat_id, message_id, state = plugin.edits[0]
+    assert secret == OUTBOUND_TOKEN
+    assert chat_id == FOUNDER_CHAT_ID
+    assert message_id == 1234
+    assert state == plugin.answered[0][2]
+
+
+def test_nonprivate_widget_never_reaches_telegram_edit_or_ledger() -> None:
+    plugin = _RecordingPlugin()
+    body = json.loads(_widget_query_body(
+        from_id=FOUNDER_CHAT_ID, chat_id=FOUNDER_CHAT_ID,
+    ))
+    body["widget_query"]["chat"]["type"] = "supergroup"
+    body["widget_query"]["message_id"] = 1234
+    result = _gateway(plugin).handle(TELEGRAM, _headers(), json.dumps(body).encode())
+    assert result.status == NOTHING_TO_DO
+    assert plugin.answered == []
+    assert plugin.edits == []
+
+
+def test_bool_telegram_identity_and_message_id_cannot_pass_authentication() -> None:
+    raw = json.loads(_widget_query_body(
+        from_id=FOUNDER_CHAT_ID, chat_id=FOUNDER_CHAT_ID,
+    ))
+    raw["widget_query"]["from"]["id"] = True
+    raw["widget_query"]["message_id"] = True
+    assert detect_widget_query(raw) is None
