@@ -51,7 +51,7 @@ class TelegramTransport(Protocol):
         widget_id: str,
         chat_data: dict,
         url: str | None = None,
-    ) -> None: ...
+    ) -> int: ...
 
     def answer_widget_query(
         self, widget_query_id: str, chat_data: dict
