@@ -295,3 +295,69 @@ def test_no_outbound_credential_resolves_unavailable() -> None:
     )
     assert result.status == UNAVAILABLE
     assert plugin.answered == []
+
+
+def _office_body(*, sender=FOUNDER_CHAT_ID, chat=FOUNDER_CHAT_ID,
+                 chat_type="private", text="/office") -> bytes:
+    return json.dumps({"message": {
+        "message_id": 12, "text": text, "from": {"id": sender},
+        "chat": {"id": chat, "type": chat_type}
+    }}).encode("utf-8")
+
+
+def test_office_command_uses_real_telegram_send_not_the_model_queue():
+    plugin = _RecordingPlugin()
+    sent = []
+    def send(secret, chat_id, data, widget_id, url=None):
+        sent.append((secret, chat_id, data, widget_id, url))
+        return 713
+    plugin.send_widget = send
+    publisher = _Publisher()
+    gateway = EventGateway(store=_store(), secrets=_Secrets(),
+                           publisher=publisher, obs=_Obs(), plugins={TELEGRAM: plugin})
+    result = gateway.handle(TELEGRAM, _headers(), _office_body())
+    assert result.status == 200
+    assert result.reason == "office widget delivered"
+    assert result.payload["message_id"] == 713
+    assert not publisher.envelopes, "/office must NOT become an LLM instruction"
+    assert len(sent) == 1
+    token, chat_id, data, widget_id, url = sent[0]
+    assert token == OUTBOUND_TOKEN
+    assert chat_id == str(FOUNDER_CHAT_ID)
+    assert widget_id == "otto_founder_compass"
+    assert url is None
+    assert data["delivered"] is None, "no evidence must be UNKNOWN, not zero"
+
+
+def test_office_command_denies_unauthorized_group_and_forged_sender():
+    plugin = _RecordingPlugin()
+    sent = []
+    plugin.send_widget = lambda *args, **kwargs: sent.append(args)
+    gateway = _gateway(plugin)
+    for body in (
+        _office_body(sender=OTHER_CHAT_ID),
+        _office_body(chat=OTHER_CHAT_ID),
+        _office_body(chat_type="supergroup"),
+        _office_body(sender=FOUNDER_CHAT_ID, chat_type="group"),
+    ):
+        result = gateway.handle(TELEGRAM, _headers(), body)
+        assert result.status == FORBIDDEN
+    assert sent == []
+
+
+def test_office_command_fails_without_confirmed_telegram_message_id():
+    plugin = _RecordingPlugin()
+    plugin.send_widget = lambda *args, **kwargs: None
+    result = _gateway(plugin).handle(TELEGRAM, _headers(), _office_body())
+    assert result.status == UNAVAILABLE
+
+
+def test_office_command_is_not_injected_through_non_telegram_channel():
+    plugin = _RecordingPlugin()
+    called = []
+    plugin.send_widget = lambda *args, **kwargs: called.append(1)
+    result = _gateway(plugin).handle(
+        TELEGRAM, _headers(), _office_body(text="/unrelated")
+    )
+    assert called == []
+    assert result.status in (NOTHING_TO_DO, 202)
