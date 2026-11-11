@@ -187,15 +187,14 @@ class FounderEvidenceStore:
         return latest_id or "—"
 
     def _latest_proof(self) -> str:
-        _, prompt = self._latest()
-        if not prompt:
-            return "—"
-        # The widget's `proof` field is a string of at most 130 bytes.
-        # Truncating a real instruction's prompt into a 130-byte snippet
-        # risks showing a partial, mis-leading statement, so the whole
-        # prompt is shown only when it fits; otherwise the field is a
-        # neutral dash rather than a cut-off half-truth.
-        return prompt if len(prompt.encode("utf-8")) <= 130 else "—"
+        """A prompt is NOT a completion receipt. Never label it proof.
+
+        The catalogue's prompt column is instruction text, not a checked
+        deployment or independently verified artifact. Until the source
+        supplies an authenticated receipt reference, the correct proof is
+        explicitly unavailable.
+        """
+        return "—"
 
 
 def catalog_dsn_from_env(environ: Mapping[str, str] | None = None) -> str:
