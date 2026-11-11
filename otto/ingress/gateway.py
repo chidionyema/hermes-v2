@@ -378,7 +378,7 @@ class EventGateway:
         sender_id = sender.get("id") if isinstance(sender, dict) else None
         allowlist = binding.principal_allowlist
         founder = (
-            chat is not None and chat.get("type") == "private"
+            isinstance(chat, dict) and chat.get("type") == "private"
             and type(chat_id) is int and chat_id > 0
             and type(sender_id) is int and sender_id == chat_id
             and allowlist.get(str(chat_id)) == "founder"
