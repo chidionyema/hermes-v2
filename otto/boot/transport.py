@@ -57,6 +57,10 @@ class TelegramTransport(Protocol):
         self, widget_query_id: str, chat_data: dict
     ) -> None: ...
 
+    def edit_message_widget_data(
+        self, chat_id: int, message_id: int, chat_data: dict
+    ) -> None: ...
+
 
 @dataclass(frozen=True)
 class TelegramHTTPTransport:
@@ -218,4 +222,22 @@ class TelegramHTTPTransport:
         self._post("answerWidgetQuery", {
             "widget_query_id": widget_query_id,
             "data": data,
+        })
+
+    def edit_message_widget_data(
+        self, chat_id: int, message_id: int, chat_data: dict
+    ) -> None:
+        """Silently persist the verified brief in the original widget message."""
+        if (
+            type(chat_id) is not int or chat_id <= 0
+            or type(message_id) is not int or message_id <= 0
+        ):
+            raise ValueError("edit_message_widget_data: invalid original message")
+        data = json.dumps(chat_data, ensure_ascii=False, separators=(",", ":"))
+        if len(data.encode("utf-8")) > 1024:
+            raise ValueError("edit_message_widget_data exceeds 1024 UTF-8 bytes")
+        self._post("editMessageWidgetData", {
+            "chat_id": chat_id,
+            "message_id": message_id,
+            "chat_data": data,
         })
