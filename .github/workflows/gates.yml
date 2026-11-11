@@ -117,6 +117,20 @@ jobs:
       - name: shell-strict (shellcheck, shfmt, strict mode, trap)
         run: python3 bin/shell-strict .
 
+  # Run Telegram widget wire regressions independently of PostgreSQL provisioning.
+  telegram-widget-wire-tests:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: install Otto test dependencies
+        run: python -m pip install -q -r otto/requirements.txt
+      - name: execute Telegram widget HTTP-wire and ingress regression tests
+        run: python -m pytest -q otto/tests/ingress/test_widget_wire_104.py otto/tests/ingress/test_widgets.py
+
   # The Otto v1 conformance suite (otto/tests/, crew#768): 255 tests, none
   # of which ran on any pull request before this row existed. `bin/otto-demo`
   # is the one command the founder already runs by hand (R31); this job runs
