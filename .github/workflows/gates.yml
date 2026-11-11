@@ -158,15 +158,29 @@ jobs:
           sudo install -m 0755 /tmp/nats-server-v2.11.4-linux-amd64/nats-server /usr/local/bin/nats-server
           nats-server --version
 
-      # ubuntu-latest ships PostgreSQL 16 already (service disabled by
-      # default, binaries not on PATH); this only adds the pgvector
-      # extension files to that same installation. CP1/CP4 start their own
-      # disposable cluster with initdb/pg_ctl, so the system service is
-      # never started.
-      - name: install the pgvector extension for the pre-installed PostgreSQL 16
+      # Cloud runners contain PostgreSQL 16, but Ubuntu mirror DNS was
+      # unavailable on multiple real PR runs (e.g. 43049997083), leaving
+      # every DB integration test unexecuted. Obtain the extension from a
+      # digest-pinned pgvector/PostgreSQL 16 image instead. Only the extension
+      # binaries and SQL scripts are copied; CP1/CP4 still launch their OWN
+      # real disposable local PostgreSQL clusters, not a fake DB.
+      - name: install pinned pgvector extension into hosted PostgreSQL 16
         run: |
-          sudo apt-get update -q
-          sudo apt-get install -y -q postgresql-16-pgvector
+          set -euo pipefail
+          image='pgvector/pgvector@sha256:c0cd736fe8b8b5d408db56b780570bac404fe518e66e39de624aa46f9aabc60a'
+          docker pull --platform linux/amd64 "$image"
+          container_id=$(docker create --platform linux/amd64 "$image")
+          work=$(mktemp -d)
+          trap 'docker rm -f "$container_id" >/dev/null 2>&1 || true; rm -rf "$work"' EXIT
+          docker cp "$container_id":/usr/lib/postgresql/16/lib/vector.so "$work/vector.so"
+          docker cp "$container_id":/usr/share/postgresql/16/extension "$work/extension"
+          test -s "$work/vector.so"
+          test -s "$work/extension/vector.control"
+          grep -q "default_version = '0.8.7'" "$work/extension/vector.control"
+          sudo install -m 0644 "$work/vector.so" /usr/lib/postgresql/16/lib/vector.so
+          sudo install -m 0644 "$work"/extension/vector* /usr/share/postgresql/16/extension/
+          echo "pgvector 0.8.7 installed from exact image manifest digest; no Ubuntu mirror used"
+          /usr/lib/postgresql/16/bin/pg_config --version
 
       # CP4's conftest reads OTTO_CP4_TEST_PG_BINDIR for its own initdb/pg_ctl
       # calls, but CP1's conftest (otto/tests/cp1/conftest.py) calls

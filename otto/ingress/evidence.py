@@ -170,7 +170,7 @@ class FounderEvidenceStore:
             self._dsn, connect_timeout=self._connect_timeout, autocommit=True
         ) as conn:
             row = conn.execute(_BRIEF_SQL).fetchone()
-        return int(row.delivered or 0), int(row.active or 0), int(row.issues or 0)
+        return int(row[0] or 0), int(row[1] or 0), int(row[2] or 0)
 
     def _latest(self) -> tuple[str | None, str | None]:
         try:
@@ -178,7 +178,7 @@ class FounderEvidenceStore:
                 self._dsn, connect_timeout=self._connect_timeout, autocommit=True
             ) as conn:
                 row = conn.execute(_BRIEF_SQL).fetchone()
-            return row.latest_id, row.latest_prompt
+            return row[4], row[5]
         except Exception:  # noqa: BLE001 - proof/id are a nicety, never a must
             return None, None
 
@@ -187,15 +187,14 @@ class FounderEvidenceStore:
         return latest_id or "—"
 
     def _latest_proof(self) -> str:
-        _, prompt = self._latest()
-        if not prompt:
-            return "—"
-        # The widget's `proof` field is a string of at most 130 bytes.
-        # Truncating a real instruction's prompt into a 130-byte snippet
-        # risks showing a partial, mis-leading statement, so the whole
-        # prompt is shown only when it fits; otherwise the field is a
-        # neutral dash rather than a cut-off half-truth.
-        return prompt if len(prompt.encode("utf-8")) <= 130 else "—"
+        """A prompt is NOT a completion receipt. Never label it proof.
+
+        The catalogue's prompt column is instruction text, not a checked
+        deployment or independently verified artifact. Until the source
+        supplies an authenticated receipt reference, the correct proof is
+        explicitly unavailable.
+        """
+        return "—"
 
 
 def catalog_dsn_from_env(environ: Mapping[str, str] | None = None) -> str:
@@ -265,9 +264,9 @@ DEFAULT_NO_EVIDENCE: Mapping[str, Any] = {
     "r": 0,
     "at": 0,
     "headline": "No verified estate briefing is available.",
-    "delivered": 0,
-    "active": 0,
-    "issues": 0,
+    "delivered": None,
+    "active": None,
+    "issues": None,
     "priority": "—",
     "id": "—",
     "proof": "—",

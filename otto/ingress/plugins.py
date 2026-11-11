@@ -246,7 +246,7 @@ class TelegramPlugin:
         url: str | None = None,
     ) -> None:
         """Push the founder's compass widget into a chat."""
-        TelegramHTTPTransport(token=secret).send_widget(
+        return TelegramHTTPTransport(token=secret).send_widget(
             int(reply_to), widget_id, chat_data, url=url
         )
 

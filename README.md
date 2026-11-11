@@ -754,6 +754,11 @@ are tracked, so what you see below is the source they come from.
 | `otto/verify/reply_judge.py` | Per-line verdict from the verify lane (a different model on a different lane, never the one that answered): conversational or supported renders clean; anything unreadable, over budget or timed out fails closed to marked. |
 | `pyproject.toml` | Python project metadata for the `otto` packages and the pytest configuration the suite runs under. |
 
+| `otto/ingress/office_delivery.py` | Sends the verified, private founder Telegram widget from the production gateway, retaining PostgreSQL delivery state to avoid replay on every restart. |
+| `otto/ingress/otto_founder_compass.html` | Self-contained Telegram 10.4 widget HTML shipped inside the runtime image and checked against Telegram byte limits. |
+| `otto/tests/cp1/test_widget_postgres_receipt.py` | Exercises real PostgreSQL idempotency and refusal state in a disposable cloud test cluster. |
+| `otto/tests/ingress/test_widget_wire_104.py` | Exercises actual Bot API JSON requests, private authorization and psycopg tuple-row evidence behavior. |
+
 <!-- /tracked -->
 
 ---
