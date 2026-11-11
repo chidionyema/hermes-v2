@@ -118,3 +118,32 @@ def test_body_copies_repository_owned_widget_html_not_a_remote_url():
             FOUNDER, "otto_founder_compass", {"r": 1}
         )
     assert requests[0][1]["html"].encode("utf-8") == asset.read_bytes()
+
+
+def test_silent_edit_posts_message_scoped_chat_data_not_new_chat_message():
+    requests, urlopen = capture_bot_api(response={"ok": True, "result": True})
+    transport = TelegramHTTPTransport(token="LOCAL-TEST")
+    with patch("otto.boot.transport.urllib.request.urlopen", side_effect=urlopen):
+        transport.edit_message_widget_data(FOUNDER, 77, {"r": 9, "proof": "real"})
+    assert requests == [(
+        "editMessageWidgetData",
+        {
+            "chat_id": FOUNDER, "message_id": 77,
+            "chat_data": '{"r":9,"proof":"real"}',
+        },
+    )]
+
+
+def test_silent_edit_refuses_nonoriginal_message_and_oversized_state():
+    requests, urlopen = capture_bot_api()
+    with patch("otto.boot.transport.urllib.request.urlopen", side_effect=urlopen):
+        for chat_id, message_id in ((0, 1), (FOUNDER, 0), (FOUNDER, True)):
+            with pytest.raises(ValueError):
+                TelegramHTTPTransport(token="LOCAL-TEST").edit_message_widget_data(
+                    chat_id, message_id, {"r": 1}
+                )
+        with pytest.raises(ValueError, match="1024"):
+            TelegramHTTPTransport(token="LOCAL-TEST").edit_message_widget_data(
+                FOUNDER, 77, {"private": "a" * 1025}
+            )
+    assert requests == []
