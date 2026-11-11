@@ -36,6 +36,7 @@ import asyncio
 import os
 import sys
 import threading
+import time
 from typing import Mapping
 
 from otto.ingress.evidence import (
@@ -152,17 +153,24 @@ def main() -> int:
     if os.environ.get("OTTO_OPERATOR_CHAT_ID") and os.environ.get("OTTO_TELEGRAM_BOT_TOKEN"):
         def deliver_founder_widget() -> None:
             from otto.ingress.office_delivery import auto_publish_widget
-            try:
-                receipt = auto_publish_widget(deps.gateway, dsn=dsn_from_env())
-            except Exception:
-                receipt = {"status": "BLIND", "reason": "unhandled startup delivery error"}
-            # Never log raw webhook/Telegram token or credential-bearing errors.
-            obs_fields = {"status": receipt.get("status", "BLIND")}
-            if receipt.get("message_id"):
-                obs_fields["message_id"] = receipt["message_id"]
-            if receipt.get("reason"):
-                obs_fields["reason"] = receipt["reason"]
-            deps.obs.info("ingress.founder_widget_delivery", TaskContext.new(), **obs_fields)
+
+            # Retry transient Bot API failures autonomously, without flooding
+            # the chat. An ambiguous DB receipt is not safe to resend blindly.
+            for attempt in range(4):
+                try:
+                    receipt = auto_publish_widget(deps.gateway, dsn=dsn_from_env())
+                except Exception:
+                    receipt = {"status": "BLIND", "reason": "unhandled startup delivery error"}
+                obs_fields = {"status": receipt.get("status", "BLIND")}
+                if receipt.get("message_id"):
+                    obs_fields["message_id"] = receipt["message_id"]
+                if receipt.get("reason"):
+                    obs_fields["reason"] = receipt["reason"]
+                deps.obs.info("ingress.founder_widget_delivery", TaskContext.new(), **obs_fields)
+                state = receipt.get("status")
+                if state not in ("FAILED", "PENDING_RECOVERY") or attempt == 3:
+                    break
+                time.sleep(600 if state == "PENDING_RECOVERY" else min(60 * (2 ** attempt), 300))
 
         threading.Thread(
             target=deliver_founder_widget, name="otto-founder-widget-delivery", daemon=True
