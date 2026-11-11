@@ -98,7 +98,7 @@ def test_brief_maps_ledger_counts_to_widget_fields(monkeypatch) -> None:
     assert brief["at"] == brief["r"] * 1000
     assert "proven" in brief["headline"]
     assert brief["id"] == "instr-7"
-    assert brief["proof"] == "Ship the router"
+    assert brief["proof"] == "—", "instruction text must not be labelled deployment proof"
 
 
 def test_brief_is_fail_closed_when_the_read_raises(monkeypatch) -> None:
