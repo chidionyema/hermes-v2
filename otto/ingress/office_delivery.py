@@ -15,6 +15,7 @@ import hashlib
 import hmac
 import os
 import time
+from pathlib import Path
 from typing import Any, Mapping
 
 import psycopg
@@ -74,8 +75,14 @@ def auto_publish_widget(
     if not hmac.compare_digest(token, expected_bot):
         return {"status": "REFUSED", "reason": "bot identity does not agree"}
 
+    # Telegram widgets are immutable HTML. A delivered v1 widget cannot
+    # acquire voice controls by editing chat_data. Bind idempotence to the
+    # actual HTML revision, so a new version is sent exactly once.
+    widget_html = Path(__file__).with_name("otto_founder_compass.html").read_bytes()
+    widget_version = hashlib.sha256(widget_html).hexdigest()
     key = hashlib.sha256(
-        ("otto-founder-widget-v1:" + binding.tenant_id + ":" + chat + ":" + token).encode("utf-8")
+        ("otto-founder-widget-v2:" + binding.tenant_id + ":" + chat
+         + ":" + token + ":" + widget_version).encode("utf-8")
     ).hexdigest()
     with psycopg.connect(dsn, connect_timeout=3) as conn:
         conn.execute(_CREATE)

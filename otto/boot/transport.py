@@ -22,6 +22,7 @@ token before minting the client.
 from __future__ import annotations
 
 import json
+import re
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
@@ -195,6 +196,17 @@ class TelegramHTTPTransport:
             html = raw.decode("utf-8")
         except UnicodeDecodeError:
             raise ValueError("OTTO widget HTML must be UTF-8") from None
+        # Telegram's widget sandbox has no microphone. Resolve the actual
+        # bot username server-side and route the tap into Telegram's native
+        # voice-note composer; never hardcode a bot identity in distributed HTML.
+        identity = self._post("getMe", {}).get("result")
+        username = identity.get("username") if isinstance(identity, dict) and identity.get("is_bot") is True else None
+        if not isinstance(username, str) or not re.fullmatch(r"[A-Za-z][A-Za-z0-9_]{4,31}", username) or not username.lower().endswith("bot"):
+            raise TelegramAPIError("getMe: verified bot username unavailable")
+        html = html.replace("__OTTO_BOT_CHAT_URL__", f"https://t.me/{username}")
+        rendered = html.encode("utf-8")
+        if len(rendered) > 32768 or len(zlib.compress(rendered, 9)) > 4096:
+            raise ValueError("OTTO voice widget exceeds Telegram HTML size limits")
         result = self._post("sendWidget", {
             "chat_id": chat_id,
             "html": html,
