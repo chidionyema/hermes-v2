@@ -45,14 +45,21 @@ def test_send_widget_reaches_real_http_request_with_html_and_private_query_contr
         method = request.full_url.rsplit("/", 1)[-1]
         data = json.loads(request.data)
         requests.append((method, data))
+        if method == "getMe":
+            return _Response({"ok": True, "result": {"is_bot": True, "username": "OttoFounderBot"}})
         return _Response({"ok": True, "result": {"message_id": 713}})
 
     monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
     client = TelegramHTTPTransport(token=BOT)
     initial = {"r": 0, "at": 0, "delivered": None, "active": None, "issues": None}
     assert client.send_widget(CHAT, "otto_founder_compass", initial) == 713
-    assert [name for name, _ in requests] == ["sendWidget"]
-    body = requests[0][1]
+    assert [name for name, _ in requests] == ["getMe", "sendWidget"]
+    body = requests[1][1]
+    assert body["html"].count("https://t.me/OttoFounderBot") == 1
+    assert "__OTTO_BOT_CHAT_URL__" not in body["html"]
+    assert 'id="voiceAction"' in body["html"]
+    assert "openTelegramLink" in body["html"]
+    assert BOT not in body["html"]
     assert body["chat_id"] == CHAT
     assert "TelegramWidget" in body["html"]
     assert len(body["html"].encode("utf-8")) <= 32768
@@ -243,3 +250,29 @@ def test_automated_delivery_denies_mismatched_bot_or_private_founder(monkeypatch
     env["OTTO_TELEGRAM_BOT_TOKEN"] = BOT
     assert mod.auto_publish_widget(gateway, dsn="dbname=mock", environ=env)["status"] == "REFUSED"
     assert called == []
+
+
+def test_invalid_bot_identity_never_sends_new_widget(monkeypatch):
+    calls = []
+    def fake(request, timeout):
+        method = request.full_url.rsplit("/", 1)[-1]
+        calls.append(method)
+        assert method == "getMe", "never dispatch a widget without a verified voice destination"
+        return _Response({"ok": True, "result": {"is_bot": True, "username": "<script>alert(1)</script>"}})
+    monkeypatch.setattr(urllib.request, "urlopen", fake)
+    with pytest.raises(TelegramAPIError, match="verified bot username unavailable"):
+        TelegramHTTPTransport(token=BOT).send_widget(CHAT, "otto_founder_compass", {"r": 0})
+    assert calls == ["getMe"]
+
+
+def test_new_html_revision_has_distinct_delivery_key_and_preserves_idempotence(monkeypatch):
+    import hashlib
+    from pathlib import Path
+    from otto.ingress import office_delivery
+    p = Path(office_delivery.__file__).with_name("otto_founder_compass.html")
+    content = p.read_bytes()
+    assert b"__OTTO_BOT_CHAT_URL__" in content
+    assert b'id="voiceAction"' in content
+    v1 = hashlib.sha256(b"old-widget-html").hexdigest()
+    v2 = hashlib.sha256(content).hexdigest()
+    assert v1 != v2, "an old immutable widget cannot stand in for the new voice UI"
