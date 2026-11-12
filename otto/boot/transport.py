@@ -199,6 +199,8 @@ class TelegramHTTPTransport:
         # Telegram's widget sandbox has no microphone. Resolve the actual
         # bot username server-side and route the tap into Telegram's native
         # voice-note composer; never hardcode a bot identity in distributed HTML.
+        # Fail before any Bot API call on oversized, attacker-controlled state.
+        validated_chat_data = self._widget_json(chat_data)
         identity = self._post("getMe", {}).get("result")
         username = identity.get("username") if isinstance(identity, dict) and identity.get("is_bot") is True else None
         if not isinstance(username, str) or not re.fullmatch(r"[A-Za-z][A-Za-z0-9_]{4,31}", username) or not username.lower().endswith("bot"):
@@ -210,7 +212,7 @@ class TelegramHTTPTransport:
         result = self._post("sendWidget", {
             "chat_id": chat_id,
             "html": html,
-            "chat_data": self._widget_json(chat_data),
+            "chat_data": validated_chat_data,
             "allow_queries": True,
             "is_shared": False,
             "caption": "OTTO Private Office — open for a source-backed briefing and refresh.",
