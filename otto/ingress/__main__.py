@@ -44,6 +44,7 @@ from otto.ingress.evidence import (
 )
 from otto.ingress.gateway import EventGateway
 from otto.ingress.pg_store import PostgresChannelBindingStore, dsn_from_env
+from otto.ingress.store import SqliteChannelBindingStore
 from otto.ingress.publisher import JetStreamPublisher
 from otto.ingress.secrets import EnvSecretResolver
 from otto.ingress.server import ServerDeps, build_server
@@ -54,6 +55,44 @@ from otto.spine.bus import Bus
 COMPONENT = "otto-ingress"
 PORT_ENV = "OTTO_INGRESS_PORT"
 DEFAULT_PORT = 8080
+
+# The binding store the deployment runs. Postgres is the only production
+# store, and it stays the default: an unset or empty value still means
+# postgres, so a deployment never silently swaps its database for a local
+# file. ``sqlite`` exists so the same process can be run by an operator on
+# a machine with no postgres -- a laptop proving the widget end to end --
+# through a store that already implements the identical protocol. A laptop
+# run is not a production run, and this switch does not make it one.
+STORE_ENV = "OTTO_INGRESS_STORE"
+STORE_POSTGRES = "postgres"
+STORE_SQLITE = "sqlite"
+SQLITE_PATH_ENV = "OTTO_INGRESS_SQLITE_PATH"
+
+
+class StoreNotUsable(RuntimeError):
+    """``OTTO_INGRESS_STORE`` was set to something that is not a store."""
+
+
+def binding_store_from_env(environ: Mapping[str, str] | None = None):
+    """The channel binding store, chosen by ``OTTO_INGRESS_STORE``.
+
+    Absent or ``postgres`` gives the fail-closed postgres store exactly as
+    before, so nothing about a production boot changes. ``sqlite`` gives the
+    SQLite store, which implements the same ``ChannelBindingStore`` protocol.
+    Any other value is refused rather than guessed: a typo must not decide
+    which database a door reads its credentials from.
+    """
+    env = os.environ if environ is None else environ
+    choice = (env.get(STORE_ENV) or "").strip().lower()
+    if choice in ("", STORE_POSTGRES):
+        return PostgresChannelBindingStore(dsn_from_env(env))
+    if choice == STORE_SQLITE:
+        path = (env.get(SQLITE_PATH_ENV) or "").strip() or ":memory:"
+        return SqliteChannelBindingStore(path)
+    raise StoreNotUsable(
+        f"{STORE_ENV}={choice!r} is not a store; "
+        f"use {STORE_POSTGRES!r} or {STORE_SQLITE!r}"
+    )
 
 
 class PortNotUsable(RuntimeError):
@@ -90,8 +129,10 @@ def build_deps(
     """
     obs = instrument(COMPONENT)
 
-    store = PostgresChannelBindingStore(dsn_from_env())
-    store.ensure_schema()
+    store = binding_store_from_env()
+    ensure_schema = getattr(store, "ensure_schema", None)
+    if ensure_schema is not None:
+        ensure_schema()
 
     bus = loop.run_until_complete(Bus().connect())
     loop.run_until_complete(bus.ensure_streams())
