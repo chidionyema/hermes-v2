@@ -308,6 +308,46 @@ class Worker:
             await msg.term()
             return
 
+        # The identity is the channel binding's independently authenticated
+        # principal, NEVER a model saying 'founder' or a guessed chat ID.
+        # This check precedes all inference: an unsigned status may neither
+        # contact the founder nor spend a model call on a doomed retry.
+        founder_recipient = bool(
+            binding is not None
+            and envelope.reply_to
+            and binding.principal_allowlist.get(str(envelope.reply_to)) == "founder"
+        )
+        if founder_recipient:
+            from otto.ingress.founder_transport import send_certified
+
+            try:
+                send_certified(
+                    task_id=envelope.task_id,
+                    channel=channel,
+                    reply_to=str(envelope.reply_to),
+                    delivery_secret=delivery_secret or "",
+                    plugin=plugin,
+                    on_denial=lambda denial: self._obs.info(
+                        "worker.founder_proof_denied", ctx, **denial
+                    ),
+                )
+            except Exception as exc:  # noqa: BLE001 -- missing custody/IO always denies
+                # NATS keeps the original task durably; delayed NAK prevents a
+                # hot loop, and NO provider inference has been spent.
+                self._obs.info(
+                    "worker.founder_delivery_held",
+                    ctx,
+                    reason=type(exc).__name__,
+                    channel=channel,
+                )
+                await msg.nak(delay=300)
+                return
+            # The one signed, exact-byte text is delivered once. No voice
+            # side-send: that is a separate output requiring its own proof.
+            self._obs.info("worker.founder_certified_sent", ctx, channel=channel)
+            await msg.ack()
+            return
+
         # The founder could not tell whether Otto was answering or down
         # (2026-09-06): the boot path shows Telegram's typing indicator
         # (otto.boot.presence) but this lane, the one every Telegram message
