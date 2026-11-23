@@ -42,6 +42,7 @@ _DIST_FOR_IMPORT = {
 # reason on the record for the next reader.
 _FORK_OWNED_MODULES = {
     "model_tools": "hermes-agent (/app)",
+    "lib": "chidionyema/idp@faa9fb7141d29296b2ff6ac44fd7535b7bb0e9c0 (image-pinned E1-E4 source)",
 }
 
 
@@ -104,4 +105,22 @@ def test_every_third_party_import_is_declared() -> None:
     assert missing == [], (
         f"otto/ imports these packages but otto/requirements.txt does not "
         f"pin them: {missing}"
+    )
+
+
+def test_idp_founder_verifier_is_pinned_to_exact_release_and_blobs() -> None:
+    """An internal module is a real dependency: prove its supply chain pin."""
+    docker = (OTTO_ROOT.parent / "Dockerfile").read_text()
+    expected = (
+        "ARG IDP_FOUNDER_PEP_SHA=faa9fb7141d29296b2ff6ac44fd7535b7bb0e9c0",
+        'git -C /tmp/idp-founder-pep rev-parse HEAD',
+        'git hash-object /tmp/idp-founder-pep/lib/founder_admission.py',
+        '6700ed26034897e7bbbdc429ec5345ad6dea6238',
+        'git hash-object /tmp/idp-founder-pep/lib/epistemic_kernel/kernel.py',
+        'd24b91ed445eb0e1c7da712c7d074f82f6d0e113',
+        'git hash-object /tmp/idp-founder-pep/lib/epistemic_kernel/__init__.py',
+        '06e7249119de14d84ae3b3a5f26e783295cf53c5',
+    )
+    assert all(fragment in docker for fragment in expected), (
+        "Missing immutable idp E1-E4 runtime dependency or exact blob checks"
     )

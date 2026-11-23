@@ -85,12 +85,14 @@ class FakeMsg:
     acked: bool = False
     naked: bool = False
     termed: bool = False
+    nak_delay: float | None = None
 
     async def ack(self) -> None:
         self.acked = True
 
-    async def nak(self) -> None:
+    async def nak(self, delay: float | None = None) -> None:
         self.naked = True
+        self.nak_delay = delay
 
     async def term(self) -> None:
         self.termed = True
@@ -109,7 +111,9 @@ class RecordingPlugin:
         self.sent.append((secret, reply_to, text))
 
 
-def _store(outbound: str | None = OUTBOUND_REF) -> SqliteChannelBindingStore:
+def _store(
+    outbound: str | None = OUTBOUND_REF, *, founder: bool = False
+) -> SqliteChannelBindingStore:
     store = SqliteChannelBindingStore()
     store.register(
         ChannelBinding(
@@ -118,6 +122,7 @@ def _store(outbound: str | None = OUTBOUND_REF) -> SqliteChannelBindingStore:
             external_id="acme-workspace",
             secret_ref=SECRET_REF,
             outbound_secret_ref=outbound,
+            principal_allowlist={str(CHAT_ID): "founder"} if founder else {},
         ),
         credential=WEBHOOK_SECRET,
     )
@@ -175,6 +180,72 @@ def _answer(text: str | None) -> AnswerOutcome:
     return AnswerOutcome(
         gateway_response=None, router_response=None, fact=None, reply_text=text
     )
+
+
+def test_founder_status_without_independent_proof_never_calls_inference_or_telegram(
+    monkeypatch,
+) -> None:
+    """A denied founder status is held durably, with no paid inference."""
+    envelope = _accepted_envelope()
+    plugin = RecordingPlugin()
+    worker, _ = _worker(
+        _store(founder=True),
+        FakeSecrets({OUTBOUND_REF: BOT_TOKEN}),
+        plugin,
+        answer=_answer("Deployed and operational"),
+    )
+    monkeypatch.delenv("OTTO_FOUNDER_CERT_DIR", raising=False)
+    monkeypatch.delenv("OTTO_FOUNDER_TRUST_ROOTS_FILE", raising=False)
+
+    def must_not_infer(*args, **kwargs):
+        raise AssertionError("unverified status must not execute inference")
+
+    monkeypatch.setattr(worker_module, "answer_envelope", must_not_infer)
+    msg = FakeMsg(data=envelope.canonical_json())
+    asyncio.run(worker._handle(msg))
+    assert plugin.sent == []
+    assert msg.naked and not msg.acked and not msg.termed
+    assert msg.nak_delay == 300
+
+
+def test_real_founder_transport_seam_only_sends_certified_bytes(
+    monkeypatch,
+) -> None:
+    """Wire can call PEP's post-verification sender, not the model router.
+
+    This stub tests wiring ONLY: the real Ed25519 verifier is exercised by
+    idp#8478's separate 25 signed-root falsifiers, not mocked as operational.
+    """
+    envelope = _accepted_envelope()
+    plugin = RecordingPlugin()
+    worker, _ = _worker(
+        _store(founder=True),
+        FakeSecrets({OUTBOUND_REF: BOT_TOKEN}),
+        plugin,
+        answer=_answer("Model says operational, no proof"),
+    )
+
+    from otto.ingress import founder_transport
+
+    def proven_send(**kwargs):
+        assert kwargs["task_id"] == envelope.task_id
+        assert kwargs["reply_to"] == str(CHAT_ID)
+        return kwargs["plugin"].send_reply(
+            kwargs["delivery_secret"],
+            kwargs["reply_to"],
+            "Proof-bound exact payload",
+        )
+
+    monkeypatch.setattr(founder_transport, "send_certified", proven_send)
+    monkeypatch.setattr(
+        worker_module,
+        "answer_envelope",
+        lambda *a, **kw: (_ for _ in ()).throw(AssertionError("no inference")),
+    )
+    msg = FakeMsg(data=envelope.canonical_json())
+    asyncio.run(worker._handle(msg))
+    assert plugin.sent == [(BOT_TOKEN, str(CHAT_ID), "Proof-bound exact payload")]
+    assert msg.acked and not msg.naked
 
 
 def test_the_accepted_task_carries_the_address_to_answer_on() -> None:

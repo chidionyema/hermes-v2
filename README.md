@@ -502,6 +502,7 @@ are tracked, so what you see below is the source they come from.
 | `otto/ingress/__init__.py` | Package docstring: what the gateway is, the multi-tenant directive it implements, and its boundaries. |
 | `otto/ingress/__main__.py` | `python -m otto.ingress`: the process the deployment runs, booting the collector, the binding database and the bus before the socket opens. |
 | `otto/ingress/evidence.py` | The founder widget's verified evidence: one bounded aggregate read of the catalogue instruction ledger, mapped to the widget's `chat_data` contract. Fail-closed — any read failure renders a "no verified evidence" packet, never an invented number. |
+| `otto/ingress/founder_transport.py` | The transport-only adapter to idp#8478's exact pinned E1-E4 verifier: permits independently signed and re-read exact-byte founder claims; unproved sends fail closed and retain their NATS obligation without paid inference. |
 | `otto/ingress/gateway.py` | The request pipeline every channel and every customer shares: nine steps, none of which names a channel. |
 | `otto/ingress/media.py` | Hands & senses 3+4 core: pure, channel-neutral media models and detectors; a voice note or photo becomes prefixed words, the Telegram-coupled bolts live in `plugins.py`. |
 | `otto/ingress/pg_store.py` | The binding table on PostgreSQL, the store the running gateway holds; the connection details come from the deployment and the password from a mounted file. |

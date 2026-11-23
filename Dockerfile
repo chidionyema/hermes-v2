@@ -149,6 +149,29 @@ ENV PYTHONUNBUFFERED=1
 # build over the persistent HERMES_HOME volume at boot and leaves the state on it alone.
 COPY --chown=10001:10001 . /app/estate
 
+# idp#8478 is the single E1-E4 founder-admission authority. Fetch ONLY the
+# exact protected-main source and independently check each Git blob; a branch
+# name, a CI badge or a mutable package release is NOT runtime provenance.
+ARG IDP_FOUNDER_PEP_SHA=faa9fb7141d29296b2ff6ac44fd7535b7bb0e9c0
+RUN git clone --quiet --filter=blob:none --no-checkout \
+      https://github.com/chidionyema/idp.git /tmp/idp-founder-pep \
+    && git -C /tmp/idp-founder-pep sparse-checkout init --no-cone \
+    && git -C /tmp/idp-founder-pep sparse-checkout set \
+       lib/founder_admission.py lib/epistemic_kernel \
+    && git -C /tmp/idp-founder-pep fetch --quiet --depth 1 \
+       origin "$IDP_FOUNDER_PEP_SHA" \
+    && git -C /tmp/idp-founder-pep checkout --quiet --detach FETCH_HEAD \
+    && test "$(git -C /tmp/idp-founder-pep rev-parse HEAD)" = "$IDP_FOUNDER_PEP_SHA" \
+    && test "$(git hash-object /tmp/idp-founder-pep/lib/founder_admission.py)" = "6700ed26034897e7bbbdc429ec5345ad6dea6238" \
+    && test "$(git hash-object /tmp/idp-founder-pep/lib/epistemic_kernel/kernel.py)" = "d24b91ed445eb0e1c7da712c7d074f82f6d0e113" \
+    && test "$(git hash-object /tmp/idp-founder-pep/lib/epistemic_kernel/__init__.py)" = "06e7249119de14d84ae3b3a5f26e783295cf53c5" \
+    && mkdir -p /app/estate/lib/epistemic_kernel \
+    && cp /tmp/idp-founder-pep/lib/founder_admission.py /app/estate/lib/ \
+    && cp /tmp/idp-founder-pep/lib/epistemic_kernel/*.py /app/estate/lib/epistemic_kernel/ \
+    && chown -R 10001:10001 /app/estate/lib \
+    && /app/hermes-agent/.venv/bin/python -c 'import sys; sys.path.insert(0,"/app/estate"); from lib.founder_admission import send_checked; from lib.epistemic_kernel import EpistemicKernel; assert callable(send_checked) and callable(EpistemicKernel)' \
+    && rm -rf /tmp/idp-founder-pep
+
 # No secrets baked in: .env values arrive as environment from a Secret the platform syncs
 # (External Secrets Operator, crew#227 CP3); auth.json is seeded once from HERMES_AUTH_JSON.
 ENV HERMES_HOME=/data
